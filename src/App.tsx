@@ -1,11 +1,35 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries } from 'lightweight-charts';
-import { Play, Square, Activity, TrendingUp, TrendingDown, Clock } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
+// Simple SVG Icons to avoid heavy lucide-react dependency
+const ActivityIcon = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+);
+const PlayIcon = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+);
+const SquareIcon = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
+);
+const TrendingUpIcon = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
+);
+const TrendingDownIcon = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"></polyline><polyline points="17 18 23 18 23 12"></polyline></svg>
+);
+const ClockIcon = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+);
+
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
+}
+
+declare global {
+  interface Window {
+    LightweightCharts: any;
+  }
 }
 
 export default function App() {
@@ -18,8 +42,8 @@ export default function App() {
   const [statusMsg, setStatusMsg] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
   
   const chartContainerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-  const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const chartRef = useRef<any>(null);
+  const candleSeriesRef = useRef<any>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   const handleSetToken = async (e: React.FormEvent) => {
@@ -81,6 +105,7 @@ export default function App() {
     if (!chartContainerRef.current) return;
 
     try {
+      const { createChart, ColorType } = window.LightweightCharts;
       const chart = createChart(chartContainerRef.current, {
         layout: {
           background: { type: ColorType.Solid, color: '#0f172a' },
@@ -191,7 +216,7 @@ export default function App() {
           <div className="flex items-center justify-between w-full md:w-auto">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
-                <Activity className="text-white w-6 h-6" />
+                <ActivityIcon className="text-white w-6 h-6" />
               </div>
               <div>
                 <h1 className="font-bold text-lg tracking-tight">فرازگلد لایو</h1>
@@ -236,7 +261,7 @@ export default function App() {
                   : "bg-emerald-500 text-white shadow-emerald-500/20"
               )}
             >
-              {data?.isRecording ? <Square className="w-3 h-3 fill-current" /> : <Play className="w-3 h-3 fill-current" />}
+              {data?.isRecording ? <SquareIcon className="w-3 h-3 fill-current" /> : <PlayIcon className="w-3 h-3 fill-current" />}
               {data?.isRecording ? "توقف" : "ضبط"}
             </button>
           </div>
@@ -250,7 +275,7 @@ export default function App() {
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-bold">احراز هویت</h2>
               <button onClick={() => setShowAuth(false)} className="text-slate-500 hover:text-white">
-                <Square className="w-6 h-6 rotate-45" />
+                <SquareIcon className="w-6 h-6 rotate-45" />
               </button>
             </div>
 
@@ -321,7 +346,7 @@ export default function App() {
           <div className="bg-slate-900/50 border border-slate-800 p-4 md:p-6 rounded-2xl backdrop-blur-sm">
             <div className="flex items-center gap-2 md:gap-3 mb-2 md:mb-4">
               <div className="p-1.5 md:p-2 bg-blue-500/10 rounded-lg text-blue-400">
-                <TrendingUp className="w-4 h-4 md:w-5 md:h-5" />
+                <TrendingUpIcon className="w-4 h-4 md:w-5 md:h-5" />
               </div>
               <h3 className="text-[10px] md:text-sm font-medium text-slate-400 uppercase tracking-wider">مقاومت (سقف)</h3>
             </div>
@@ -333,7 +358,7 @@ export default function App() {
           <div className="bg-slate-900/50 border border-slate-800 p-4 md:p-6 rounded-2xl backdrop-blur-sm">
             <div className="flex items-center gap-2 md:gap-3 mb-2 md:mb-4">
               <div className="p-1.5 md:p-2 bg-rose-500/10 rounded-lg text-rose-400">
-                <TrendingDown className="w-4 h-4 md:w-5 md:h-5" />
+                <TrendingDownIcon className="w-4 h-4 md:w-5 md:h-5" />
               </div>
               <h3 className="text-[10px] md:text-sm font-medium text-slate-400 uppercase tracking-wider">حمایت (کف)</h3>
             </div>
@@ -345,7 +370,7 @@ export default function App() {
           <div className="col-span-2 md:col-span-1 bg-slate-900/50 border border-slate-800 p-4 md:p-6 rounded-2xl backdrop-blur-sm">
             <div className="flex items-center gap-2 md:gap-3 mb-2 md:mb-4">
               <div className="p-1.5 md:p-2 bg-emerald-500/10 rounded-lg text-emerald-400">
-                <Clock className="w-4 h-4 md:w-5 md:h-5" />
+                <ClockIcon className="w-4 h-4 md:w-5 md:h-5" />
               </div>
               <h3 className="text-[10px] md:text-sm font-medium text-slate-400 uppercase tracking-wider">وضعیت ضبط</h3>
             </div>
@@ -362,7 +387,7 @@ export default function App() {
         <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
           <div className="p-4 border-b border-slate-800 flex flex-col sm:flex-row items-center justify-between bg-slate-900/80 gap-4">
             <span className="text-sm font-bold text-slate-400 flex items-center gap-2">
-              <Activity className="w-4 h-4" /> مظنه طلا ({data?.timeframe ? (data.timeframe === '60' ? '1h' : `${data.timeframe}m`) : '1m'})
+              <ActivityIcon className="w-4 h-4" /> مظنه طلا ({data?.timeframe ? (data.timeframe === '60' ? '1h' : `${data.timeframe}m`) : '1m'})
             </span>
             
             <div className="flex overflow-x-auto no-scrollbar gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 w-full sm:w-auto" dir="ltr">
