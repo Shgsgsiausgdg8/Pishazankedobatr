@@ -105,7 +105,7 @@ export default function App() {
     if (!chartContainerRef.current) return;
 
     try {
-      const { createChart, ColorType } = window.LightweightCharts;
+      const { createChart, ColorType, CandlestickSeries } = window.LightweightCharts;
       const chart = createChart(chartContainerRef.current, {
         layout: {
           background: { type: ColorType.Solid, color: '#0f172a' },
@@ -336,7 +336,7 @@ export default function App() {
           )}>
             {statusMsg.text}
             <button onClick={() => setStatusMsg(null)} className="text-slate-500 hover:text-white">
-              <Square className="w-4 h-4 rotate-45 fill-current" />
+              <SquareIcon className="w-4 h-4 rotate-45 fill-current" />
             </button>
           </div>
         )}
