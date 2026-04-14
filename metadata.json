@@ -1,0 +1,6 @@
+{
+  "name": "FarazGold Real-Time Chart & Level Detector",
+  "description": "A real-time candlestick charting application for FarazGold with automated support/resistance level detection and data recording.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
