@@ -10,7 +10,7 @@ import { FarazGoldEngine } from "./src/server/engine.ts";
 async function startServer() {
   const app = express();
   const server = http.createServer(app);
-  const PORT = 4000;
+  const PORT = 3000;
 
   // Prevent process crash from unhandled errors
   process.on('uncaughtException', (err) => {

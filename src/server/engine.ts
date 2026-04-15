@@ -30,8 +30,9 @@ export class FarazGoldEngine {
     try {
       const baseUrl = process.env.FARAZGOLD_BASEURL || 'https://demo.farazgold.com';
       const timeframe = this.timeframe === '60' ? '60' : this.timeframe;
-      // Try a more standard URL for history
-      const url = `${baseUrl}/api/room/get-history/?symbol=mazane&timeframe=${timeframe}&count=300`;
+      // Reverting to the original API path structure
+      const url = `${baseUrl}/api/room/api/get-history/?symbol=mazane&timeframe=${timeframe}&count=300`;
+      console.log(`[Engine] Fetching history from: ${url}`);
       
       const headers: any = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',

@@ -4,10 +4,10 @@ import {defineConfig} from 'vite';
 
 export default defineConfig({
   plugins: [react()],
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, '.'),
-    },
+  css: {
+    postcss: {
+      plugins: []
+    }
   },
   server: {
     hmr: process.env.DISABLE_HMR !== 'true',
