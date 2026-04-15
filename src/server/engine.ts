@@ -32,29 +32,43 @@ export class FarazGoldEngine {
       const timeframe = this.timeframe === '60' ? '60' : this.timeframe;
       const url = `${baseUrl}/api/room/api/get-history/?symbol=mazane&timeframe=${timeframe}&count=300`;
       
-      const headers: any = {};
+      const headers: any = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+        'Origin': 'https://demo.farazgold.com',
+        'Referer': 'https://demo.farazgold.com/room/'
+      };
       if (this.accessToken) headers['Authorization'] = `Bearer ${this.accessToken}`;
       if (this.sessionId) headers['Cookie'] = `sessionid=${this.sessionId}`;
 
       const res = await fetch(url, { headers });
-      const data = await res.json();
-
-      if (Array.isArray(data)) {
-        this.candles = data.map((b: any) => ({
-          time: b.time,
-          open: parseFloat(b.open),
-          high: parseFloat(b.high),
-          low: parseFloat(b.low),
-          close: parseFloat(b.close)
-        })).sort((a: any, b: any) => a.time - b.time);
-        
-        if (this.candles.length > 0) {
-          this.lastCandleTime = this.candles[this.candles.length - 1].time * 1000;
-          this.detectLevels();
+      if (!res.ok) {
+        console.error(`[Engine] History API returned status ${res.status}`);
+        return;
+      }
+      
+      const text = await res.text();
+      try {
+        const data = JSON.parse(text);
+        if (Array.isArray(data)) {
+          this.candles = data.map((b: any) => ({
+            time: b.time,
+            open: parseFloat(b.open),
+            high: parseFloat(b.high),
+            low: parseFloat(b.low),
+            close: parseFloat(b.close)
+          })).sort((a: any, b: any) => a.time - b.time);
+          
+          if (this.candles.length > 0) {
+            this.lastCandleTime = this.candles[this.candles.length - 1].time * 1000;
+            this.detectLevels();
+          }
         }
+      } catch (e) {
+        console.error("[Engine] Failed to parse history JSON. Response was likely HTML.");
       }
     } catch (e: any) {
-      console.error(`Error fetching history: ${e.message}`);
+      console.error(`[Engine] Error fetching history: ${e.message}`);
     }
   }
 
@@ -97,7 +111,10 @@ export class FarazGoldEngine {
       const baseUrl = process.env.FARAZGOLD_BASEURL || 'https://demo.farazgold.com';
       const res = await fetch(`${baseUrl}/api/User/api/token/refresh/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+        },
         body: JSON.stringify({ refresh: this.refreshToken })
       });
       const data = await res.json();
@@ -131,8 +148,10 @@ export class FarazGoldEngine {
     try {
       const options: any = {
         headers: {
-          'User-Agent': 'Mozilla/5.0',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
           'Origin': 'https://demo.farazgold.com',
+          'Pragma': 'no-cache',
+          'Cache-Control': 'no-cache',
         }
       };
 
@@ -143,7 +162,13 @@ export class FarazGoldEngine {
 
       this.ws = new WebSocket(finalWsUrl, options);
 
+      // CRITICAL: Handle error event to prevent process crash
+      this.ws.on('error', (err) => {
+        console.error(`[Engine] WebSocket Error: ${err.message}`);
+      });
+
       this.ws.on('open', () => {
+        console.log("[Engine] WebSocket Connected");
         this.ws?.send(JSON.stringify({
           action: 'SubAdd',
           subs: [`0~farazgold~mazane~gold~${this.timeframe}`]
