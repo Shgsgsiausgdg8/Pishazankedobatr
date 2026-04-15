@@ -68,8 +68,27 @@ async function startServer() {
   });
 
   if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
-    app.use(vite.middlewares);
+    try {
+      // Clean up any leftover PostCSS/Tailwind configs that might cause Vite to fail
+      const fs = await import('fs');
+      ['postcss.config.js', 'tailwind.config.js', 'postcss.config.cjs', 'tailwind.config.cjs'].forEach(file => {
+        const p = path.join(process.cwd(), file);
+        if (fs.existsSync(p)) {
+          console.log(`[Server] Removing problematic config: ${file}`);
+          fs.unlinkSync(p);
+        }
+      });
+
+      const vite = await createViteServer({ 
+        server: { middlewareMode: true }, 
+        appType: "spa",
+        logLevel: 'info'
+      });
+      app.use(vite.middlewares);
+      console.log("[Server] Vite middleware initialized");
+    } catch (error) {
+      console.error("[Server] Failed to initialize Vite:", error);
+    }
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
@@ -77,7 +96,7 @@ async function startServer() {
   }
 
   server.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server running on http://localhost:${PORT} [v1.1]`);
     engine.start();
   });
 }

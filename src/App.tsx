@@ -15,72 +15,118 @@ const SquareIcon = () => (
 const CandlestickChart = ({ data, levels }: { data: any[], levels: any[] }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [viewState, setViewState] = useState({ offset: 0, zoom: 1, followLatest: true });
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0, active: false });
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const isDragging = useRef(false);
+  const lastMouseX = useRef(0);
 
   useEffect(() => {
-    if (!canvasRef.current || !containerRef.current || data.length === 0) return;
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver(entries => {
+      if (entries[0]) {
+        setDimensions({
+          width: entries[0].contentRect.width,
+          height: entries[0].contentRect.height
+        });
+      }
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!canvasRef.current || dimensions.width === 0 || data.length === 0) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const width = containerRef.current.clientWidth;
-    const height = containerRef.current.clientHeight;
+    const { width, height } = dimensions;
 
     canvas.width = width * dpr;
     canvas.height = height * dpr;
     ctx.scale(dpr, dpr);
 
+    const paddingRight = 60;
+    const paddingTop = 20;
+    const paddingBottom = 30;
+    const chartWidth = width - paddingRight;
+    const chartHeight = height - paddingTop - paddingBottom;
+
+    const baseCandleWidth = 10;
+    const candleWidth = baseCandleWidth * viewState.zoom;
+    const totalContentWidth = data.length * candleWidth;
+    
+    let currentOffset = viewState.offset;
+    if (viewState.followLatest) {
+      currentOffset = chartWidth - totalContentWidth;
+    }
+
+    // Determine visible range
+    const startIdx = Math.max(0, Math.floor(-currentOffset / candleWidth));
+    const endIdx = Math.min(data.length, Math.ceil((chartWidth - currentOffset) / candleWidth));
+    const visibleData = data.slice(startIdx, endIdx);
+
+    if (visibleData.length === 0) return;
+
+    // Scale Y based on visible data
+    const prices = visibleData.flatMap(d => [d.high, d.low]);
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    const priceRange = (maxPrice - minPrice) || 1;
+    const yBuffer = priceRange * 0.1;
+    const displayMin = minPrice - yBuffer;
+    const displayMax = maxPrice + yBuffer;
+    const displayRange = displayMax - displayMin;
+
+    const getX = (index: number) => currentOffset + (index * candleWidth);
+    const getY = (price: number) => paddingTop + chartHeight - ((price - displayMin) / displayRange) * chartHeight;
+
     // Clear
     ctx.clearRect(0, 0, width, height);
 
-    // Calculate ranges
-    const padding = 40;
-    const chartWidth = width - padding * 2;
-    const chartHeight = height - padding * 2;
-
-    const prices = data.flatMap(d => [d.high, d.low]);
-    const minPrice = Math.min(...prices) * 0.999;
-    const maxPrice = Math.max(...prices) * 1.001;
-    const priceRange = maxPrice - minPrice;
-
-    const getX = (index: number) => padding + (index / (data.length - 1)) * chartWidth;
-    const getY = (price: number) => padding + chartHeight - ((price - minPrice) / priceRange) * chartHeight;
-
-    // Draw Grid
+    // Draw Grid & Labels
     ctx.strokeStyle = '#1e293b';
     ctx.lineWidth = 1;
     ctx.setLineDash([5, 5]);
-    for (let i = 0; i <= 5; i++) {
-      const y = padding + (i / 5) * chartHeight;
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '10px JetBrains Mono';
+
+    const gridLines = 6;
+    for (let i = 0; i <= gridLines; i++) {
+      const y = paddingTop + (i / gridLines) * chartHeight;
       ctx.beginPath();
-      ctx.moveTo(padding, y);
-      ctx.lineTo(width - padding, y);
+      ctx.moveTo(0, y);
+      ctx.lineTo(chartWidth, y);
       ctx.stroke();
 
-      // Price labels
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = '10px JetBrains Mono';
-      const price = maxPrice - (i / 5) * priceRange;
-      ctx.fillText(Math.round(price).toLocaleString(), width - padding + 5, y + 4);
+      const price = displayMax - (i / gridLines) * displayRange;
+      ctx.fillText(Math.round(price).toLocaleString(), chartWidth + 5, y + 4);
     }
     ctx.setLineDash([]);
 
     // Draw Levels
     levels.forEach(level => {
-      const y = getY(level.price);
-      ctx.strokeStyle = level.type === 'RESISTANCE' ? 'rgba(239, 68, 68, 0.5)' : 'rgba(16, 185, 129, 0.5)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(padding, y);
-      ctx.lineTo(width - padding, y);
-      ctx.stroke();
+      if (level.price >= displayMin && level.price <= displayMax) {
+        const y = getY(level.price);
+        ctx.strokeStyle = level.type === 'RESISTANCE' ? 'rgba(239, 68, 68, 0.4)' : 'rgba(16, 185, 129, 0.4)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(chartWidth, y);
+        ctx.stroke();
+        
+        ctx.fillStyle = level.type === 'RESISTANCE' ? '#ef4444' : '#10b981';
+        ctx.fillText(level.type === 'RESISTANCE' ? 'RES' : 'SUP', 5, y - 5);
+      }
     });
 
     // Draw Candles
-    const candleWidth = (chartWidth / data.length) * 0.8;
-    data.forEach((d, i) => {
-      const x = getX(i);
+    visibleData.forEach((d, i) => {
+      const actualIdx = startIdx + i;
+      const x = getX(actualIdx);
       const openY = getY(d.open);
       const closeY = getY(d.close);
       const highY = getY(d.high);
@@ -89,8 +135,7 @@ const CandlestickChart = ({ data, levels }: { data: any[], levels: any[] }) => {
       const isUp = d.close >= d.open;
       ctx.strokeStyle = isUp ? '#10b981' : '#ef4444';
       ctx.fillStyle = isUp ? '#10b981' : '#ef4444';
-      ctx.lineWidth = 1;
-
+      
       // Wick
       ctx.beginPath();
       ctx.moveTo(x, highY);
@@ -98,15 +143,116 @@ const CandlestickChart = ({ data, levels }: { data: any[], levels: any[] }) => {
       ctx.stroke();
 
       // Body
+      const bWidth = candleWidth * 0.7;
       const bodyHeight = Math.max(Math.abs(closeY - openY), 1);
-      ctx.fillRect(x - candleWidth / 2, Math.min(openY, closeY), candleWidth, bodyHeight);
+      ctx.fillRect(x - bWidth / 2, Math.min(openY, closeY), bWidth, bodyHeight);
     });
 
-  }, [data, levels]);
+    // Crosshair
+    if (mousePos.active && mousePos.x < chartWidth) {
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)';
+      ctx.setLineDash([2, 2]);
+      
+      // Vertical
+      ctx.beginPath();
+      ctx.moveTo(mousePos.x, 0);
+      ctx.lineTo(mousePos.x, height);
+      ctx.stroke();
+
+      // Horizontal
+      ctx.beginPath();
+      ctx.moveTo(0, mousePos.y);
+      ctx.lineTo(width, mousePos.y);
+      ctx.stroke();
+      
+      ctx.setLineDash([]);
+      
+      // Price tag
+      const priceAtMouse = displayMax - ((mousePos.y - paddingTop) / chartHeight) * displayRange;
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(chartWidth, mousePos.y - 10, 60, 20);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(Math.round(priceAtMouse).toLocaleString(), chartWidth + 5, mousePos.y + 4);
+    }
+
+    // Current Price Label on Axis
+    const lastCandle = data[data.length - 1];
+    if (lastCandle && lastCandle.close >= displayMin && lastCandle.close <= displayMax) {
+      const y = getY(lastCandle.close);
+      ctx.fillStyle = '#10b981';
+      ctx.fillRect(chartWidth, y - 10, 60, 20);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 10px JetBrains Mono';
+      ctx.fillText(Math.round(lastCandle.close).toLocaleString(), chartWidth + 5, y + 4);
+    }
+
+  }, [data, levels, viewState, mousePos, dimensions]);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    isDragging.current = true;
+    lastMouseX.current = e.clientX;
+    setViewState(prev => ({ ...prev, followLatest: false }));
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setMousePos({ x, y, active: true });
+
+    if (isDragging.current) {
+      const deltaX = e.clientX - lastMouseX.current;
+      setViewState(prev => ({ ...prev, offset: prev.offset + deltaX }));
+      lastMouseX.current = e.clientX;
+    }
+  };
+
+  const handleMouseUp = () => {
+    isDragging.current = false;
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+    setViewState(prev => ({
+      ...prev,
+      zoom: Math.max(0.1, Math.min(5, prev.zoom * zoomFactor))
+    }));
+  };
 
   return (
-    <div ref={containerRef} className="chart-container">
-      <canvas ref={canvasRef} style={{ width: '100%', height: '100%' }} />
+    <div 
+      ref={containerRef} 
+      className="chart-container"
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={() => { isDragging.current = false; setMousePos(p => ({ ...p, active: false })); }}
+      onWheel={handleWheel}
+    >
+      <canvas ref={canvasRef} style={{ width: '100%', height: '100%', cursor: isDragging.current ? 'grabbing' : 'crosshair' }} />
+      
+      {!viewState.followLatest && (
+        <button 
+          onClick={() => setViewState(v => ({ ...v, followLatest: true }))}
+          style={{
+            position: 'absolute',
+            bottom: '40px',
+            right: '70px',
+            background: '#10b981',
+            color: 'white',
+            border: 'none',
+            borderRadius: '20px',
+            padding: '4px 12px',
+            fontSize: '0.7rem',
+            cursor: 'pointer',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
+          }}
+        >
+          بازگشت به قیمت زنده
+        </button>
+      )}
     </div>
   );
 };
@@ -179,6 +325,16 @@ export default function App() {
 
   return (
     <div className="rtl">
+      {!data && (
+        <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#020617', color: 'white', zIndex: 9999 }}>
+          <div style={{ textAlign: 'center' }}>
+            <div className="btn-primary" style={{ padding: '20px', borderRadius: '50%', marginBottom: '10px', display: 'inline-block' }}>
+              <ActivityIcon />
+            </div>
+            <p>در حال دریافت اطلاعات از سرور...</p>
+          </div>
+        </div>
+      )}
       <header className="header">
         <div className="header-content">
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>

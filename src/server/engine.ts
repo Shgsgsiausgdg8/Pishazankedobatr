@@ -23,30 +23,52 @@ export class FarazGoldEngine {
 
   constructor() {
     this.loadSettings();
-    this.loadHistory();
   }
 
   private async fetchHistory() {
     try {
       const baseUrl = process.env.FARAZGOLD_BASEURL || 'https://demo.farazgold.com';
-      const timeframe = this.timeframe === '60' ? '60' : this.timeframe;
-      // Reverting to the original API path structure
-      const url = `${baseUrl}/api/room/api/get-history/?symbol=mazane&timeframe=${timeframe}&count=300`;
-      console.log(`[Engine] Fetching history from: ${url}`);
+      const resolution = this.timeframe; // '1', '5', '15', '60'
+      
+      const now = Math.floor(Date.now() / 1000);
+      const barsCount = 300;
+      const timeframeSeconds = (parseInt(resolution) || 1) * 60;
+      const from = now - (barsCount * timeframeSeconds);
+      const to = now;
+
+      // The user provided endpoint
+      const url = `${baseUrl}/api/room/api/get-bars/?symbol=mazane&from=${from}&to=${to}&resolution=${resolution}`;
+      console.log(`[Engine] Fetching history: ${url}`);
       
       const headers: any = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'application/json',
-        'Origin': 'https://demo.farazgold.com',
-        'Referer': 'https://demo.farazgold.com/room/'
+        'accept': 'application/json',
+        'accept-language': 'en-US,en;q=0.9,fa;q=0.8',
+        'cache-control': 'no-store, no-cache, must-revalidate',
+        'expires': '0',
+        'pragma': 'no-cache',
+        'priority': 'u=1, i',
+        'referer': `${baseUrl}/room/`,
+        'sec-ch-ua': '"Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Windows"',
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'same-origin',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
       };
-      if (this.accessToken) headers['Authorization'] = `Bearer ${this.accessToken}`;
-      if (this.sessionId) headers['Cookie'] = `sessionid=${this.sessionId}`;
+      
+      if (this.accessToken) {
+        headers['authorization'] = `Bearer ${this.accessToken}`;
+      }
+      if (this.sessionId) {
+        headers['cookie'] = `sessionid=${this.sessionId}`;
+      }
 
       const res = await fetch(url, { headers });
       if (!res.ok) {
-        console.error(`[Engine] History API returned status ${res.status}`);
-        return;
+        console.error(`[Engine] History API (get-bars) failed: ${res.status}`);
+        // Fallback to old probing logic if get-bars fails
+        return this.probeOldHistory();
       }
       
       const text = await res.text();
@@ -65,12 +87,49 @@ export class FarazGoldEngine {
             this.lastCandleTime = this.candles[this.candles.length - 1].time * 1000;
             this.detectLevels();
           }
+          console.log(`[Engine] Successfully loaded ${this.candles.length} candles.`);
         }
       } catch (e) {
-        console.error("[Engine] Failed to parse history JSON. Response was likely HTML.");
+        console.error("[Engine] Failed to parse history JSON.");
+        this.probeOldHistory();
       }
     } catch (e: any) {
       console.error(`[Engine] Error fetching history: ${e.message}`);
+    }
+  }
+
+  private async probeOldHistory() {
+    const baseUrl = process.env.FARAZGOLD_BASEURL || 'https://demo.farazgold.com';
+    const timeframe = this.timeframe === '60' ? '60' : this.timeframe;
+    const paths = [`/api/room/api/get-history/`, `/api/room/get-history/` ];
+    
+    for (const p of paths) {
+      const url = `${baseUrl}${p}?symbol=mazane&timeframe=${timeframe}&count=300`;
+      console.log(`[Engine] Probing fallback history: ${url}`);
+      try {
+        const res = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Origin': baseUrl,
+            'Referer': `${baseUrl}/room/`
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            this.candles = data.map((b: any) => ({
+              time: b.time,
+              open: parseFloat(b.open),
+              high: parseFloat(b.high),
+              low: parseFloat(b.low),
+              close: parseFloat(b.close)
+            })).sort((a: any, b: any) => a.time - b.time);
+            this.lastCandleTime = this.candles[this.candles.length - 1].time * 1000;
+            this.detectLevels();
+            return;
+          }
+        }
+      } catch (e) {}
     }
   }
 
@@ -136,6 +195,8 @@ export class FarazGoldEngine {
   start() {
     this.connectWS();
     setInterval(() => this.refreshAuthToken(), 12 * 60 * 60 * 1000);
+    // Wait a bit for session/csrf before first history fetch
+    setTimeout(() => this.fetchHistory(), 2000);
     setInterval(() => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
         this.fetchPriceAPI();
@@ -143,23 +204,56 @@ export class FarazGoldEngine {
     }, 30000);
   }
 
-  private connectWS() {
+  private async connectWS() {
+    const baseUrl = process.env.FARAZGOLD_BASEURL || 'https://demo.farazgold.com';
     const wsUrl = process.env.FARAZGOLD_WS_URL || 'wss://demo.farazgold.com/ws/';
+    
+    // Pre-flight check to get session and CSRF if needed
+    if (!this.sessionId || !this.csrfToken) {
+      try {
+        const res = await fetch(`${baseUrl}/room/`, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' }
+        });
+        const text = await res.text();
+        const cookie = res.headers.get('set-cookie');
+        if (cookie) {
+          const sMatch = cookie.match(/sessionid=([^;]+)/);
+          if (sMatch) this.sessionId = sMatch[1];
+          const cMatch = cookie.match(/csrftoken=([^;]+)/);
+          if (cMatch) this.csrfToken = cMatch[1];
+        }
+        // Fallback for CSRF from HTML
+        if (!this.csrfToken) {
+          const csrfMatch = text.match(/name="csrfmiddlewaretoken" value="([^"]+)"/);
+          if (csrfMatch) this.csrfToken = csrfMatch[1];
+        }
+      } catch (e) {}
+    }
+
     const finalWsUrl = this.accessToken ? `${wsUrl}?token=${this.accessToken}` : wsUrl;
 
     try {
       const options: any = {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-          'Origin': 'https://demo.farazgold.com',
-          'Pragma': 'no-cache',
-          'Cache-Control': 'no-cache',
+          'accept-language': 'en-US,en;q=0.9,fa;q=0.8',
+          'cache-control': 'no-cache',
+          'pragma': 'no-cache',
+          'referer': `${baseUrl}/room/`,
+          'sec-ch-ua': '"Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"',
+          'sec-ch-ua-mobile': '?0',
+          'sec-ch-ua-platform': '"Windows"',
+          'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
+          'Origin': baseUrl
         }
       };
 
-      if (this.sessionId && this.csrfToken) {
-        options.headers['Cookie'] = `sessionid=${this.sessionId}; csrftoken=${this.csrfToken}`;
-        options.headers['X-CSRFToken'] = this.csrfToken;
+      if (this.sessionId) {
+        const cookies = [`sessionid=${this.sessionId}`];
+        if (this.csrfToken) cookies.push(`csrftoken=${this.csrfToken}`);
+        options.headers['cookie'] = cookies.join('; ');
+      }
+      if (this.csrfToken) {
+        options.headers['x-csrftoken'] = this.csrfToken;
       }
 
       this.ws = new WebSocket(finalWsUrl, options);
