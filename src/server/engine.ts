@@ -208,9 +208,8 @@ export class FarazGoldEngine {
 
   private async connectWS() {
     const baseUrl = process.env.FARAZGOLD_BASEURL || 'https://demo.farazgold.com';
-    // New WebSocket endpoint from inspiration project
-    const resolution = Math.floor((parseInt(this.timeframe) || 1));
-    const wsUrl = `wss://demo.farazgold.com/room/api/get-bars-ws/?symbol=mazane&resolution=${resolution}&history=300`;
+    const wsUrl = 'wss://demo.farazgold.com/ws/';
+    const resolution = this.timeframe;
     
     // Pre-flight check to get session and CSRF if needed
     if (!this.sessionId || !this.csrfToken) {
@@ -234,9 +233,9 @@ export class FarazGoldEngine {
     }
 
     const tokenToUse = this.accessToken || '';
-    const finalWsUrl = tokenToUse ? `${wsUrl}&token=${tokenToUse}` : wsUrl;
+    const finalWsUrl = tokenToUse ? `${wsUrl}?token=${tokenToUse}` : wsUrl;
 
-    console.log(`[Engine] Connecting to WS: ${finalWsUrl.split('&token=')[0]}`);
+    console.log(`[Engine] Connecting to standard WS: ${wsUrl}`);
 
     try {
       const options: any = {
@@ -245,12 +244,8 @@ export class FarazGoldEngine {
           'cache-control': 'no-cache',
           'pragma': 'no-cache',
           'referer': `${baseUrl}/room/`,
-          'sec-ch-ua': '"Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"',
-          'sec-ch-ua-mobile': '?0',
-          'sec-ch-ua-platform': '"Windows"',
           'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
-          'Origin': baseUrl,
-          'X-Requested-With': 'XMLHttpRequest'
+          'Origin': baseUrl
         }
       };
 
@@ -265,32 +260,45 @@ export class FarazGoldEngine {
 
       this.ws = new WebSocket(finalWsUrl, options);
 
-      // CRITICAL: Handle error event to prevent process crash
       this.ws.on('error', (err) => {
         console.error(`[Engine] WebSocket Error: ${err.message}`);
       });
 
       this.ws.on('open', () => {
-        console.log("[Engine] WebSocket Connected");
+        console.log("[Engine] WebSocket Connected. Subscribing...");
+        // Send subscription message as seen in the bot code
         this.ws?.send(JSON.stringify({
           action: 'SubAdd',
-          subs: [`0~farazgold~mazane~gold~${this.timeframe}`]
+          subs: [`0~farazgold~mazane~gold~${resolution}`]
         }));
       });
 
       this.ws.on('message', (data) => {
         try {
           const msg = JSON.parse(data.toString());
+          
+          // Handle standard Update messages
           if (msg.action === 'Update' && msg.data?.price) {
             this.updatePrice(parseFloat(msg.data.price));
           }
+          
+          // Handle bar updates
           if (msg.bars && msg.bars[this.timeframe]) {
-            this.processBar(msg.bars[this.timeframe]);
+            const bar = msg.bars[this.timeframe];
+            this.processBar(Array.isArray(bar) ? bar[0] : bar);
+          }
+
+          // Handle direct price updates
+          if (msg.price) {
+            this.updatePrice(parseFloat(msg.price));
           }
         } catch (e) {}
       });
 
-      this.ws.on('close', () => setTimeout(() => this.connectWS(), 5000));
+      this.ws.on('close', () => {
+        console.log("[Engine] WebSocket Closed. Reconnecting in 5s...");
+        setTimeout(() => this.connectWS(), 5000);
+      });
     } catch (e) {
       setTimeout(() => this.connectWS(), 5000);
     }
@@ -354,19 +362,22 @@ export class FarazGoldEngine {
   }
 
   private detectLevels() {
-    if (this.candles.length < 10) return;
+    if (this.candles.length < 20) return;
+    this.levels = []; // Reset and re-detect for better accuracy
+    
     const lookback = 5;
-    const lastIdx = this.candles.length - lookback - 1;
-    if (lastIdx < lookback) return;
-
-    const current = this.candles[lastIdx];
-    let isHigh = true, isLow = true;
-    for (let i = 1; i <= lookback; i++) {
-      if (this.candles[lastIdx - i].high >= current.high || this.candles[lastIdx + i].high > current.high) isHigh = false;
-      if (this.candles[lastIdx - i].low <= current.low || this.candles[lastIdx + i].low < current.low) isLow = false;
+    for (let i = lookback; i < this.candles.length - lookback; i++) {
+      const current = this.candles[i];
+      let isHigh = true, isLow = true;
+      
+      for (let j = 1; j <= lookback; j++) {
+        if (this.candles[i - j].high >= current.high || this.candles[i + j].high > current.high) isHigh = false;
+        if (this.candles[i - j].low <= current.low || this.candles[i + j].low < current.low) isLow = false;
+      }
+      
+      if (isHigh) this.addLevel('RESISTANCE', current.high, current.time * 1000);
+      if (isLow) this.addLevel('SUPPORT', current.low, current.time * 1000);
     }
-    if (isHigh) this.addLevel('RESISTANCE', current.high, current.time * 1000);
-    if (isLow) this.addLevel('SUPPORT', current.low, current.time * 1000);
   }
 
   private addLevel(type: 'SUPPORT' | 'RESISTANCE', price: number, time: number) {
