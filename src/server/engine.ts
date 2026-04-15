@@ -1,8 +1,6 @@
 import WebSocket from 'ws';
-import axios, { AxiosInstance } from 'axios';
 import fs from 'fs';
 import path from 'path';
-import https from 'https';
 
 export class FarazGoldEngine {
   price: number = 0;
@@ -19,17 +17,12 @@ export class FarazGoldEngine {
   csrfToken: string | null = null;
   
   private ws: WebSocket | null = null;
-  private api: AxiosInstance;
   private dataFile: string = path.join(process.cwd(), 'recorded_data.jsonl');
   private settingsFile: string = path.join(process.cwd(), 'settings.json');
   private lastCandleTime: number = 0;
 
   constructor() {
     this.loadSettings();
-    this.api = axios.create({
-      timeout: 30000,
-      httpsAgent: new https.Agent({ keepAlive: true, rejectUnauthorized: false })
-    });
     this.loadHistory();
   }
 
@@ -37,23 +30,17 @@ export class FarazGoldEngine {
     try {
       const baseUrl = process.env.FARAZGOLD_BASEURL || 'https://demo.farazgold.com';
       const timeframe = this.timeframe === '60' ? '60' : this.timeframe;
-      const url = `${baseUrl}/api/room/api/get-history/`;
-      console.log(`[Engine] Fetching history from: ${url} (TF: ${timeframe})`);
+      const url = `${baseUrl}/api/room/api/get-history/?symbol=mazane&timeframe=${timeframe}&count=300`;
       
-      const response = await this.api.get(url, {
-        params: {
-          symbol: 'mazane',
-          timeframe: timeframe,
-          count: 300
-        },
-        headers: {
-          'Authorization': this.accessToken ? `Bearer ${this.accessToken}` : undefined,
-          'Cookie': this.sessionId ? `sessionid=${this.sessionId}` : undefined
-        }
-      });
+      const headers: any = {};
+      if (this.accessToken) headers['Authorization'] = `Bearer ${this.accessToken}`;
+      if (this.sessionId) headers['Cookie'] = `sessionid=${this.sessionId}`;
 
-      if (response.data && Array.isArray(response.data)) {
-        this.candles = response.data.map((b: any) => ({
+      const res = await fetch(url, { headers });
+      const data = await res.json();
+
+      if (Array.isArray(data)) {
+        this.candles = data.map((b: any) => ({
           time: b.time,
           open: parseFloat(b.open),
           high: parseFloat(b.high),
@@ -65,7 +52,6 @@ export class FarazGoldEngine {
           this.lastCandleTime = this.candles[this.candles.length - 1].time * 1000;
           this.detectLevels();
         }
-        console.log(`Loaded ${this.candles.length} candles for history.`);
       }
     } catch (e: any) {
       console.error(`Error fetching history: ${e.message}`);
@@ -108,17 +94,18 @@ export class FarazGoldEngine {
     if (!this.refreshToken) return false;
     
     try {
-      console.log("Attempting to refresh auth token...");
       const baseUrl = process.env.FARAZGOLD_BASEURL || 'https://demo.farazgold.com';
-      const response = await axios.post(`${baseUrl}/api/User/api/token/refresh/`, {
-        refresh: this.refreshToken
+      const res = await fetch(`${baseUrl}/api/User/api/token/refresh/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh: this.refreshToken })
       });
+      const data = await res.json();
       
-      if (response.data && response.data.access) {
-        this.accessToken = response.data.access;
-        if (response.data.refresh) this.refreshToken = response.data.refresh;
+      if (data && data.access) {
+        this.accessToken = data.access;
+        if (data.refresh) this.refreshToken = data.refresh;
         this.saveSettings();
-        console.log("Token refreshed successfully.");
         return true;
       }
     } catch (e: any) {
@@ -129,13 +116,7 @@ export class FarazGoldEngine {
 
   start() {
     this.connectWS();
-    
-    // Periodic token refresh (every 12 hours)
-    setInterval(() => {
-      this.refreshAuthToken();
-    }, 12 * 60 * 60 * 1000);
-
-    // Fallback price fetch every 30s
+    setInterval(() => this.refreshAuthToken(), 12 * 60 * 60 * 1000);
     setInterval(() => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
         this.fetchPriceAPI();
@@ -145,19 +126,13 @@ export class FarazGoldEngine {
 
   private connectWS() {
     const wsUrl = process.env.FARAZGOLD_WS_URL || 'wss://demo.farazgold.com/ws/';
-    const token = this.accessToken;
-    
-    // Inject token into URL if available
-    const finalWsUrl = token ? `${wsUrl}?token=${token}` : wsUrl;
+    const finalWsUrl = this.accessToken ? `${wsUrl}?token=${this.accessToken}` : wsUrl;
 
-    console.log(`Connecting to FarazGold WS: ${finalWsUrl.split('?')[0]}`);
-    
     try {
       const options: any = {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          'User-Agent': 'Mozilla/5.0',
           'Origin': 'https://demo.farazgold.com',
-          'Referer': 'https://demo.farazgold.com/room/',
         }
       };
 
@@ -169,8 +144,6 @@ export class FarazGoldEngine {
       this.ws = new WebSocket(finalWsUrl, options);
 
       this.ws.on('open', () => {
-        console.log(`WS Connected, subscribing to timeframe: ${this.timeframe}`);
-        // Subscribe to mazane gold bars for the current timeframe
         this.ws?.send(JSON.stringify({
           action: 'SubAdd',
           subs: [`0~farazgold~mazane~gold~${this.timeframe}`]
@@ -180,42 +153,27 @@ export class FarazGoldEngine {
       this.ws.on('message', (data) => {
         try {
           const msg = JSON.parse(data.toString());
-          
-          // Handle price updates
-          if (msg.action === 'Update' && msg.data) {
-            const d = msg.data;
-            if (d.price) {
-              this.updatePrice(parseFloat(d.price));
-            }
+          if (msg.action === 'Update' && msg.data?.price) {
+            this.updatePrice(parseFloat(msg.data.price));
           }
-          
-          // Handle bar updates for current timeframe
           if (msg.bars && msg.bars[this.timeframe]) {
-            const bar = msg.bars[this.timeframe];
-            this.processBar(bar);
+            this.processBar(msg.bars[this.timeframe]);
           }
         } catch (e) {}
       });
 
-      this.ws.on('close', () => {
-        console.log("WS Closed, reconnecting in 5s...");
-        setTimeout(() => this.connectWS(), 5000);
-      });
-
-      this.ws.on('error', (err) => {
-        console.error("WS Error:", err.message);
-      });
+      this.ws.on('close', () => setTimeout(() => this.connectWS(), 5000));
     } catch (e) {
-      console.error("WS Connection failed:", e);
       setTimeout(() => this.connectWS(), 5000);
     }
   }
 
   private async fetchPriceAPI() {
     try {
-      const res = await axios.get('https://demo.farazgold.com/api/room/api/get-last-price/?symbol=mazane');
-      if (res.data && res.data.price) {
-        this.updatePrice(parseFloat(res.data.price));
+      const res = await fetch('https://demo.farazgold.com/api/room/api/get-last-price/?symbol=mazane');
+      const data = await res.json();
+      if (data && data.price) {
+        this.updatePrice(parseFloat(data.price));
       }
     } catch (e) {}
   }
@@ -223,25 +181,16 @@ export class FarazGoldEngine {
   private updatePrice(newPrice: number) {
     this.price = newPrice;
     const now = Date.now();
-    const timeframeMinutes = parseInt(this.timeframe) || 1;
-    const timeframeMs = timeframeMinutes * 60000;
+    const timeframeMs = (parseInt(this.timeframe) || 1) * 60000;
     const candleTime = Math.floor(now / timeframeMs) * timeframeMs;
     const candleTimeSec = candleTime / 1000;
 
     if (this.candles.length === 0 || candleTime > this.lastCandleTime) {
-      const newCandle = {
-        time: candleTimeSec,
-        open: newPrice,
-        high: newPrice,
-        low: newPrice,
-        close: newPrice
-      };
+      const newCandle = { time: candleTimeSec, open: newPrice, high: newPrice, low: newPrice, close: newPrice };
       this.candles.push(newCandle);
       this.candles.sort((a, b) => a.time - b.time);
       this.lastCandleTime = candleTime;
-      
-      if (this.candles.length > 2880) this.candles.shift(); // Keep 2 days of 1m candles
-      
+      if (this.candles.length > 1000) this.candles.shift();
       this.detectLevels();
       this.recordData(newCandle);
     } else {
@@ -256,13 +205,11 @@ export class FarazGoldEngine {
 
   private processBar(bar: any) {
     if (!bar || !bar.time) return;
-    
-    const time = bar.time; // This is already in seconds from FarazGold
+    const time = bar.time;
     const open = parseFloat(bar.open || bar.close);
     const high = parseFloat(bar.high || bar.close);
     const low = parseFloat(bar.low || bar.close);
     const close = parseFloat(bar.close);
-
     if (isNaN(close)) return;
 
     const existingIdx = this.candles.findIndex(c => c.time === time);
@@ -270,10 +217,8 @@ export class FarazGoldEngine {
       this.candles[existingIdx] = { time, open, high, low, close };
     } else {
       this.candles.push({ time, open, high, low, close });
-      // Sort and keep only unique timestamps
       this.candles.sort((a, b) => a.time - b.time);
-      
-      if (this.candles.length > 2880) this.candles.shift();
+      if (this.candles.length > 1000) this.candles.shift();
       this.lastCandleTime = time * 1000;
       this.detectLevels();
       this.recordData({ time, open, high, low, close });
@@ -282,31 +227,21 @@ export class FarazGoldEngine {
 
   private detectLevels() {
     if (this.candles.length < 10) return;
-    
-    // Simple Peak/Trough detection
     const lookback = 5;
     const lastIdx = this.candles.length - lookback - 1;
     if (lastIdx < lookback) return;
 
     const current = this.candles[lastIdx];
-    let isHigh = true;
-    let isLow = true;
-
+    let isHigh = true, isLow = true;
     for (let i = 1; i <= lookback; i++) {
       if (this.candles[lastIdx - i].high >= current.high || this.candles[lastIdx + i].high > current.high) isHigh = false;
       if (this.candles[lastIdx - i].low <= current.low || this.candles[lastIdx + i].low < current.low) isLow = false;
     }
-
-    if (isHigh) {
-      this.addLevel('RESISTANCE', current.high, current.time * 1000);
-    }
-    if (isLow) {
-      this.addLevel('SUPPORT', current.low, current.time * 1000);
-    }
+    if (isHigh) this.addLevel('RESISTANCE', current.high, current.time * 1000);
+    if (isLow) this.addLevel('SUPPORT', current.low, current.time * 1000);
   }
 
   private addLevel(type: 'SUPPORT' | 'RESISTANCE', price: number, time: number) {
-    // Avoid duplicate levels at same price/time
     const exists = this.levels.some(l => l.type === type && Math.abs(l.price - price) < 10);
     if (!exists) {
       this.levels.push({ type, price, time });
@@ -314,54 +249,26 @@ export class FarazGoldEngine {
     }
   }
 
-  startRecording() {
-    this.isRecording = true;
-    this.recordingStartTime = Date.now();
-    console.log("Recording started");
-  }
-
-  stopRecording() {
-    this.isRecording = false;
-    this.recordingStartTime = null;
-    console.log("Recording stopped");
-  }
+  startRecording() { this.isRecording = true; this.recordingStartTime = Date.now(); }
+  stopRecording() { this.isRecording = false; this.recordingStartTime = null; }
 
   private recordData(candle: any) {
     if (!this.isRecording) return;
-    
-    const data = JSON.stringify({ ...candle, recordedAt: Date.now() }) + '\n';
-    fs.appendFileSync(this.dataFile, data);
+    fs.appendFileSync(this.dataFile, JSON.stringify({ ...candle, recordedAt: Date.now() }) + '\n');
   }
 
   setTimeframe(tf: string) {
     if (this.timeframe === tf) return;
-    console.log(`[Engine] Switching timeframe from ${this.timeframe} to ${tf}`);
     this.timeframe = tf;
-    this.candles = []; 
-    this.levels = [];
-    this.lastCandleTime = 0;
-    
+    this.candles = []; this.levels = []; this.lastCandleTime = 0;
     this.fetchHistory();
-    
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      console.log(`[Engine] Updating WS subscriptions for ${tf}`);
-      // Unsubscribe from all to be sure
+    if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ action: 'SubRemoveAll' }));
-      // Re-subscribe to new timeframe
-      this.ws.send(JSON.stringify({
-        action: 'SubAdd',
-        subs: [`0~farazgold~mazane~gold~${this.timeframe}`]
-      }));
+      this.ws.send(JSON.stringify({ action: 'SubAdd', subs: [`0~farazgold~mazane~gold~${this.timeframe}`] }));
     }
   }
 
   getState() {
-    return {
-      price: this.price,
-      timeframe: this.timeframe,
-      candles: this.candles.slice(-300), // Send last 300 for UI
-      levels: this.levels,
-      isRecording: this.isRecording
-    };
+    return { price: this.price, timeframe: this.timeframe, candles: this.candles.slice(-300), levels: this.levels, isRecording: this.isRecording };
   }
 }
