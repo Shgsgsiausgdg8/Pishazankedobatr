@@ -10,7 +10,15 @@ import { FarazGoldEngine } from "./src/server/engine.ts";
 async function startServer() {
   const app = express();
   const server = http.createServer(app);
-  const PORT = 3000;
+  const PORT = 4000;
+
+  // Prevent process crash from unhandled errors
+  process.on('uncaughtException', (err) => {
+    console.error('[Server] Uncaught Exception:', err);
+  });
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('[Server] Unhandled Rejection at:', promise, 'reason:', reason);
+  });
 
   const engine = new FarazGoldEngine();
   const wss = new WebSocketServer({ server });
