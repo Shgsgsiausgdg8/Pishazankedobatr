@@ -13,8 +13,8 @@ export class FarazGoldEngine {
   // Auth State
   accessToken: string | null = null;
   refreshToken: string | null = null;
-  sessionId: string | null = null;
-  csrfToken: string | null = null;
+  sessionId: string | null = 'njmnqc7hfkeyayowprwheqc73lvp98as';
+  csrfToken: string | null = 'GTiZlvd8jNoMuko3nkjjU0lhC8m6Yy3m';
   
   private ws: WebSocket | null = null;
   private dataFile: string = path.join(process.cwd(), 'recorded_data.jsonl');
@@ -36,39 +36,42 @@ export class FarazGoldEngine {
       const from = now - (barsCount * timeframeSeconds);
       const to = now;
 
-      // The user provided endpoint
       const url = `${baseUrl}/api/room/api/get-bars/?symbol=mazane&from=${from}&to=${to}&resolution=${resolution}`;
       console.log(`[Engine] Fetching history: ${url}`);
       
       const headers: any = {
-        'accept': 'application/json',
-        'accept-language': 'en-US,en;q=0.9,fa;q=0.8',
-        'cache-control': 'no-store, no-cache, must-revalidate',
-        'expires': '0',
+        'accept': 'application/json, text/plain, */*',
+        'accept-language': 'fa-IR,fa;q=0.9,en-US;q=0.8,en;q=0.7',
+        'cache-control': 'no-cache',
         'pragma': 'no-cache',
-        'priority': 'u=1, i',
         'referer': `${baseUrl}/room/`,
-        'sec-ch-ua': '"Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"',
+        'sec-ch-ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
         'sec-ch-ua-mobile': '?0',
         'sec-ch-ua-platform': '"Windows"',
         'sec-fetch-dest': 'empty',
         'sec-fetch-mode': 'cors',
         'sec-fetch-site': 'same-origin',
-        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'X-Requested-With': 'XMLHttpRequest'
       };
       
       if (this.accessToken) {
         headers['authorization'] = `Bearer ${this.accessToken}`;
       }
-      if (this.sessionId) {
-        headers['cookie'] = `sessionid=${this.sessionId}`;
+
+      const cookies = [];
+      if (this.sessionId) cookies.push(`sessionid=${this.sessionId}`);
+      if (this.csrfToken) cookies.push(`csrftoken=${this.csrfToken}`);
+      if (cookies.length > 0) headers['cookie'] = cookies.join('; ');
+      
+      if (this.csrfToken) {
+        headers['X-CSRFToken'] = this.csrfToken;
       }
 
       const res = await fetch(url, { headers });
       if (!res.ok) {
-        console.error(`[Engine] History API (get-bars) failed: ${res.status}`);
-        // Fallback to old probing logic if get-bars fails
-        return this.probeOldHistory();
+        console.error(`[Engine] History API failed: ${res.status}`);
+        return;
       }
       
       const text = await res.text();
@@ -77,9 +80,9 @@ export class FarazGoldEngine {
         if (Array.isArray(data)) {
           this.candles = data.map((b: any) => ({
             time: b.time,
-            open: parseFloat(b.open),
-            high: parseFloat(b.high),
-            low: parseFloat(b.low),
+            open: parseFloat(b.open || b.close),
+            high: parseFloat(b.high || b.close),
+            low: parseFloat(b.low || b.close),
             close: parseFloat(b.close)
           })).sort((a: any, b: any) => a.time - b.time);
           
@@ -91,7 +94,6 @@ export class FarazGoldEngine {
         }
       } catch (e) {
         console.error("[Engine] Failed to parse history JSON.");
-        this.probeOldHistory();
       }
     } catch (e: any) {
       console.error(`[Engine] Error fetching history: ${e.message}`);
@@ -206,13 +208,15 @@ export class FarazGoldEngine {
 
   private async connectWS() {
     const baseUrl = process.env.FARAZGOLD_BASEURL || 'https://demo.farazgold.com';
-    const wsUrl = process.env.FARAZGOLD_WS_URL || 'wss://demo.farazgold.com/ws/';
+    // New WebSocket endpoint from inspiration project
+    const resolution = Math.floor((parseInt(this.timeframe) || 1));
+    const wsUrl = `wss://demo.farazgold.com/room/api/get-bars-ws/?symbol=mazane&resolution=${resolution}&history=300`;
     
     // Pre-flight check to get session and CSRF if needed
     if (!this.sessionId || !this.csrfToken) {
       try {
         const res = await fetch(`${baseUrl}/room/`, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' }
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36' }
         });
         const text = await res.text();
         const cookie = res.headers.get('set-cookie');
@@ -222,7 +226,6 @@ export class FarazGoldEngine {
           const cMatch = cookie.match(/csrftoken=([^;]+)/);
           if (cMatch) this.csrfToken = cMatch[1];
         }
-        // Fallback for CSRF from HTML
         if (!this.csrfToken) {
           const csrfMatch = text.match(/name="csrfmiddlewaretoken" value="([^"]+)"/);
           if (csrfMatch) this.csrfToken = csrfMatch[1];
@@ -230,7 +233,10 @@ export class FarazGoldEngine {
       } catch (e) {}
     }
 
-    const finalWsUrl = this.accessToken ? `${wsUrl}?token=${this.accessToken}` : wsUrl;
+    const tokenToUse = this.accessToken || '';
+    const finalWsUrl = tokenToUse ? `${wsUrl}&token=${tokenToUse}` : wsUrl;
+
+    console.log(`[Engine] Connecting to WS: ${finalWsUrl.split('&token=')[0]}`);
 
     try {
       const options: any = {
@@ -243,15 +249,16 @@ export class FarazGoldEngine {
           'sec-ch-ua-mobile': '?0',
           'sec-ch-ua-platform': '"Windows"',
           'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
-          'Origin': baseUrl
+          'Origin': baseUrl,
+          'X-Requested-With': 'XMLHttpRequest'
         }
       };
 
-      if (this.sessionId) {
-        const cookies = [`sessionid=${this.sessionId}`];
-        if (this.csrfToken) cookies.push(`csrftoken=${this.csrfToken}`);
-        options.headers['cookie'] = cookies.join('; ');
-      }
+      const cookies = [];
+      if (this.sessionId) cookies.push(`sessionid=${this.sessionId}`);
+      if (this.csrfToken) cookies.push(`csrftoken=${this.csrfToken}`);
+      if (cookies.length > 0) options.headers['cookie'] = cookies.join('; ');
+      
       if (this.csrfToken) {
         options.headers['x-csrftoken'] = this.csrfToken;
       }

@@ -48,20 +48,23 @@ async function startServer() {
 
   app.post("/api/auth/set-refresh-token", async (req, res) => {
     const { refreshToken, type } = req.body;
-    if (!refreshToken) return res.status(400).json({ error: 'Refresh token is required' });
+    if (!refreshToken) return res.status(400).json({ error: 'Token is required' });
 
     try {
-      engine.refreshToken = refreshToken;
       process.env.FARAZGOLD_BASEURL = type === 'real' ? 'https://farazgold.com' : 'https://demo.farazgold.com';
-      process.env.FARAZGOLD_WS_URL = type === 'real' ? 'wss://farazgold.com/ws/' : 'wss://demo.farazgold.com/ws/';
-
-      const success = await engine.refreshAuthToken();
-      if (success) {
-        (engine as any).connectWS();
-        res.json({ success: true });
+      
+      // If it looks like an access token (starts with eyJ), set it as accessToken
+      if (refreshToken.startsWith('eyJ')) {
+        (engine as any).accessToken = refreshToken;
+        console.log("[Server] Access token set directly.");
       } else {
-        res.status(400).json({ error: 'Invalid refresh token' });
+        (engine as any).refreshToken = refreshToken;
+        await engine.refreshAuthToken();
       }
+      
+      (engine as any).saveSettings();
+      (engine as any).connectWS();
+      res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
