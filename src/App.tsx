@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 // --- Icons (SVG) ---
-const ActivityIcon = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+const ActivityIcon = ({ size = 24 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
 );
 const PlayIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
@@ -318,6 +318,7 @@ export default function App() {
 
   const timeframes = [
     { label: '1m', value: '1' },
+    { label: '2m', value: '2' },
     { label: '5m', value: '5' },
     { label: '15m', value: '15' },
     { label: '1h', value: '60' },
@@ -381,38 +382,88 @@ export default function App() {
             </div>
           </div>
           <div className="stat-card">
-            <div style={{ color: '#94a3b8', fontSize: '0.8rem', marginBottom: '8px' }}>وضعیت ضبط</div>
+            <div style={{ color: '#94a3b8', fontSize: '0.8rem', marginBottom: '8px' }}>وضعیت استراتژی</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: data?.isRecording ? '#10b981' : '#475569' }} />
-              {data?.isRecording ? 'در حال ضبط' : 'غیرفعال'}
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }} />
+              {data?.timeframe === '5' ? 'روند (Trend)' : 'اسکلپ (Scalp)'}
             </div>
           </div>
         </div>
 
-        <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <div style={{ fontWeight: 'bold', color: '#94a3b8' }}>مظنه طلا ({data?.timeframe}m)</div>
-            <div style={{ display: 'flex', gap: '4px', background: '#020617', padding: '4px', borderRadius: '8px' }} className="ltr">
-              {timeframes.map(tf => (
-                <button 
-                  key={tf.value} 
-                  onClick={() => setTimeframe(tf.value)}
-                  style={{ 
-                    padding: '4px 12px', 
-                    borderRadius: '6px', 
-                    fontSize: '0.7rem', 
-                    border: 'none',
-                    cursor: 'pointer',
-                    background: data?.timeframe === tf.value ? '#10b981' : 'transparent',
-                    color: data?.timeframe === tf.value ? 'white' : '#94a3b8'
-                  }}
-                >
-                  {tf.label}
-                </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div className="card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <div style={{ fontWeight: 'bold', color: '#94a3b8' }}>مظنه طلا ({data?.timeframe}m)</div>
+              <div style={{ display: 'flex', gap: '4px', background: '#020617', padding: '4px', borderRadius: '8px' }} className="ltr">
+                {timeframes.map(tf => (
+                  <button 
+                    key={tf.value} 
+                    onClick={() => setTimeframe(tf.value)}
+                    style={{ 
+                      padding: '4px 12px', 
+                      borderRadius: '6px', 
+                      fontSize: '0.7rem', 
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: data?.timeframe === tf.value ? '#10b981' : 'transparent',
+                      color: data?.timeframe === tf.value ? 'white' : '#94a3b8'
+                    }}
+                  >
+                    {tf.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <CandlestickChart data={data?.candles || []} levels={data?.levels || []} />
+          </div>
+
+          <div className="card">
+            <div style={{ fontWeight: 'bold', color: '#94a3b8', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <ActivityIcon size={16} />
+              سیگنال‌های اخیر
+            </div>
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', 
+              gap: '1rem',
+              padding: '4px'
+            }}>
+              {(!data?.signals || data.signals.length === 0) && (
+                <div style={{ textAlign: 'center', color: '#475569', gridColumn: '1 / -1', padding: '2rem', fontSize: '0.8rem' }}>
+                  در انتظار سیگنال...
+                </div>
+              )}
+              {data?.signals?.map((sig: any, idx: number) => (
+                <div key={idx} style={{ 
+                  background: '#020617', 
+                  borderRadius: '12px', 
+                  padding: '12px', 
+                  border: `1px solid ${sig.type === 'BUY' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <span style={{ 
+                      color: sig.type === 'BUY' ? '#10b981' : '#ef4444', 
+                      fontWeight: 'bold',
+                      fontSize: '0.9rem'
+                    }}>
+                      {sig.type === 'BUY' ? 'خرید (BUY)' : 'فروش (SELL)'}
+                    </span>
+                    <span style={{ color: '#475569', fontSize: '0.7rem' }}>
+                      {new Date(sig.time).toLocaleTimeString('fa-IR')}
+                    </span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.8rem' }}>
+                    <div style={{ color: '#94a3b8' }}>ورود: <span style={{ color: '#fff' }}>{sig.entry.toLocaleString()}</span></div>
+                    <div style={{ color: '#94a3b8' }}>استاپ: <span style={{ color: '#ef4444' }}>{sig.sl.toLocaleString()}</span></div>
+                    <div style={{ color: '#94a3b8' }}>تارگت ۱: <span style={{ color: '#10b981' }}>{sig.tp1.toLocaleString()}</span></div>
+                    <div style={{ color: '#94a3b8' }}>تارگت ۲: <span style={{ color: '#10b981' }}>{sig.tp2.toLocaleString()}</span></div>
+                    <div style={{ color: '#94a3b8' }}>تارگت ۳: <span style={{ color: '#10b981' }}>{sig.tp3.toLocaleString()}</span></div>
+                    <div style={{ color: '#94a3b8' }}>تایم: <span style={{ color: '#fff' }}>{sig.timeframe}m</span></div>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
-          <CandlestickChart data={data?.candles || []} levels={data?.levels || []} />
         </div>
       </main>
 

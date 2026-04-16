@@ -1,13 +1,17 @@
 import WebSocket from 'ws';
 import fs from 'fs';
 import path from 'path';
+import { TradingStrategy, Signal } from './strategy';
 
 export class FarazGoldEngine {
   price: number = 0;
   timeframe: string = '1'; // Default to 1m
   candles: any[] = [];
   levels: { type: 'SUPPORT' | 'RESISTANCE', price: number, time: number }[] = [];
+  signals: Signal[] = [];
   isRecording: boolean = false;
+  
+  private strategy = new TradingStrategy();
   recordingStartTime: number | null = null;
   
   // Auth State
@@ -328,13 +332,27 @@ export class FarazGoldEngine {
       this.lastCandleTime = candleTime;
       if (this.candles.length > 1000) this.candles.shift();
       this.detectLevels();
+      this.runStrategy();
       this.recordData(newCandle);
     } else {
       const last = this.candles[this.candles.length - 1];
-      if (last.time === candleTimeSec) {
+      if (last && last.time === candleTimeSec) {
         last.high = Math.max(last.high, newPrice);
         last.low = Math.min(last.low, newPrice);
         last.close = newPrice;
+      }
+    }
+  }
+
+  private runStrategy() {
+    const signal = this.strategy.analyze(this.candles, this.timeframe);
+    if (signal) {
+      // Avoid duplicate signals for the same candle time
+      const lastSignal = this.signals[0]; // signals is unshifted, so 0 is latest
+      if (!lastSignal || lastSignal.timeframe !== signal.timeframe || Math.abs(lastSignal.time - signal.time) > 60000) {
+        this.signals.unshift(signal);
+        if (this.signals.length > 4) this.signals.pop();
+        console.log(`[Strategy] New Signal: ${signal.type} at ${signal.entry}`);
       }
     }
   }
@@ -408,6 +426,13 @@ export class FarazGoldEngine {
   }
 
   getState() {
-    return { price: this.price, timeframe: this.timeframe, candles: this.candles.slice(-300), levels: this.levels, isRecording: this.isRecording };
+    return { 
+      price: this.price, 
+      timeframe: this.timeframe, 
+      candles: this.candles.slice(-300), 
+      levels: this.levels, 
+      signals: this.signals,
+      isRecording: this.isRecording 
+    };
   }
 }
