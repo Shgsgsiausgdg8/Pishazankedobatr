@@ -1,7 +1,8 @@
 /**
- * FarazGold Trading Strategy
- * This file is designed to be easily editable by a trader.
- * Logic: RSI + EMA
+ * FarazGold Trading Strategy - N Pattern Detector
+ * تشخیص الگوی N معمولی و N معکوس با سه نقطه A, B, C
+ * سیگنال Buy/Sell در سطح 50% بین A و B
+ * Targets: 2%, 3.3%, 3.9% - Stop Loss: 2%
  */
 
 export interface Candle {
@@ -24,115 +25,126 @@ export interface Signal {
 }
 
 export class TradingStrategy {
-  // --- CONFIGURATION ---
-  private rsiPeriod = 14;
-  private emaPeriod = 20;
-  
-  // Scalp Settings (1m, 2m)
-  private scalpRsiOverbought = 70;
-  private scalpRsiOversold = 30;
-  
-  // Trend Settings (5m)
-  private trendRsiThreshold = 50;
-  
-  // Risk Management (in Ticks/Price units)
-  private tp1Ticks = 15;
-  private tp2Ticks = 30;
-  private tp3Ticks = 50;
-  private slTicks = 20;
+    private lastSignalTime: number = 0;       // جلوگیری از سیگنال‌های تکراری
+    private lastPatternKey: string | null = null;    // کلید منحصربه‌فرد الگو
 
-  /**
-   * Main analysis function
-   */
-  analyze(candles: Candle[], timeframe: string): Signal | null {
-    if (candles.length < Math.max(this.rsiPeriod, this.emaPeriod) + 5) return null;
+    constructor() {}
 
-    const closes = candles.map(c => c.close);
-    const currentPrice = closes[closes.length - 1];
-    const rsi = this.calculateRSI(closes, this.rsiPeriod);
-    const ema = this.calculateEMA(closes, this.emaPeriod);
-    
-    const lastRsi = rsi[rsi.length - 1];
-    const lastEma = ema[ema.length - 1];
+    /**
+     * تابع اصلی تحلیل که توسط engine.ts فراخوانی می‌شود
+     * @param candles - آرایه شمع‌ها {time, open, high, low, close}
+     * @param timeframe - تایم‌فریم (مثلاً '1', '5')
+     * @returns - سیگنال یا null
+     */
+    analyze(candles: Candle[], timeframe: string): Signal | null {
+        if (!candles || candles.length < 10) return null;
 
-    // Determine Mode
-    const isScalp = timeframe === '1' || timeframe === '2';
-    const isTrend = timeframe === '5';
+        const pattern = this.detectNPattern(candles);
+        if (!pattern) return null;
 
-    if (isScalp) {
-      // SCALP STRATEGY: RSI Reversal + EMA Confirmation
-      // BUY: RSI was oversold and price is above EMA
-      if (lastRsi < this.scalpRsiOversold && currentPrice > lastEma) {
-        return this.createSignal('BUY', currentPrice, timeframe);
-      }
-      // SELL: RSI was overbought and price is below EMA
-      if (lastRsi > this.scalpRsiOverbought && currentPrice < lastEma) {
-        return this.createSignal('SELL', currentPrice, timeframe);
-      }
-    } 
-    
-    if (isTrend) {
-      // TREND STRATEGY: EMA Direction + RSI Strength
-      // BUY: Price above EMA and RSI above 50
-      if (currentPrice > lastEma && lastRsi > this.trendRsiThreshold) {
-        return this.createSignal('BUY', currentPrice, timeframe);
-      }
-      // SELL: Price below EMA and RSI below 50
-      if (currentPrice < lastEma && lastRsi < this.trendRsiThreshold) {
-        return this.createSignal('SELL', currentPrice, timeframe);
-      }
+        // جلوگیری از سیگنال‌های تکراری در یک دقیقه
+        const now = Date.now();
+        if (this.lastSignalTime && (now - this.lastSignalTime) < 60000) return null;
+
+        const signal = this.createSignalFromPattern(pattern, timeframe);
+        this.lastSignalTime = now;
+        console.log(`[Strategy] N-Pattern Signal: ${signal.type} at ${signal.entry}`);
+        return signal;
     }
 
-    return null;
-  }
+    /**
+     * تشخیص الگوی N یا N معکوس از روی نقاط چرخشی اخیر
+     * @param candles 
+     * @returns - { type, A, B, C, signalPrice }
+     */
+    private detectNPattern(candles: Candle[]) {
+        // 1. پیدا کردن نقاط چرخشی (سقف و کف محلی)
+        const pivots: { type: 'high' | 'low', price: number, index: number, time: number }[] = [];
+        const len = candles.length;
+        for (let i = 1; i < len - 1; i++) {
+            const prev = candles[i-1];
+            const curr = candles[i];
+            const next = candles[i+1];
+            
+            // سقف محلی (قله)
+            if (curr.high > prev.high && curr.high > next.high) {
+                pivots.push({ type: 'high', price: curr.high, index: i, time: curr.time });
+            }
+            // کف محلی (دره)
+            if (curr.low < prev.low && curr.low < next.low) {
+                pivots.push({ type: 'low', price: curr.low, index: i, time: curr.time });
+            }
+        }
 
-  private createSignal(type: 'BUY' | 'SELL', price: number, timeframe: string): Signal {
-    const direction = type === 'BUY' ? 1 : -1;
-    return {
-      type,
-      entry: price,
-      sl: price - (this.slTicks * direction * -1), // SL is opposite to direction
-      tp1: price + (this.tp1Ticks * direction),
-      tp2: price + (this.tp2Ticks * direction),
-      tp3: price + (this.tp3Ticks * direction),
-      time: Date.now(),
-      timeframe
-    };
-  }
+        if (pivots.length < 3) return null;
 
-  // --- TECHNICAL INDICATORS ---
+        // 2. سه نقطه چرخشی آخر را بگیرید (باید متناوب باشند)
+        const recent = pivots.slice(-3);
+        const [p1, p2, p3] = recent;
+        if (p1.type === p2.type || p2.type === p3.type) return null;
 
-  private calculateEMA(data: number[], period: number): number[] {
-    const k = 2 / (period + 1);
-    let ema = [data[0]];
-    for (let i = 1; i < data.length; i++) {
-      ema.push(data[i] * k + ema[i - 1] * (1 - k));
+        // 3. الگوی N معمولی: low → high → low
+        if (p1.type === 'low' && p2.type === 'high' && p3.type === 'low') {
+            const A = p1.price;
+            const B = p2.price;
+            const C = p3.price;
+            // شرط: A < B و C < B و C > A
+            if (A < B && C < B && C > A) {
+                const signalPrice = A + (B - A) * 0.5;
+                // کلید منحصربه‌فرد برای این الگو
+                const patternKey = `N|${A}|${B}|${C}`;
+                if (this.lastPatternKey === patternKey) return null;
+                this.lastPatternKey = patternKey;
+                return { type: 'SELL', A, B, C, signalPrice };
+            }
+        }
+
+        // 4. الگوی N معکوس: high → low → high
+        if (p1.type === 'high' && p2.type === 'low' && p3.type === 'high') {
+            const A = p1.price;
+            const B = p2.price;
+            const C = p3.price;
+            // شرط: A > B و C > B و C < A
+            if (A > B && C > B && C < A) {
+                const signalPrice = A + (B - A) * 0.5; 
+                const patternKey = `INV|${A}|${B}|${C}`;
+                if (this.lastPatternKey === patternKey) return null;
+                this.lastPatternKey = patternKey;
+                return { type: 'BUY', A, B, C, signalPrice };
+            }
+        }
+
+        return null;
     }
-    return ema;
-  }
 
-  private calculateRSI(data: number[], period: number): number[] {
-    let rsi = [];
-    let gains = [];
-    let losses = [];
+    /**
+     * ساخت آبجکت سیگنال با تارگت‌ها و استاپ لاس
+     * @param pattern 
+     * @param timeframe 
+     * @returns
+     */
+    private createSignalFromPattern(pattern: any, timeframe: string): Signal {
+        const isBuy = pattern.type === 'BUY';
+        const entry = pattern.signalPrice;
 
-    for (let i = 1; i < data.length; i++) {
-      const diff = data[i] - data[i - 1];
-      gains.push(Math.max(0, diff));
-      losses.push(Math.max(0, -diff));
+        // درصدهای تارگت (۲٪، ۳.۳٪، ۳.۹٪)
+        const tpPercents = [0.02, 0.033, 0.039];
+        const slPercent = 0.02;   // استاپ لاس ۲٪
+
+        const tp1 = isBuy ? entry * (1 + tpPercents[0]) : entry * (1 - tpPercents[0]);
+        const tp2 = isBuy ? entry * (1 + tpPercents[1]) : entry * (1 - tpPercents[1]);
+        const tp3 = isBuy ? entry * (1 + tpPercents[2]) : entry * (1 - tpPercents[2]);
+        const sl = isBuy ? entry * (1 - slPercent) : entry * (1 + slPercent);
+
+        return {
+            type: pattern.type,
+            entry: entry,
+            sl: sl,
+            tp1: tp1,
+            tp2: tp2,
+            tp3: tp3,
+            time: Date.now(),
+            timeframe: timeframe
+        };
     }
-
-    let avgGain = gains.slice(0, period).reduce((a, b) => a + b) / period;
-    let avgLoss = losses.slice(0, period).reduce((a, b) => a + b) / period;
-
-    for (let i = period; i < data.length; i++) {
-      const rs = avgGain / (avgLoss || 1);
-      rsi.push(100 - (100 / (1 + rs)));
-
-      avgGain = (avgGain * (period - 1) + gains[i]) / period;
-      avgLoss = (avgLoss * (period - 1) + losses[i]) / period;
-    }
-
-    return rsi;
-  }
 }

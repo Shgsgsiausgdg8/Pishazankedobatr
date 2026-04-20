@@ -82,10 +82,14 @@ const CandlestickChart = ({ data, levels }: { data: any[], levels: any[] }) => {
     const displayRange = displayMax - displayMin;
 
     const getX = (index: number) => currentOffset + (index * candleWidth);
-    const getY = (price: number) => paddingTop + chartHeight - ((price - displayMin) / displayRange) * chartHeight;
+    const getY = (price: number) => {
+      const y = paddingTop + chartHeight - ((price - displayMin) / displayRange) * chartHeight;
+      return Number.isNaN(y) ? 0 : y;
+    };
 
-    // Clear
-    ctx.clearRect(0, 0, width, height);
+    // Clear background
+    ctx.fillStyle = '#020617';
+    ctx.fillRect(0, 0, width, height);
 
     // Draw Grid & Labels
     ctx.strokeStyle = '#1e293b';
@@ -260,6 +264,7 @@ const CandlestickChart = ({ data, levels }: { data: any[], levels: any[] }) => {
 export default function App() {
   const [data, setData] = useState<any>(null);
   const [wsConnected, setWsConnected] = useState(false);
+  const [activeBroker, setActiveBroker] = useState<'faraz' | 'alpha'>('faraz');
   const [showAuth, setShowAuth] = useState(false);
   const [refreshToken, setRefreshToken] = useState('');
   const [accountType, setAccountType] = useState('demo');
@@ -272,7 +277,11 @@ export default function App() {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const ws = new WebSocket(`${protocol}//${window.location.host}`);
       
-      ws.onopen = () => setWsConnected(true);
+      ws.onopen = () => {
+        setWsConnected(true);
+        // Sync broker on reconnect
+        ws.send(JSON.stringify({ type: 'SET_BROKER', broker: activeBroker }));
+      };
       ws.onclose = () => {
         setWsConnected(false);
         setTimeout(connect, 3000);
@@ -280,7 +289,11 @@ export default function App() {
       ws.onmessage = (e) => {
         const msg = JSON.parse(e.data);
         if (msg.type === 'STATE' || msg.type === 'INIT' || msg.type === 'UPDATE') {
-          setData(msg.data);
+          // IMPORTANT: Only update data if the message matches our active broker
+          // This prevents the "jumping" bug when switching brokers
+          if (msg.broker === activeBroker) {
+            setData(msg.data);
+          }
         }
       };
       wsRef.current = ws;
@@ -289,6 +302,12 @@ export default function App() {
     connect();
     return () => wsRef.current?.close();
   }, []);
+
+  const switchBroker = (broker: 'faraz' | 'alpha') => {
+    setActiveBroker(broker);
+    setData(null); // Clear data to show loading
+    wsRef.current?.send(JSON.stringify({ type: 'SET_BROKER', broker }));
+  };
 
   const toggleRecording = () => {
     wsRef.current?.send(JSON.stringify({ type: data?.isRecording ? 'STOP_RECORDING' : 'START_RECORDING' }));
@@ -349,16 +368,55 @@ export default function App() {
                 {wsConnected ? 'متصل' : 'قطع شده'}
               </div>
             </div>
+            
+            {/* Broker Selector */}
+            <div style={{ display: 'flex', gap: '4px', background: '#020617', padding: '4px', borderRadius: '12px', marginRight: '1rem' }}>
+              <button 
+                onClick={() => switchBroker('faraz')}
+                style={{
+                  padding: '6px 16px',
+                  borderRadius: '10px',
+                  fontSize: '0.8rem',
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: activeBroker === 'faraz' ? '#10b981' : 'transparent',
+                  color: activeBroker === 'faraz' ? 'white' : '#94a3b8',
+                  transition: '0.2s'
+                }}
+              >
+                فراز گلد (آبشده)
+              </button>
+              <button 
+                onClick={() => switchBroker('alpha')}
+                style={{
+                  padding: '6px 16px',
+                  borderRadius: '10px',
+                  fontSize: '0.8rem',
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: activeBroker === 'alpha' ? '#10b981' : 'transparent',
+                  color: activeBroker === 'alpha' ? 'white' : '#94a3b8',
+                  transition: '0.2s'
+                }}
+              >
+                آلفا گلد (انس)
+              </button>
+            </div>
           </div>
 
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
             <div className="ltr" style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>قیمت لحظه‌ای</div>
+              <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>قیمت لحظه‌ای {activeBroker === 'faraz' ? '(مظنه)' : '(انس)'}</div>
               <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#10b981', fontFamily: 'var(--font-mono)' }}>
-                {data?.price?.toLocaleString() || '0'}
+                {activeBroker === 'alpha' 
+                  ? data?.price?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'
+                  : data?.price?.toLocaleString() || '0'
+                }
               </div>
             </div>
-            <button onClick={() => setShowAuth(true)} className="btn btn-secondary">احراز هویت</button>
+            {activeBroker === 'faraz' && (
+              <button onClick={() => setShowAuth(true)} className="btn btn-secondary">احراز هویت</button>
+            )}
             <button onClick={toggleRecording} className={`btn ${data?.isRecording ? 'btn-secondary' : 'btn-primary'}`}>
               {data?.isRecording ? <SquareIcon /> : <PlayIcon />}
               {data?.isRecording ? 'توقف' : 'ضبط'}
@@ -393,7 +451,9 @@ export default function App() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <div style={{ fontWeight: 'bold', color: '#94a3b8' }}>مظنه طلا ({data?.timeframe}m)</div>
+              <div style={{ fontWeight: 'bold', color: '#94a3b8' }}>
+                {activeBroker === 'faraz' ? 'مظنه طلا' : 'انس جهانی (XAUUSD)'} ({data?.timeframe}m)
+              </div>
               <div style={{ display: 'flex', gap: '4px', background: '#020617', padding: '4px', borderRadius: '8px' }} className="ltr">
                 {timeframes.map(tf => (
                   <button 
@@ -414,7 +474,19 @@ export default function App() {
                 ))}
               </div>
             </div>
-            <CandlestickChart data={data?.candles || []} levels={data?.levels || []} />
+            <CandlestickChart 
+              key={activeBroker} 
+              data={data?.candles || []} 
+              levels={data?.levels || []} 
+            />
+            {!data && (
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(2, 6, 23, 0.7)', backdropFilter: 'blur(4px)', borderRadius: '12px' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div className="animate-spin" style={{ width: '30px', height: '30px', border: '3px solid #10b981', borderTopColor: 'transparent', borderRadius: '50%', margin: '0 auto 10px' }}></div>
+                  <p style={{ fontSize: '0.8rem', color: '#94a3b8' }}>درحال بارگذاری دیتای {activeBroker === 'faraz' ? 'فراز گلد' : 'آلفا گلد'}...</p>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="card">
