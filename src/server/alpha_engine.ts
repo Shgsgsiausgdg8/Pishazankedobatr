@@ -41,10 +41,10 @@ export class AlphaGoldEngine {
 
     async fetchHistoricalCandles() {
         try {
-            const resolution = parseInt(this.timeframe) || 1;
+            const resolution = this.timeframe; // '1', '5', '15', etc.
             const now = Math.floor(Date.now() / 1000);
             const limit = 500;
-            const fromTs = now - (limit * resolution * 60);
+            const fromTs = now - (limit * parseInt(resolution) * 60);
             const toTs = now;
 
             const url = `https://chrt.alphagoldx.com/api/data/histoday/?e=ALPHAGOLDX&fsym=XAU&tsym=USD&toTs=${toTs}&fromTs=${fromTs}&resolution=${resolution}&limit=${limit}`;
@@ -61,21 +61,25 @@ export class AlphaGoldEngine {
             const json: any = await res.json();
             
             if (json && json.Data && Array.isArray(json.Data)) {
-                const newCandles = json.Data.map((item: any) => ({
-                    time: item.time,
-                    open: parseFloat(item.open),
-                    high: parseFloat(item.high),
-                    low: parseFloat(item.low),
-                    close: parseFloat(item.close)
-                })).sort((a: any, b: any) => a.time - b.time);
+                // IMPORTANT: Filter out any Mazane data (above 10k) that might be in the history API
+                const rawCandles = json.Data
+                    .map((item: any) => ({
+                        time: item.time,
+                        open: parseFloat(item.open),
+                        high: parseFloat(item.high),
+                        low: parseFloat(item.low),
+                        close: parseFloat(item.close)
+                    }))
+                    .filter((c: any) => c.close > 1000 && c.close < 10000)
+                    .sort((a: any, b: any) => a.time - b.time);
 
-                if (newCandles.length > 0) {
-                    this.candles = newCandles;
+                if (rawCandles.length > 0) {
+                    this.candles = rawCandles;
                     const last = this.candles[this.candles.length - 1];
                     this.lastCandleTime = last.time * 1000;
                     this.price = last.close;
                     this.detectLevels();
-                    console.log(`[AlphaEngine] Loaded ${this.candles.length} historical candles (${resolution}m)`);
+                    console.log(`[AlphaEngine] Loaded ${this.candles.length} clean historical candles`);
                 }
             }
         } catch (err: any) {
@@ -142,6 +146,12 @@ export class AlphaGoldEngine {
 
     updatePrice(newPrice: number) {
         if (!newPrice || Number.isNaN(newPrice)) return;
+        
+        // STRICT PRICE GUARD: Alpha Ounce must be between 1000 and 10000.
+        // Mazane (80k+) is rejected to prevent chart scale jumping.
+        if (newPrice > 10000 || newPrice < 1000) {
+            return;
+        }
 
         this.price = newPrice;
 
