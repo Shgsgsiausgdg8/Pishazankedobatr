@@ -265,12 +265,18 @@ export default function App() {
   const [data, setData] = useState<any>(null);
   const [wsConnected, setWsConnected] = useState(false);
   const [activeBroker, setActiveBroker] = useState<'faraz' | 'alpha'>('faraz');
+  const activeBrokerRef = useRef(activeBroker);
+  
   const [showAuth, setShowAuth] = useState(false);
   const [refreshToken, setRefreshToken] = useState('');
   const [accountType, setAccountType] = useState('demo');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const wsRef = useRef<WebSocket | null>(null);
+
+  useEffect(() => {
+    activeBrokerRef.current = activeBroker;
+  }, [activeBroker]);
 
   useEffect(() => {
     const connect = () => {
@@ -280,20 +286,23 @@ export default function App() {
       ws.onopen = () => {
         setWsConnected(true);
         // Sync broker on reconnect
-        ws.send(JSON.stringify({ type: 'SET_BROKER', broker: activeBroker }));
+        ws.send(JSON.stringify({ type: 'SET_BROKER', broker: activeBrokerRef.current }));
       };
       ws.onclose = () => {
         setWsConnected(false);
         setTimeout(connect, 3000);
       };
       ws.onmessage = (e) => {
-        const msg = JSON.parse(e.data);
-        if (msg.type === 'STATE' || msg.type === 'INIT' || msg.type === 'UPDATE') {
-          // IMPORTANT: Only update data if the message matches our active broker
-          // This prevents the "jumping" bug when switching brokers
-          if (msg.broker === activeBroker) {
-            setData(msg.data);
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'STATE' || msg.type === 'INIT' || msg.type === 'UPDATE') {
+            // CRITICAL FIX: Only accept data if it exactly matches our current active selection
+            if (msg.broker === activeBrokerRef.current) {
+              setData(msg.data);
+            }
           }
+        } catch (err) {
+          console.error("WS Parse Error", err);
         }
       };
       wsRef.current = ws;
@@ -304,9 +313,14 @@ export default function App() {
   }, []);
 
   const switchBroker = (broker: 'faraz' | 'alpha') => {
+    if (broker === activeBroker) return;
+    
     setActiveBroker(broker);
-    setData(null); // Clear data to show loading
-    wsRef.current?.send(JSON.stringify({ type: 'SET_BROKER', broker }));
+    setData(null); // Instant clear for UX
+    
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'SET_BROKER', broker }));
+    }
   };
 
   const toggleRecording = () => {
