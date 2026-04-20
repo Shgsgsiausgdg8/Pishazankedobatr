@@ -306,9 +306,9 @@ export default function App() {
         try {
           const msg = JSON.parse(e.data);
           if (msg.type === 'STATE' || msg.type === 'INIT' || msg.type === 'UPDATE') {
-            // CRITICAL FIX: Only accept data if it exactly matches our current active selection
+            // CRITICAL FIX: Ensure broker name is part of the data so the loading check passes
             if (msg.broker === activeBrokerRef.current) {
-              setData(msg.data);
+              setData({ ...msg.data, broker: msg.broker });
             }
           }
         } catch (err) {
