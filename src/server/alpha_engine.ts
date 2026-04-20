@@ -126,18 +126,27 @@ export class AlphaGoldEngine {
         });
 
         ws.on("open", () => {
-            console.log("[AlphaWS] Connected to Ounce Market.");
+            console.log("[AlphaWS] Connected to Ounce Market. Subscribing...");
             this.ws = ws;
             this.reconnecting = false;
+            
+            // Subscribing to Ounce Price Stream
+            ws.send(JSON.stringify({
+                action: "subscribe",
+                symbols: ["XAUUSD", "GOLD", "XAU"]
+            }));
         });
 
         ws.on("message", (raw) => {
             try {
                 const msg = JSON.parse(raw.toString());
-                // Extract price from Ounce socket message (usually in 'price', 'P', or 'last_price')
-                const p = msg.price || msg.last_price || msg.P || msg.close;
+                // Support multiple formats: price, P, p, last, bid, ask
+                const p = msg.price || msg.last || msg.P || msg.p || msg.close || msg.bid;
                 if (p && !Number.isNaN(parseFloat(p))) {
-                    this.updatePrice(parseFloat(p));
+                    const priceNum = parseFloat(p);
+                    if (priceNum > 1000 && priceNum < 10000) {
+                        this.updatePrice(priceNum);
+                    }
                 }
             } catch (err) { }
         });
