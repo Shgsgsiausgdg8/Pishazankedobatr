@@ -262,10 +262,20 @@ const CandlestickChart = ({ data, levels }: { data: any[], levels: any[] }) => {
 };
 
 export default function App() {
+  // Persistent broker selection
+  const [activeBroker, setActiveBroker] = useState<'faraz' | 'alpha'>(() => {
+    const saved = localStorage.getItem('activeBroker');
+    return (saved === 'faraz' || saved === 'alpha') ? saved : 'faraz';
+  });
+  
+  const activeBrokerRef = useRef(activeBroker);
   const [data, setData] = useState<any>(null);
   const [wsConnected, setWsConnected] = useState(false);
-  const [activeBroker, setActiveBroker] = useState<'faraz' | 'alpha'>('faraz');
-  const activeBrokerRef = useRef(activeBroker);
+  
+  useEffect(() => {
+    localStorage.setItem('activeBroker', activeBroker);
+    activeBrokerRef.current = activeBroker;
+  }, [activeBroker]);
   
   const [showAuth, setShowAuth] = useState(false);
   const [refreshToken, setRefreshToken] = useState('');
@@ -439,7 +449,32 @@ export default function App() {
         </div>
       </header>
 
-      <main className="container">
+      <main className="container" style={{ position: 'relative', minHeight: '400px' }}>
+        {(!data || data.broker !== activeBroker) && (
+          <div style={{ 
+            position: 'absolute', 
+            inset: 0, 
+            zIndex: 50, 
+            display: 'flex', 
+            flexDirection: 'column',
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            background: 'rgba(2, 6, 23, 0.85)', 
+            backdropFilter: 'blur(8px)',
+            borderRadius: '16px'
+          }}>
+            <div className="animate-spin" style={{ 
+              width: '40px', 
+              height: '40px', 
+              border: '4px solid #10b981', 
+              borderTopColor: 'transparent', 
+              borderRadius: '50%',
+              marginBottom: '1rem'
+            }}></div>
+            <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>درحال فراخوانی دیتای {activeBroker === 'faraz' ? 'فراز گلد' : 'آلفا گلد'}...</div>
+          </div>
+        )}
+
         <div className="stats-grid">
           <div className="stat-card">
             <div style={{ color: '#94a3b8', fontSize: '0.8rem', marginBottom: '8px' }}>مقاومت (سقف)</div>
@@ -493,14 +528,6 @@ export default function App() {
               data={data?.candles || []} 
               levels={data?.levels || []} 
             />
-            {!data && (
-              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(2, 6, 23, 0.7)', backdropFilter: 'blur(4px)', borderRadius: '12px' }}>
-                <div style={{ textAlign: 'center' }}>
-                  <div className="animate-spin" style={{ width: '30px', height: '30px', border: '3px solid #10b981', borderTopColor: 'transparent', borderRadius: '50%', margin: '0 auto 10px' }}></div>
-                  <p style={{ fontSize: '0.8rem', color: '#94a3b8' }}>درحال بارگذاری دیتای {activeBroker === 'faraz' ? 'فراز گلد' : 'آلفا گلد'}...</p>
-                </div>
-              </div>
-            )}
           </div>
 
           <div className="card">
