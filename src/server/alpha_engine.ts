@@ -5,7 +5,7 @@ import { TradingStrategy, Signal, Candle } from "./strategy.js";
 
 export class AlphaGoldEngine {
     price = 0;
-    timeframe = "1"; 
+    timeframe = "1"; // minutes
     candles: Candle[] = [];
     signals: Signal[] = [];
     levels: { type: 'SUPPORT' | 'RESISTANCE', price: number, time?: number, hits?: number, latest?: number }[] = [];
@@ -20,63 +20,48 @@ export class AlphaGoldEngine {
     strategy = new TradingStrategy();
     lastLevelsUpdate = 0;
 
-    // AlphaGold Details from logs
-    demoNumber = "bd466596-0007-4a11-8dc9-257e5a2c69c8";
-
     constructor() {
-        console.log("\n[AlphaGoldEngine] Initialized - XAUUSD (Ounce Mode)");
+        console.log("\n[AlphaGoldEngine] Syncing with chrt.alphagoldx.com logic...");
     }
 
     async start() {
-        console.log("[AlphaGoldEngine] Starting...");
+        console.log("[AlphaGoldEngine] Starting engine...");
         await this.fetchHistoricalCandles();
         this.connectWS();
-        
-        // Fallback: Fetch price from last candle every 15s if WS is slow
+
+        // Fallback REST every 30 sec
         setInterval(() => {
             if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-                this.fetchHistoricalCandles(); 
+                this.fetchPriceAPI();
             }
-        }, 15000);
+        }, 30000);
 
         setInterval(() => this.cleanupCandles(), 60000);
     }
 
     async fetchHistoricalCandles() {
         try {
-            const resolution = this.timeframe; // '1', '5', '15', etc.
+            const resolution = parseInt(this.timeframe) || 1;
             const now = Math.floor(Date.now() / 1000);
-            const limit = 300;
-            const fromTs = now - (limit * parseInt(resolution) * 60);
+            const limit = 500;
+            const fromTs = now - (limit * resolution * 60);
             const toTs = now;
 
-            // EXACT URL from your logs
             const url = `https://chrt.alphagoldx.com/api/data/histoday/?e=ALPHAGOLDX&fsym=XAU&tsym=USD&toTs=${toTs}&fromTs=${fromTs}&resolution=${resolution}&limit=${limit}`;
-            console.log(`[AlphaEngine] Loading History (${resolution}m): ${url}`);
-            
+            console.log(`[AlphaEngine] Fetching history: ${url}`);
+
             const res = await fetch(url, {
                 headers: {
-                    "authority": "chrt.alphagoldx.com",
                     "accept": "*/*",
-                    "accept-language": "en-US,en;q=0.9",
                     "origin": "https://light.alphagoldx.com",
                     "referer": "https://light.alphagoldx.com/",
-                    "sec-ch-ua": "\"Not_A Brand\";v=\"99\", \"Google Chrome\";v=\"109\", \"Chromium\";v=\"109\"",
-                    "sec-ch-ua-mobile": "?0",
-                    "sec-ch-ua-platform": "\"Windows\"",
-                    "sec-fetch-dest": "empty",
-                    "sec-fetch-mode": "cors",
-                    "sec-fetch-site": "same-site",
-                    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"
+                    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
                 }
             });
-
-            if (!res.ok) return;
-
             const json: any = await res.json();
-            if (json && json.Response === "Success" && Array.isArray(json.Data)) {
-                // Map fields exactly: time, open, high, low, close
-                const rawCandles = json.Data.map((item: any) => ({
+            
+            if (json && json.Data && Array.isArray(json.Data)) {
+                const newCandles = json.Data.map((item: any) => ({
                     time: item.time,
                     open: parseFloat(item.open),
                     high: parseFloat(item.high),
@@ -84,88 +69,82 @@ export class AlphaGoldEngine {
                     close: parseFloat(item.close)
                 })).sort((a: any, b: any) => a.time - b.time);
 
-                // Dedup and Clean
-                const cleaned = [];
-                const seen = new Set();
-                for (const c of rawCandles) {
-                    if (!seen.has(c.time) && !Number.isNaN(c.close)) {
-                        cleaned.push(c);
-                        seen.add(c.time);
-                    }
-                }
-
-                if (cleaned.length > 0) {
-                    this.candles = cleaned;
-                    const last = cleaned[cleaned.length - 1];
+                if (newCandles.length > 0) {
+                    this.candles = newCandles;
+                    const last = this.candles[this.candles.length - 1];
                     this.lastCandleTime = last.time * 1000;
                     this.price = last.close;
                     this.detectLevels();
-                    this.runStrategy();
-                    console.log(`[AlphaEngine] Sync Complete: ${cleaned.length} candles at price ${this.price}`);
+                    console.log(`[AlphaEngine] Loaded ${this.candles.length} historical candles (${resolution}m)`);
                 }
             }
         } catch (err: any) {
-            console.error("[AlphaEngine] Sync Error:", err.message);
+            console.error("[AlphaEngine] History fetch error:", err.message);
         }
     }
 
     connectWS() {
-        // EXACT WS URL from your logs
-        const wsUrl = `wss://demo.alphagoldx.com/ounce/orders/?user_id=${this.demoNumber}`;
+        // EXACT URL from your provided file
+        const url = "wss://chrt.alphagoldx.com/ohlc/";
 
         if (this.reconnecting) return;
         this.reconnecting = true;
 
-        console.log(`[AlphaWS] Connecting to Ounce Socket: ${wsUrl}`);
+        console.log(`[AlphaWS] Connecting to: ${url}`);
 
-        const ws = new WebSocket(wsUrl, {
+        const ws = new WebSocket(url, {
             headers: {
-                "Origin": "https://alphagoldx.com",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"
+                "Origin": "https://light.alphagoldx.com",
+                "User-Agent": "Mozilla/5.0",
+                "Cache-Control": "no-cache",
+                "Pragma": "no-cache"
             }
         });
 
         ws.on("open", () => {
-            console.log("[AlphaWS] Connected to Ounce Market. Subscribing...");
+            console.log("[AlphaWS] Connected.");
             this.ws = ws;
             this.reconnecting = false;
-            
-            // Subscribing to Ounce Price Stream
-            ws.send(JSON.stringify({
-                action: "subscribe",
-                symbols: ["XAUUSD", "GOLD", "XAU"]
-            }));
         });
 
         ws.on("message", (raw) => {
             try {
                 const msg = JSON.parse(raw.toString());
-                // Support multiple formats: price, P, p, last, bid, ask
-                const p = msg.price || msg.last || msg.P || msg.p || msg.close || msg.bid;
-                if (p && !Number.isNaN(parseFloat(p))) {
-                    const priceNum = parseFloat(p);
-                    if (priceNum > 1000 && priceNum < 10000) {
-                        this.updatePrice(priceNum);
-                    }
+                // EXACT key from your provided file: 'P'
+                if (msg.P) {
+                    this.updatePrice(parseFloat(msg.P));
                 }
             } catch (err) { }
         });
 
         ws.on("close", () => {
+            console.log("[AlphaWS] Closed → Reconnecting...");
             this.ws = null;
             this.reconnecting = false;
             setTimeout(() => this.connectWS(), 5000);
         });
 
-        ws.on("error", () => {
+        ws.on("error", (err) => {
+            console.log("[AlphaWS] Error:", err.message);
             this.reconnecting = false;
         });
     }
 
+    async fetchPriceAPI() {
+        try {
+            const res = await fetch("https://chrt.alphagoldx.com/api/data/v3/all/exchanges/");
+            const json: any = await res.json();
+            const p = json.Data?.ALPHAGOLDX?.pairs?.XAUUSD?.price ??
+                      json.Data?.ALPHAGOLDX?.pairs?.XAUUSD?.last;
+            if (p) this.updatePrice(parseFloat(p));
+        } catch (e) { }
+    }
+
     updatePrice(newPrice: number) {
-        if (!newPrice || Number.isNaN(newPrice) || newPrice > 10000) return; // Guard: Ounce is around 2k-5k, Mazane is 80k+
+        if (!newPrice || Number.isNaN(newPrice)) return;
 
         this.price = newPrice;
+
         const now = Date.now();
         const tf = (parseInt(this.timeframe) || 1) * 60000;
         const cTime = Math.floor(now / tf) * tf;
@@ -177,6 +156,7 @@ export class AlphaGoldEngine {
         }
 
         const last = this.candles[this.candles.length - 1];
+
         if (sec > last.time) {
             this.createNewCandle(sec, newPrice);
         } else {
@@ -194,7 +174,7 @@ export class AlphaGoldEngine {
     createNewCandle(time: number, price: number) {
         const c = { time, open: price, high: price, low: price, close: price };
         this.candles.push(c);
-        if (this.candles.length > 1000) this.candles.shift();
+        if (this.candles.length > 2000) this.candles.shift();
         this.lastCandleTime = time * 1000;
         this.detectLevels();
         this.runStrategy();
@@ -203,25 +183,48 @@ export class AlphaGoldEngine {
 
     detectLevels() {
         if (this.candles.length < 30) return;
+        const candles = this.candles;
         const lookback = 8;
+        const atr = this.calcATR(14) || 2.0;
+        const minDistance = Math.max(atr * 0.6, 0.5);
+
         const rawLevels: any[] = [];
-        for (let i = lookback; i < this.candles.length - lookback; i++) {
-            const c = this.candles[i];
+        for (let i = lookback; i < candles.length - lookback; i++) {
+            const c = candles[i];
             let isHigh = true, isLow = true;
             for (let j = 1; j <= lookback; j++) {
-                if (this.candles[i - j].high >= c.high || this.candles[i + j].high >= c.high) isHigh = false;
-                if (this.candles[i - j].low <= c.low || this.candles[i + j].low <= c.low) isLow = false;
+                if (candles[i - j].high >= c.high || candles[i + j].high >= c.high) isHigh = false;
+                if (candles[i - j].low <= c.low || candles[i + j].low <= c.low) isLow = false;
             }
             if (isHigh) rawLevels.push({ type: "RESISTANCE", price: c.high, time: c.time });
             if (isLow) rawLevels.push({ type: "SUPPORT", price: c.low, time: c.time });
         }
+
         const clustered: any[] = [];
         for (const lvl of rawLevels) {
-            const near = clustered.find(x => x.type === lvl.type && Math.abs(x.price - lvl.price) < 0.5);
-            if (!near) clustered.push({ ...lvl, hits: 1 });
-            else { near.price = (near.price * near.hits + lvl.price) / (near.hits + 1); near.hits++; }
+            const near = clustered.find(x => x.type === lvl.type && Math.abs(x.price - lvl.price) < minDistance);
+            if (!near) {
+                clustered.push({ type: lvl.type, price: lvl.price, hits: 1, latest: lvl.time });
+            } else {
+                near.price = (near.price * near.hits + lvl.price) / (near.hits + 1);
+                near.hits++;
+                near.latest = lvl.time;
+            }
         }
-        this.levels = clustered.sort((a, b) => b.hits - a.hits).slice(0, 20);
+
+        this.levels = clustered.sort((a, b) => b.hits - a.hits).slice(0, 40);
+    }
+
+    calcATR(period = 14) {
+        if (this.candles.length < period + 2) return 0;
+        let sum = 0;
+        for (let i = 1; i <= period; i++) {
+            const c = this.candles[this.candles.length - i];
+            const p = this.candles[this.candles.length - i - 1];
+            const tr = Math.max(c.high - c.low, Math.abs(c.high - p.close), Math.abs(c.low - p.close));
+            sum += tr;
+        }
+        return sum / period;
     }
 
     runStrategy() {
@@ -230,20 +233,23 @@ export class AlphaGoldEngine {
         const last = this.signals[0];
         if (!last || Math.abs(last.time - sig.time) > 60000) {
             this.signals.unshift(sig);
-            if (this.signals.length > 10) this.signals.pop();
+            if (this.signals.length > 20) this.signals.pop();
         }
     }
 
     startRecording() { this.isRecording = true; }
     stopRecording() { this.isRecording = false; }
-    recordData(c: Candle) {
+    recordData(c: any) {
         if (!this.isRecording) return;
         fs.appendFileSync(this.dataFile, JSON.stringify({ ...c, recordedAt: Date.now() }) + "\n");
     }
 
     async setTimeframe(tf: string) {
+        if (this.timeframe === tf) return;
         this.timeframe = tf;
         this.candles = [];
+        this.levels = [];
+        this.signals = [];
         this.lastCandleTime = 0;
         await this.fetchHistoricalCandles();
     }
@@ -252,7 +258,7 @@ export class AlphaGoldEngine {
         return {
             price: this.price,
             timeframe: this.timeframe,
-            candles: this.candles.slice(-300),
+            candles: this.candles.slice(-600),
             levels: this.levels,
             signals: this.signals,
             isRecording: this.isRecording
