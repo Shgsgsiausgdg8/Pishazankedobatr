@@ -817,6 +817,8 @@ export default function App() {
                     <div style={{ color: '#94a3b8' }}>تارگت ۲: <span style={{ color: '#10b981' }}>{sig.tp2.toLocaleString()}</span></div>
                     <div style={{ color: '#94a3b8' }}>تارگت ۳: <span style={{ color: '#10b981' }}>{sig.tp3.toLocaleString()}</span></div>
                     <div style={{ color: '#94a3b8' }}>تایم: <span style={{ color: '#fff' }}>{sig.timeframe}m</span></div>
+                    {sig.saghf && <div style={{ color: '#94a3b8' }}>سقف: <span style={{ color: '#fff' }}>{sig.saghf.toLocaleString()}</span></div>}
+                    {sig.kaf && <div style={{ color: '#94a3b8' }}>کف: <span style={{ color: '#fff' }}>{sig.kaf.toLocaleString()}</span></div>}
                   </div>
                 </div>
               ))}

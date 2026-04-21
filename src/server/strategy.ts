@@ -1,8 +1,8 @@
 /**
  * FarazGold Trading Strategy - N Pattern Detector
  * تشخیص الگوی N معمولی و N معکوس با سه نقطه A, B, C
- * سیگنال Buy/Sell در سطح 50% بین A و B
- * Targets: 2%, 3.3%, 3.9% - Stop Loss: 2%
+ * نقطه ورود: ۳٪ بازگشت از سقف/کف
+ * تارگت‌ها: ۲٪، ۳.۲٪، ۳.۸٪ - استاپ: ۲٪
  */
 
 export interface Candle {
@@ -22,6 +22,8 @@ export interface Signal {
   sl: number;
   time: number;
   timeframe: string;
+  kaf?: number;
+  saghf?: number;
 }
 
 export class TradingStrategy {
@@ -308,12 +310,19 @@ export class TradingStrategy {
             
             // شرط N صعودی: B بالاتر از A ، C پایین‌تر از B ولی بالاتر از A (اصلاح)
             if (B > A && C < B && C > A) {
-                // سیگنال خرید در بازگشت به فیبوناچی 50% بین A و B موج صعودی
-                const signalPrice = A + (B - A) * 0.5; 
+                // نقطه ورود: ۳٪ بازگشت از سقف (B) مطابق درخواست جدید
+                const signalPrice = B * 0.97; 
                 const patternKey = `N_UP|${p1.index}|${p2.index}|${p3.index}`;
                 if (this.lastPatternKey === patternKey) return null;
                 this.lastPatternKey = patternKey;
-                return { type: 'BUY', signalPrice, atr };
+                return { 
+                    type: 'BUY', 
+                    signalPrice, 
+                    atr, 
+                    kaf: A, 
+                    saghf: B, 
+                    isNPattern: true 
+                };
             }
         }
 
@@ -325,11 +334,19 @@ export class TradingStrategy {
 
             // شرط N نزولی: B پایین‌تر از A ، C بالاتر از B ولی پایین‌تر از A
             if (B < A && C > B && C < A) {
-                const signalPrice = A - (A - B) * 0.5;
+                // نقطه ورود: ۳٪ بازگشت از کف (B)
+                const signalPrice = B * 1.03;
                 const patternKey = `N_DOWN|${p1.index}|${p2.index}|${p3.index}`;
                 if (this.lastPatternKey === patternKey) return null;
                 this.lastPatternKey = patternKey;
-                return { type: 'SELL', signalPrice, atr };
+                return { 
+                    type: 'SELL', 
+                    signalPrice, 
+                    atr, 
+                    kaf: B, 
+                    saghf: A, 
+                    isNPattern: true 
+                };
             }
         }
 
@@ -434,16 +451,28 @@ export class TradingStrategy {
     private createSignalFromPattern(pattern: any, timeframe: string): Signal {
         const isBuy = pattern.type === 'BUY';
         const entry = pattern.signalPrice;
+        const isN = !!pattern.isNPattern;
         
-        // Dynamic SL/TP based on ATR for high precision
+        // Dynamic SL/TP based on ATR, or fixed % for N-Pattern
         const atr = pattern.atr || entry * 0.001; 
-        const slDist = atr * 1.5;
-        const tpDist = atr * 2.1; // Balanced RR Ratio
+        
+        let tp1, tp2, tp3, sl;
 
-        const tp1 = isBuy ? entry + tpDist : entry - tpDist;
-        const tp2 = isBuy ? entry + (tpDist * 1.5) : entry - (tpDist * 1.5);
-        const tp3 = isBuy ? entry + (tpDist * 2.0) : entry - (tpDist * 2.0);
-        const sl = isBuy ? entry - slDist : entry + slDist;
+        if (isN) {
+            // مقادیر درخواستی کاربر برای الگوی N:
+            // تارگت ۱: ۲٪ | تارگت ۲: ۳.۲٪ | تارگت ۳: ۳.۸٪
+            tp1 = isBuy ? entry * 1.02 : entry * 0.98;
+            tp2 = isBuy ? entry * 1.032 : entry * 0.968;
+            tp3 = isBuy ? entry * 1.038 : entry * 0.962;
+            sl = isBuy ? entry * 0.98 : entry * 1.02; // استاپ لاس ۲٪ پیش‌فرض
+        } else {
+            const slDist = atr * 1.5;
+            const tpDist = atr * 2.1;
+            tp1 = isBuy ? entry + tpDist : entry - tpDist;
+            tp2 = isBuy ? entry + (tpDist * 1.5) : entry - (tpDist * 1.5);
+            tp3 = isBuy ? entry + (tpDist * 2.0) : entry - (tpDist * 2.0);
+            sl = isBuy ? entry - slDist : entry + slDist;
+        }
 
         return {
             type: pattern.type,
@@ -453,7 +482,9 @@ export class TradingStrategy {
             tp2: tp2,
             tp3: tp3,
             time: Date.now(),
-            timeframe: timeframe
+            timeframe: timeframe,
+            kaf: pattern.kaf,
+            saghf: pattern.saghf
         };
     }
 
