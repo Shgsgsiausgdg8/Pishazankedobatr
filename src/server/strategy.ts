@@ -287,31 +287,30 @@ export class TradingStrategy {
     }
 
     /**
-     * تشخیص الگوی N با استفاده از نقاط چرخشی (ZigZag)
+     * تشخیص الگوی N با استفاده از نسبت موج (Range)
+     * ورود: ۳٪ از رنج سقف تا کف
      */
     private detectNPattern(candles: Candle[]) {
         const pivots = this.getSwingPivots(candles, 8); 
         if (pivots.length < 3) return null;
 
-        // سه نقطه آخر را بگیرید
-        const p3 = pivots[pivots.length - 1]; // آخرین نقطه (C)
-        const p2 = pivots[pivots.length - 2]; // نقطه وسط (B)
-        const p1 = pivots[pivots.length - 3]; // اولین نقطه (A)
+        const p3 = pivots[pivots.length - 1]; // نقطه C
+        const p2 = pivots[pivots.length - 2]; // نقطه B
+        const p1 = pivots[pivots.length - 3]; // نقطه A
 
-        // ATR برای تخمین نویز و قدرت حرکت
         const atr = this.calculateATR(candles, 14);
 
-        // الگوی N صعودی (V شکل + اصلاح)
-        // A (Low) -> B (High) -> C (Higher Low)
+        // الگوی N صعودی
         if (p1.type === 'low' && p2.type === 'high' && p3.type === 'low') {
             const A = p1.price;
             const B = p2.price;
             const C = p3.price;
             
-            // شرط N صعودی: B بالاتر از A ، C پایین‌تر از B ولی بالاتر از A (اصلاح)
             if (B > A && C < B && C > A) {
-                // نقطه ورود: ۳٪ بازگشت از سقف (B) مطابق درخواست جدید
-                const signalPrice = B * 0.97; 
+                const range = B - A;
+                // ورود ۳٪ پایین‌تر از سقف بر مبنای کل رنج موج
+                const signalPrice = B - (range * 0.03); 
+                
                 const patternKey = `N_UP|${p1.index}|${p2.index}|${p3.index}`;
                 if (this.lastPatternKey === patternKey) return null;
                 this.lastPatternKey = patternKey;
@@ -326,16 +325,17 @@ export class TradingStrategy {
             }
         }
 
-        // الگوی N نزولی (هشتی شکل + اصلاح)
+        // الگوی N نزولی
         if (p1.type === 'high' && p2.type === 'low' && p3.type === 'high') {
             const A = p1.price;
             const B = p2.price;
             const C = p3.price;
 
-            // شرط N نزولی: B پایین‌تر از A ، C بالاتر از B ولی پایین‌تر از A
             if (B < A && C > B && C < A) {
-                // نقطه ورود: ۳٪ بازگشت از کف (B)
-                const signalPrice = B * 1.03;
+                const range = A - B;
+                // ورود ۳٪ بالاتر از کف بر مبنای کل رنج موج
+                const signalPrice = B + (range * 0.03);
+                
                 const patternKey = `N_DOWN|${p1.index}|${p2.index}|${p3.index}`;
                 if (this.lastPatternKey === patternKey) return null;
                 this.lastPatternKey = patternKey;
@@ -354,77 +354,35 @@ export class TradingStrategy {
     }
 
     /**
-     * شناسایی نقاط سقف و کف اصلی (ZigZag structural pivots)
-     * بهینه‌سازی شده برای بروزرسانی لحظه‌ای سقف و کف جدید
+     * شناسایی نقاط سقف و کف (Pivots) با منطق تثبیت (Confirmation)
      */
     public getSwingPivots(candles: Candle[], depth: number = 8) {
-        if (candles.length < depth) return [];
+        if (candles.length < depth * 2) return [];
 
         const pivots: { type: 'high' | 'low', price: number, index: number, time: number }[] = [];
-        const atr = this.calculateATR(candles, 14);
-        const threshold = atr * 1.2; // آستانه حساس‌تر برای نوسانات سریع
-
-        let lastPivot: any = null;
-
-        // 1. یافتن نقاط تایید شده با عمق (تا کندل len - depth)
+        
+        // فقط تا جایی که تثبیت شده‌اند پیش می‌رویم (Candles.length - depth)
         const limit = candles.length - depth;
+
         for (let i = depth; i < limit; i++) {
             const curr = candles[i];
             let isHigh = true;
             let isLow = true;
 
+            // بررسی طرفین (قبل و بعد از نقطه فعلی)
             for (let j = 1; j <= depth; j++) {
-                if (candles[i - j].high > curr.high || candles[i + j].high >= curr.high) isHigh = false;
-                if (candles[i - j].low < curr.low || candles[i + j].low <= curr.low) isLow = false;
+                if (candles[i - j].high > curr.high || candles[i + j].high > curr.high) isHigh = false;
+                if (candles[i - j].low < curr.low || candles[i + j].low < curr.low) isLow = false;
             }
 
             if (isHigh) {
-                if (!lastPivot || (lastPivot.type === 'low' && curr.high - lastPivot.price > threshold)) {
-                    lastPivot = { type: 'high', price: curr.high, index: i, time: curr.time };
-                    pivots.push(lastPivot);
-                } else if (lastPivot.type === 'high' && curr.high > lastPivot.price) {
-                    pivots.pop();
-                    lastPivot = { type: 'high', price: curr.high, index: i, time: curr.time };
-                    pivots.push(lastPivot);
-                }
+                pivots.push({ type: 'high', price: curr.high, index: i, time: curr.time });
             } else if (isLow) {
-                if (!lastPivot || (lastPivot.type === 'high' && lastPivot.price - curr.low > threshold)) {
-                    lastPivot = { type: 'low', price: curr.low, index: i, time: curr.time };
-                    pivots.push(lastPivot);
-                } else if (lastPivot.type === 'low' && curr.low < lastPivot.price) {
-                    pivots.pop();
-                    lastPivot = { type: 'low', price: curr.low, index: i, time: curr.time };
-                    pivots.push(lastPivot);
-                }
+                pivots.push({ type: 'low', price: curr.low, index: i, time: curr.time });
             }
         }
 
-        // 2. بررسی کندل‌های انتهایی (بروزرسانی زنده سقف و کف)
-        for (let i = Math.max(0, limit); i < candles.length; i++) {
-            const c = candles[i];
-            if (lastPivot) {
-                if (lastPivot.type === 'high') {
-                    if (c.high > lastPivot.price) {
-                        pivots.pop();
-                        lastPivot = { type: 'high', price: c.high, index: i, time: c.time };
-                        pivots.push(lastPivot);
-                    } else if (lastPivot.price - c.low > threshold) {
-                        lastPivot = { type: 'low', price: c.low, index: i, time: c.time };
-                        pivots.push(lastPivot);
-                    }
-                } else if (lastPivot.type === 'low') {
-                    if (c.low < lastPivot.price) {
-                        pivots.pop();
-                        lastPivot = { type: 'low', price: c.low, index: i, time: c.time };
-                        pivots.push(lastPivot);
-                    } else if (c.high - lastPivot.price > threshold) {
-                        lastPivot = { type: 'high', price: c.high, index: i, time: c.time };
-                        pivots.push(lastPivot);
-                    }
-                }
-            }
-        }
-
+        // فیلتر کردن برای تمیز کردن پیوت‌های پشت سر هم (ZigZag ساده)
         const filtered: typeof pivots = [];
         for (const p of pivots) {
             if (filtered.length === 0) {
@@ -433,12 +391,17 @@ export class TradingStrategy {
             }
             const last = filtered[filtered.length - 1];
             if (last.type === p.type) {
-                if (p.type === 'high' && p.price > last.price) filtered[filtered.length - 1] = p;
-                else if (p.type === 'low' && p.price < last.price) filtered[filtered.length - 1] = p;
+                // اگر دو سقف یا دو کف پشت هم بود، بهترین را نگه دار
+                if (last.type === 'high' && p.price > last.price) {
+                    filtered[filtered.length - 1] = p;
+                } else if (last.type === 'low' && p.price < last.price) {
+                    filtered[filtered.length - 1] = p;
+                }
             } else {
                 filtered.push(p);
             }
         }
+
         return filtered;
     }
 
@@ -459,12 +422,12 @@ export class TradingStrategy {
         let tp1, tp2, tp3, sl;
 
         if (isN) {
-            // مقادیر درخواستی کاربر برای الگوی N:
-            // تارگت ۱: ۲٪ | تارگت ۲: ۳.۲٪ | تارگت ۳: ۳.۸٪
-            tp1 = isBuy ? entry * 1.02 : entry * 0.98;
-            tp2 = isBuy ? entry * 1.032 : entry * 0.968;
-            tp3 = isBuy ? entry * 1.038 : entry * 0.962;
-            sl = isBuy ? entry * 0.98 : entry * 1.02; // استاپ لاس ۲٪ پیش‌فرض
+            // مقادیر درخواستی کاربر برای الگوی N (کالیبره شده برای تایم پایین):
+            // تارگت ۱: ۰.۲٪ | تارگت ۲: ۰.۳۲٪ | تارگت ۳: ۰.۳۸٪
+            tp1 = isBuy ? entry * 1.002 : entry * 0.998;
+            tp2 = isBuy ? entry * 1.0032 : entry * 0.9968;
+            tp3 = isBuy ? entry * 1.0038 : entry * 0.9962;
+            sl = isBuy ? entry * 0.998 : entry * 1.002; // استاپ لاس ۰.۲٪
         } else {
             const slDist = atr * 1.5;
             const tpDist = atr * 2.1;
