@@ -378,19 +378,14 @@ export class FarazGoldEngine {
     detectLevels() {
         if (this.candles.length < 50) return;
         
-        // استفاده از منطق هوشمند برای تشخیص سقف و کف آخر
-        const smart = this.strategy.getSmartPivots(this.candles);
+        // استفاده از الگوریتم شناسایی نقاط سقف و کف اصلی از استراتژی
+        const pivots = this.strategy.getSwingPivots(this.candles, 8);
         
-        // ترکیب پیوت‌های ماژور و مینور برای نمایش در چارت و پنل
-        const allPivots = [...smart.major, ...smart.minor];
-        
-        this.levels = allPivots.map(p => ({
+        this.levels = pivots.map(p => ({
             type: p.type === 'high' ? 'RESISTANCE' : 'SUPPORT' as 'SUPPORT' | 'RESISTANCE',
             price: p.price,
             time: p.time * 1000
-        }))
-        .sort((a,b) => a.time - b.time)
-        .slice(-30); // نمایش ۳۰ سطح اخیر
+        })).slice(-20); // فقط 20 سطح اخیر برای جلوگیری از شلوغی
     }
 
     addLevel(type: 'SUPPORT' | 'RESISTANCE', price: number, time: number) {
