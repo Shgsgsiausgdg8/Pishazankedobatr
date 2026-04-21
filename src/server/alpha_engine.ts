@@ -207,37 +207,17 @@ export class AlphaGoldEngine {
     }
 
     detectLevels() {
-        if (this.candles.length < 30) return;
-        const candles = this.candles;
-        const lookback = 8;
-        const atr = this.calcATR(14) || 2.0;
-        const minDistance = Math.max(atr * 0.6, 0.5);
-
-        const rawLevels: any[] = [];
-        for (let i = lookback; i < candles.length - lookback; i++) {
-            const c = candles[i];
-            let isHigh = true, isLow = true;
-            for (let j = 1; j <= lookback; j++) {
-                if (candles[i - j].high >= c.high || candles[i + j].high >= c.high) isHigh = false;
-                if (candles[i - j].low <= c.low || candles[i + j].low <= c.low) isLow = false;
-            }
-            if (isHigh) rawLevels.push({ type: "RESISTANCE", price: c.high, time: c.time });
-            if (isLow) rawLevels.push({ type: "SUPPORT", price: c.low, time: c.time });
-        }
-
-        const clustered: any[] = [];
-        for (const lvl of rawLevels) {
-            const near = clustered.find(x => x.type === lvl.type && Math.abs(x.price - lvl.price) < minDistance);
-            if (!near) {
-                clustered.push({ type: lvl.type, price: lvl.price, hits: 1, latest: lvl.time });
-            } else {
-                near.price = (near.price * near.hits + lvl.price) / (near.hits + 1);
-                near.hits++;
-                near.latest = lvl.time;
-            }
-        }
-
-        this.levels = clustered.sort((a, b) => b.hits - a.hits).slice(0, 40);
+        if (this.candles.length < 50) return;
+        
+        // استفاده از الگوریتم شناسایی نقاط سقف و کف اصلی از استراتژی
+        const pivots = this.strategy.getSwingPivots(this.candles, 8);
+        
+        this.levels = pivots.map(p => ({
+            type: (p.type === 'high' ? 'RESISTANCE' : 'SUPPORT') as 'SUPPORT' | 'RESISTANCE',
+            price: p.price,
+            time: p.time,
+            hits: 1 // سازگاری با کدهای قبلی
+        })).slice(-20);
     }
 
     calcATR(period = 14) {

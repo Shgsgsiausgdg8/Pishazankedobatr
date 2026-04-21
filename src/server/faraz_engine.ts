@@ -370,19 +370,16 @@ export class FarazGoldEngine {
     }
 
     detectLevels() {
-        if (this.candles.length < 20) return;
-        this.levels = [];
-        const lookback = 5;
-        for (let i = lookback; i < this.candles.length - lookback; i++) {
-            const current = this.candles[i];
-            let isHigh = true, isLow = true;
-            for (let j = 1; j <= lookback; j++) {
-                if (this.candles[i - j].high >= current.high || this.candles[i + j].high > current.high) isHigh = false;
-                if (this.candles[i - j].low <= current.low || this.candles[i + j].low < current.low) isLow = false;
-            }
-            if (isHigh) this.addLevel('RESISTANCE', current.high, current.time * 1000);
-            if (isLow) this.addLevel('SUPPORT', current.low, current.time * 1000);
-        }
+        if (this.candles.length < 50) return;
+        
+        // استفاده از الگوریتم شناسایی نقاط سقف و کف اصلی از استراتژی
+        const pivots = this.strategy.getSwingPivots(this.candles, 8);
+        
+        this.levels = pivots.map(p => ({
+            type: p.type === 'high' ? 'RESISTANCE' : 'SUPPORT' as 'SUPPORT' | 'RESISTANCE',
+            price: p.price,
+            time: p.time * 1000
+        })).slice(-20); // فقط 20 سطح اخیر برای جلوگیری از شلوغی
     }
 
     addLevel(type: 'SUPPORT' | 'RESISTANCE', price: number, time: number) {

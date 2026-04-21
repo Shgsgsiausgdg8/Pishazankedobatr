@@ -285,68 +285,116 @@ export class TradingStrategy {
     }
 
     /**
-     * تشخیص الگوی N یا N معکوس از روی نقاط چرخشی اخیر
-     * @param candles 
-     * @returns - { type, A, B, C, signalPrice }
+     * تشخیص الگوی N با استفاده از نقاط چرخشی (ZigZag)
      */
     private detectNPattern(candles: Candle[]) {
-        // 1. پیدا کردن نقاط چرخشی (سقف و کف محلی)
-        const pivots: { type: 'high' | 'low', price: number, index: number, time: number }[] = [];
-        const len = candles.length;
-        for (let i = 1; i < len - 1; i++) {
-            const prev = candles[i-1];
-            const curr = candles[i];
-            const next = candles[i+1];
-            
-            // سقف محلی (قله)
-            if (curr.high > prev.high && curr.high > next.high) {
-                pivots.push({ type: 'high', price: curr.high, index: i, time: curr.time });
-            }
-            // کف محلی (دره)
-            if (curr.low < prev.low && curr.low < next.low) {
-                pivots.push({ type: 'low', price: curr.low, index: i, time: curr.time });
-            }
-        }
-
+        const pivots = this.getSwingPivots(candles, 8); 
         if (pivots.length < 3) return null;
 
-        // 2. سه نقطه چرخشی آخر را بگیرید (باید متناوب باشند)
-        const recent = pivots.slice(-3);
-        const [p1, p2, p3] = recent;
-        if (p1.type === p2.type || p2.type === p3.type) return null;
+        // سه نقطه آخر را بگیرید
+        const p3 = pivots[pivots.length - 1]; // آخرین نقطه (C)
+        const p2 = pivots[pivots.length - 2]; // نقطه وسط (B)
+        const p1 = pivots[pivots.length - 3]; // اولین نقطه (A)
 
-        // 3. الگوی N معمولی: low → high → low
+        // ATR برای تخمین نویز و قدرت حرکت
+        const atr = this.calculateATR(candles, 14);
+
+        // الگوی N صعودی (V شکل + اصلاح)
+        // A (Low) -> B (High) -> C (Higher Low)
         if (p1.type === 'low' && p2.type === 'high' && p3.type === 'low') {
             const A = p1.price;
             const B = p2.price;
             const C = p3.price;
-            // شرط: A < B و C < B و C > A
-            if (A < B && C < B && C > A) {
-                const signalPrice = A + (B - A) * 0.5;
-                // کلید منحصربه‌فرد برای این الگو
-                const patternKey = `N|${A}|${B}|${C}`;
+            
+            // شرط N صعودی: B بالاتر از A ، C پایین‌تر از B ولی بالاتر از A (اصلاح)
+            if (B > A && C < B && C > A) {
+                // سیگنال خرید در بازگشت به فیبوناچی 50% بین A و B موج صعودی
+                const signalPrice = A + (B - A) * 0.5; 
+                const patternKey = `N_UP|${p1.index}|${p2.index}|${p3.index}`;
                 if (this.lastPatternKey === patternKey) return null;
                 this.lastPatternKey = patternKey;
-                return { type: 'SELL', A, B, C, signalPrice };
+                return { type: 'BUY', signalPrice, atr };
             }
         }
 
-        // 4. الگوی N معکوس: high → low → high
+        // الگوی N نزولی (هشتی شکل + اصلاح)
         if (p1.type === 'high' && p2.type === 'low' && p3.type === 'high') {
             const A = p1.price;
             const B = p2.price;
             const C = p3.price;
-            // شرط: A > B و C > B و C < A
-            if (A > B && C > B && C < A) {
-                const signalPrice = A + (B - A) * 0.5; 
-                const patternKey = `INV|${A}|${B}|${C}`;
+
+            // شرط N نزولی: B پایین‌تر از A ، C بالاتر از B ولی پایین‌تر از A
+            if (B < A && C > B && C < A) {
+                const signalPrice = A - (A - B) * 0.5;
+                const patternKey = `N_DOWN|${p1.index}|${p2.index}|${p3.index}`;
                 if (this.lastPatternKey === patternKey) return null;
                 this.lastPatternKey = patternKey;
-                return { type: 'BUY', A, B, C, signalPrice };
+                return { type: 'SELL', signalPrice, atr };
             }
         }
 
         return null;
+    }
+
+    /**
+     * شناسایی نقاط سقف و کف اصلی (ZigZag structural pivots)
+     */
+    public getSwingPivots(candles: Candle[], depth: number = 8) {
+        if (candles.length < depth * 2) return [];
+
+        const pivots: { type: 'high' | 'low', price: number, index: number, time: number }[] = [];
+        const atr = this.calculateATR(candles, 14);
+        const threshold = atr * 1.5; // آستانه حرکت قیمت برای تایید یک چرخش معتبر
+
+        let lastPivot: any = null;
+
+        for (let i = depth; i < candles.length - depth; i++) {
+            const curr = candles[i];
+            let isHigh = true;
+            let isLow = true;
+
+            for (let j = 1; j <= depth; j++) {
+                if (candles[i - j].high > curr.high || candles[i + j].high >= curr.high) isHigh = false;
+                if (candles[i - j].low < curr.low || candles[i + j].low <= curr.low) isLow = false;
+            }
+
+            if (isHigh) {
+                if (!lastPivot || (lastPivot.type === 'low' && curr.high - lastPivot.price > threshold)) {
+                    lastPivot = { type: 'high', price: curr.high, index: i, time: curr.time };
+                    pivots.push(lastPivot);
+                } else if (lastPivot.type === 'high' && curr.high > lastPivot.price) {
+                    pivots.pop();
+                    lastPivot = { type: 'high', price: curr.high, index: i, time: curr.time };
+                    pivots.push(lastPivot);
+                }
+            } else if (isLow) {
+                if (!lastPivot || (lastPivot.type === 'high' && lastPivot.price - curr.low > threshold)) {
+                    lastPivot = { type: 'low', price: curr.low, index: i, time: curr.time };
+                    pivots.push(lastPivot);
+                } else if (lastPivot.type === 'low' && curr.low < lastPivot.price) {
+                    pivots.pop();
+                    lastPivot = { type: 'low', price: curr.low, index: i, time: curr.time };
+                    pivots.push(lastPivot);
+                }
+            }
+        }
+
+        // اطمینان از تناوب High/Low
+        const filtered: typeof pivots = [];
+        for (const p of pivots) {
+            if (filtered.length === 0) {
+                filtered.push(p);
+                continue;
+            }
+            const last = filtered[filtered.length - 1];
+            if (last.type === p.type) {
+                if (p.type === 'high' && p.price > last.price) filtered[filtered.length - 1] = p;
+                else if (p.type === 'low' && p.price < last.price) filtered[filtered.length - 1] = p;
+            } else {
+                filtered.push(p);
+            }
+        }
+        return filtered;
     }
 
     /**
