@@ -25,6 +25,7 @@ export class FarazGoldEngine {
     dataFile = path.join(process.cwd(), 'recorded_data.jsonl');
     settingsFile = path.join(process.cwd(), 'settings.json');
     lastCandleTime = 0;
+    lastLevelsUpdate = 0;
 
     constructor() {
         this.loadSettings();
@@ -321,8 +322,6 @@ export class FarazGoldEngine {
             this.candles.sort((a, b) => a.time - b.time);
             this.lastCandleTime = candleTime;
             if (this.candles.length > 1000) this.candles.shift();
-            this.detectLevels();
-            this.runStrategy();
             this.recordData(newCandle);
         } else {
             const last = this.candles[this.candles.length - 1];
@@ -331,6 +330,13 @@ export class FarazGoldEngine {
                 last.low = Math.min(last.low, newPrice);
                 last.close = newPrice;
             }
+        }
+
+        // بروزرسانی سطوح سقف و کف به صورت لحظه‌ای با تراتل 2 ثانیه
+        if (!this.lastLevelsUpdate || now - this.lastLevelsUpdate > 2000) {
+            this.detectLevels();
+            this.runStrategy();
+            this.lastLevelsUpdate = now;
         }
     }
 

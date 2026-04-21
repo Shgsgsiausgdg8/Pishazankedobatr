@@ -338,17 +338,20 @@ export class TradingStrategy {
 
     /**
      * شناسایی نقاط سقف و کف اصلی (ZigZag structural pivots)
+     * بهینه‌سازی شده برای بروزرسانی لحظه‌ای سقف و کف جدید
      */
     public getSwingPivots(candles: Candle[], depth: number = 8) {
-        if (candles.length < depth * 2) return [];
+        if (candles.length < depth) return [];
 
         const pivots: { type: 'high' | 'low', price: number, index: number, time: number }[] = [];
         const atr = this.calculateATR(candles, 14);
-        const threshold = atr * 1.5; // آستانه حرکت قیمت برای تایید یک چرخش معتبر
+        const threshold = atr * 1.2; // آستانه حساس‌تر برای نوسانات سریع
 
         let lastPivot: any = null;
 
-        for (let i = depth; i < candles.length - depth; i++) {
+        // 1. یافتن نقاط تایید شده با عمق (تا کندل len - depth)
+        const limit = candles.length - depth;
+        for (let i = depth; i < limit; i++) {
             const curr = candles[i];
             let isHigh = true;
             let isLow = true;
@@ -379,7 +382,32 @@ export class TradingStrategy {
             }
         }
 
-        // اطمینان از تناوب High/Low
+        // 2. بررسی کندل‌های انتهایی (بروزرسانی زنده سقف و کف)
+        for (let i = Math.max(0, limit); i < candles.length; i++) {
+            const c = candles[i];
+            if (lastPivot) {
+                if (lastPivot.type === 'high') {
+                    if (c.high > lastPivot.price) {
+                        pivots.pop();
+                        lastPivot = { type: 'high', price: c.high, index: i, time: c.time };
+                        pivots.push(lastPivot);
+                    } else if (lastPivot.price - c.low > threshold) {
+                        lastPivot = { type: 'low', price: c.low, index: i, time: c.time };
+                        pivots.push(lastPivot);
+                    }
+                } else if (lastPivot.type === 'low') {
+                    if (c.low < lastPivot.price) {
+                        pivots.pop();
+                        lastPivot = { type: 'low', price: c.low, index: i, time: c.time };
+                        pivots.push(lastPivot);
+                    } else if (c.high - lastPivot.price > threshold) {
+                        lastPivot = { type: 'high', price: c.high, index: i, time: c.time };
+                        pivots.push(lastPivot);
+                    }
+                }
+            }
+        }
+
         const filtered: typeof pivots = [];
         for (const p of pivots) {
             if (filtered.length === 0) {

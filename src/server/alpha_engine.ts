@@ -190,7 +190,7 @@ export class AlphaGoldEngine {
             last.close = newPrice;
         }
 
-        if (now - this.lastLevelsUpdate > 10000) {
+        if (now - this.lastLevelsUpdate > 2000) {
             this.detectLevels();
             this.lastLevelsUpdate = now;
         }
