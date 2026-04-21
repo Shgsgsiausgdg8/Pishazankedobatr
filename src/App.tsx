@@ -284,6 +284,10 @@ export default function App() {
   
   const wsRef = useRef<WebSocket | null>(null);
 
+  const [backtestResults, setBacktestResults] = useState<any>(null);
+  const [selectedStrategy, setSelectedStrategy] = useState('N-PATTERN');
+  const [isBacktesting, setIsBacktesting] = useState(false);
+
   useEffect(() => {
     activeBrokerRef.current = activeBroker;
   }, [activeBroker]);
@@ -310,6 +314,9 @@ export default function App() {
             if (msg.broker === activeBrokerRef.current) {
               setData({ ...msg.data, broker: msg.broker });
             }
+          } else if (msg.type === 'BACKTEST_RESULTS') {
+            setBacktestResults(msg.data);
+            setIsBacktesting(false);
           }
         } catch (err) {
           console.error("WS Parse Error", err);
@@ -321,6 +328,16 @@ export default function App() {
     connect();
     return () => wsRef.current?.close();
   }, []);
+
+  const runBacktest = () => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    setIsBacktesting(true);
+    setBacktestResults(null);
+    wsRef.current.send(JSON.stringify({ 
+      type: 'RUN_BACKTEST', 
+      strategyType: selectedStrategy 
+    }));
+  };
 
   const switchBroker = (broker: 'faraz' | 'alpha') => {
     if (broker === activeBroker) return;
@@ -530,11 +547,115 @@ export default function App() {
             />
           </div>
 
-          <div className="card">
-            <div style={{ fontWeight: 'bold', color: '#94a3b8', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {/* Backtest Terminal - Moved up for better visibility */}
+          <div className="card" style={{ border: '1px solid rgba(16, 185, 129, 0.3)', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+            <div style={{ fontWeight: 'bold', color: '#10b981', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <ActivityIcon size={16} />
-              سیگنال‌های اخیر
+              ترمینال بک‌تست (شنیه‌سازی استراتژی)
             </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem', background: '#020617', padding: '1.2rem', borderRadius: '16px', border: '1px solid #1e293b' }}>
+              <div style={{ flex: 1, minWidth: '240px' }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '6px' }}>انتخاب استراتژی معاملاتی:</label>
+                <select 
+                  value={selectedStrategy} 
+                  onChange={e => setSelectedStrategy(e.target.value)}
+                  style={{ width: '100%', padding: '12px', borderRadius: '10px', background: '#1e293b', color: 'white', border: '1px solid #334155', cursor: 'pointer', fontSize: '0.9rem' }}
+                >
+                  <option value="N-PATTERN">الگوی N (N-Pattern)</option>
+                  <option value="RSI">شاخص RSI (Oversold/Overbought)</option>
+                  <option value="EMA-CROSS">کراس میانگین متحرک (EMA 9/21)</option>
+                </select>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', width: '100%', sm: 'auto' } as any}>
+                <button 
+                  onClick={runBacktest} 
+                  disabled={isBacktesting}
+                  className="btn btn-primary" 
+                  style={{ width: '100%', minWidth: '180px', justifyContent: 'center', height: '48px', fontSize: '1rem', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)' }}
+                >
+                  {isBacktesting ? (
+                    <>
+                      <div className="animate-spin" style={{ width: '16px', height: '16px', border: '2px solid white', borderTopColor: 'transparent', borderRadius: '50%' }} />
+                      در حال آنالیز...
+                    </>
+                  ) : 'شروع بک‌تست'}
+                </button>
+              </div>
+            </div>
+
+            {backtestResults && (
+              <div style={{ animation: 'fadeIn 0.5s ease' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                  <div style={{ background: 'rgba(16, 185, 129, 0.05)', padding: '15px', borderRadius: '12px', textAlign: 'center', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>وین ریت</div>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: backtestResults.winRate >= 50 ? '#10b981' : '#ef4444' }}>
+                      {backtestResults.winRate.toFixed(1)}%
+                    </div>
+                  </div>
+                  <div style={{ background: '#020617', padding: '15px', borderRadius: '12px', textAlign: 'center', border: '1px solid #1e293b' }}>
+                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>معاملات</div>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 'bold' }}>{backtestResults.totalTrades}</div>
+                  </div>
+                  <div style={{ background: 'rgba(16, 185, 129, 0.05)', padding: '15px', borderRadius: '12px', textAlign: 'center', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>سود خالص</div>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: backtestResults.totalProfit >= 0 ? '#10b981' : '#ef4444' }}>
+                      {backtestResults.totalProfit.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                    </div>
+                  </div>
+                  <div style={{ background: 'rgba(239, 68, 68, 0.05)', padding: '15px', borderRadius: '12px', textAlign: 'center', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>افت (DD)</div>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#ef4444' }}>
+                      {backtestResults.maxDrawdown.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ overflowX: 'auto', background: '#020617', borderRadius: '12px', padding: '0.5rem' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid #1e293b', textAlign: 'right' }}>
+                        <th style={{ padding: '12px', color: '#94a3b8' }}>نوع</th>
+                        <th style={{ padding: '12px', color: '#94a3b8' }}>ورود</th>
+                        <th style={{ padding: '12px', color: '#94a3b8' }}>خروج</th>
+                        <th style={{ padding: '12px', color: '#94a3b8' }}>سود</th>
+                        <th style={{ padding: '12px', color: '#94a3b8' }}>نتیجه</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {backtestResults.trades.slice(-5).reverse().map((trade: any, i: number) => (
+                        <tr key={i} style={{ borderBottom: '1px solid #1e293b' }}>
+                          <td style={{ padding: '12px', color: trade.type === 'BUY' ? '#10b981' : '#ef4444', fontWeight: '600' }}>{trade.type}</td>
+                          <td style={{ padding: '12px', fontFamily: 'var(--font-mono)' }}>{trade.entry.toLocaleString()}</td>
+                          <td style={{ padding: '12px', fontFamily: 'var(--font-mono)' }}>{trade.exit.toLocaleString()}</td>
+                          <td style={{ padding: '12px', color: trade.profit >= 0 ? '#10b981' : '#ef4444', fontWeight: 'bold' }}>{trade.profit > 0 ? '+' : ''}{trade.profit.toLocaleString(undefined, { maximumFractionDigits: 1 })}</td>
+                          <td style={{ padding: '12px' }}>
+                            <span style={{ 
+                              padding: '2px 8px', 
+                              borderRadius: '6px', 
+                              fontSize: '0.75rem',
+                              fontWeight: '600',
+                              background: trade.result === 'WIN' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                              color: trade.result === 'WIN' ? '#10b981' : '#ef4444'
+                            }}>
+                              {trade.result === 'WIN' ? 'WIN' : 'LOSS'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {backtestResults.trades.length > 5 && (
+                    <p style={{ textAlign: 'center', fontSize: '0.75rem', color: '#475569', marginTop: '12px' }}>
+                      نمایش ۵ معامله اخیر از مجموع {backtestResults.totalTrades} معامله
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Recent Signals Section */}
+          <div className="card">
             <div style={{ 
               display: 'grid', 
               gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', 

@@ -7,10 +7,14 @@ import { createServer as createViteServer } from "vite";
 import { FarazGoldEngine } from "./src/server/faraz_engine.js";
 import { AlphaGoldEngine } from "./src/server/alpha_engine.js";
 
+import { BacktestEngine } from "./src/server/backtest.js";
+
 async function startServer() {
     const app = express();
     const server = http.createServer(app);
     const PORT = 3000;
+
+    const backtestEngine = new BacktestEngine();
 
     // Prevent process crash from unhandled errors
     process.on('uncaughtException', (err) => {
@@ -63,6 +67,15 @@ async function startServer() {
                         console.log(`[Server] Switched context to broker: ${currentBroker}`);
                         sendState('INIT');
                     }
+                } else if (command.type === 'RUN_BACKTEST') {
+                    const engine = engines[currentBroker];
+                    const state = engine.getState();
+                    const results = backtestEngine.run(state.candles, state.timeframe, command.strategyType);
+                    ws.send(JSON.stringify({
+                        type: 'BACKTEST_RESULTS',
+                        broker: currentBroker,
+                        data: results
+                    }));
                 } else {
                     const engine = engines[currentBroker];
                     if (!engine) return;
@@ -136,7 +149,7 @@ async function startServer() {
     }
 
     server.listen(PORT, "0.0.0.0", () => {
-        console.log(`Server running on http://localhost:${PORT} [v1.1]`);
+        console.log(`Server running on http://localhost:${PORT} [v1.3]`);
         farazEngine.start();
         alphaEngine.start();
     });

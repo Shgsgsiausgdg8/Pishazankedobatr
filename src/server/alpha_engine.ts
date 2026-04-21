@@ -41,24 +41,38 @@ export class AlphaGoldEngine {
 
     async fetchHistoricalCandles() {
         try {
-            const resolution = this.timeframe; // '1', '5', '15', etc.
+            const resolution = this.timeframe;
             const now = Math.floor(Date.now() / 1000);
             const limit = 500;
             const fromTs = now - (limit * parseInt(resolution) * 60);
             const toTs = now;
 
-            const url = `https://chrt.alphagoldx.com/api/data/histoday/?e=ALPHAGOLDX&fsym=XAU&tsym=USD&toTs=${toTs}&fromTs=${fromTs}&resolution=${resolution}&limit=${limit}`;
-            console.log(`[AlphaEngine] Fetching history: ${url}`);
+            // Try different variants of the API
+            const apiVariants = [
+                `https://chrt.alphagoldx.com/api/data/histoday/?e=ALPHAGOLDX&fsym=XAU&tsym=USD&toTs=${toTs}&fromTs=${fromTs}&resolution=${resolution}&limit=${limit}`,
+                `https://light.alphagoldx.com/api/data/histoday/?e=ALPHAGOLDX&fsym=XAU&tsym=USD&toTs=${toTs}&fromTs=${fromTs}&resolution=${resolution}&limit=${limit}`
+            ];
 
-            const res = await fetch(url, {
-                headers: {
-                    "accept": "*/*",
-                    "origin": "https://light.alphagoldx.com",
-                    "referer": "https://light.alphagoldx.com/",
-                    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                }
-            });
-            const json: any = await res.json();
+            let json: any = null;
+            for (const url of apiVariants) {
+                try {
+                    console.log(`[AlphaEngine] Trying history fetch: ${url}`);
+                    const res = await fetch(url, {
+                        headers: {
+                            "accept": "application/json, text/plain, */*",
+                            "origin": "https://light.alphagoldx.com",
+                            "referer": "https://light.alphagoldx.com/",
+                            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                        }
+                    });
+                    
+                    const text = await res.text();
+                    if (text.startsWith('{')) {
+                        json = JSON.parse(text);
+                        if (json.Data) break;
+                    }
+                } catch (e) { }
+            }
             
             if (json && json.Data && Array.isArray(json.Data)) {
                 // IMPORTANT: Filter out any Mazane data (above 10k) that might be in the history API
@@ -266,6 +280,7 @@ export class AlphaGoldEngine {
 
     getState() {
         return {
+            broker: 'alpha', // Explicitly include broker name in state
             price: this.price,
             timeframe: this.timeframe,
             candles: this.candles.slice(-600),

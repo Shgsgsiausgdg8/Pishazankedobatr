@@ -31,25 +31,120 @@ export class TradingStrategy {
     constructor() {}
 
     /**
-     * تابع اصلی تحلیل که توسط engine.ts فراخوانی می‌شود
-     * @param candles - آرایه شمع‌ها {time, open, high, low, close}
-     * @param timeframe - تایم‌فریم (مثلاً '1', '5')
-     * @returns - سیگنال یا null
+     * تابع اصلی تحلیل
      */
-    analyze(candles: Candle[], timeframe: string): Signal | null {
-        if (!candles || candles.length < 10) return null;
+    analyze(candles: Candle[], timeframe: string, strategyType: string = 'N-PATTERN'): Signal | null {
+        if (!candles || candles.length < 20) return null;
 
-        const pattern = this.detectNPattern(candles);
-        if (!pattern) return null;
+        let result: any = null;
 
-        // جلوگیری از سیگنال‌های تکراری در یک دقیقه
+        switch (strategyType) {
+            case 'RSI':
+                result = this.analyzeRSI(candles);
+                break;
+            case 'EMA-CROSS':
+                result = this.analyzeEMACross(candles);
+                break;
+            case 'N-PATTERN':
+            default:
+                result = this.detectNPattern(candles);
+                break;
+        }
+
+        if (!result) return null;
+
+        // جلوگیری از سیگنال‌های تکراری
         const now = Date.now();
-        if (this.lastSignalTime && (now - this.lastSignalTime) < 60000) return null;
+        if (this.lastSignalTime && (now - this.lastSignalTime) < 60000 && strategyType === 'N-PATTERN') return null;
 
-        const signal = this.createSignalFromPattern(pattern, timeframe);
+        const signal = this.createSignalFromPattern(result, timeframe);
         this.lastSignalTime = now;
-        console.log(`[Strategy] N-Pattern Signal: ${signal.type} at ${signal.entry}`);
         return signal;
+    }
+
+    private analyzeRSI(candles: Candle[]) {
+        const period = 14;
+        if (candles.length < period + 1) return null;
+
+        const rsiValues = this.calculateRSI(candles, period);
+        const lastRSI = rsiValues[rsiValues.length - 1];
+        const prevRSI = rsiValues[rsiValues.length - 2];
+        const lastPrice = candles[candles.length - 1].close;
+
+        // Buy on Oversold cross up
+        if (prevRSI < 30 && lastRSI >= 30) {
+            return { type: 'BUY', signalPrice: lastPrice };
+        }
+        // Sell on Overbought cross down
+        if (prevRSI > 70 && lastRSI <= 70) {
+            return { type: 'SELL', signalPrice: lastPrice };
+        }
+
+        return null;
+    }
+
+    private analyzeEMACross(candles: Candle[]) {
+        if (candles.length < 22) return null;
+
+        const ema9 = this.calculateEMA(candles, 9);
+        const ema21 = this.calculateEMA(candles, 21);
+
+        const lastEma9 = ema9[ema9.length - 1];
+        const prevEma9 = ema9[ema9.length - 2];
+        const lastEma21 = ema21[ema21.length - 1];
+        const prevEma21 = ema21[ema21.length - 2];
+        const lastPrice = candles[candles.length - 1].close;
+
+        // Bullish Cross
+        if (prevEma9 < prevEma21 && lastEma9 >= lastEma21) {
+            return { type: 'BUY', signalPrice: lastPrice };
+        }
+        // Bearish Cross
+        if (prevEma9 > prevEma21 && lastEma9 <= lastEma21) {
+            return { type: 'SELL', signalPrice: lastPrice };
+        }
+
+        return null;
+    }
+
+    private calculateRSI(candles: Candle[], period: number) {
+        let gains = 0;
+        let losses = 0;
+
+        for (let i = 1; i <= period; i++) {
+            const diff = candles[i].close - candles[i - 1].close;
+            if (diff >= 0) gains += diff;
+            else losses -= diff;
+        }
+
+        let avgGain = gains / period;
+        let avgLoss = losses / period;
+
+        const rsi = [];
+        for (let i = period + 1; i < candles.length; i++) {
+            const diff = candles[i].close - candles[i - 1].close;
+            const gain = diff >= 0 ? diff : 0;
+            const loss = diff < 0 ? -diff : 0;
+
+            avgGain = (avgGain * (period - 1) + gain) / period;
+            avgLoss = (avgLoss * (period - 1) + loss) / period;
+
+            const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+            rsi.push(100 - (100 / (1 + rs)));
+        }
+        return rsi;
+    }
+
+    private calculateEMA(candles: Candle[], period: number) {
+        const k = 2 / (period + 1);
+        let ema = candles[0].close;
+        const emaArray = [ema];
+
+        for (let i = 1; i < candles.length; i++) {
+            ema = (candles[i].close * k) + (ema * (1 - k));
+            emaArray.push(ema);
+        }
+        return emaArray;
     }
 
     /**

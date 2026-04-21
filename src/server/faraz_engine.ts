@@ -417,6 +417,7 @@ export class FarazGoldEngine {
 
     getState() {
         return {
+            broker: 'faraz',
             price: this.price,
             timeframe: this.timeframe,
             candles: this.candles.slice(-300),
