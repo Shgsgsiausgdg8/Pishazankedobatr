@@ -11,6 +11,7 @@ export class FarazGoldEngine {
     signals: Signal[] = [];
     isRecording = false;
     strategy = new TradingStrategy();
+    liveStrategyType = 'SCALP-ADV';
     recordingStartTime: number | null = null;
 
     // Auth State
@@ -334,7 +335,7 @@ export class FarazGoldEngine {
     }
 
     runStrategy() {
-        const signal = this.strategy.analyze(this.candles, this.timeframe);
+        const signal = this.strategy.analyze(this.candles, this.timeframe, this.liveStrategyType);
         if (signal) {
             const lastSignal = this.signals[0];
             if (!lastSignal || lastSignal.timeframe !== signal.timeframe || Math.abs(lastSignal.time - signal.time) > 60000) {
@@ -420,6 +421,7 @@ export class FarazGoldEngine {
             broker: 'faraz',
             price: this.price,
             timeframe: this.timeframe,
+            liveStrategy: this.liveStrategyType,
             candles: this.candles.slice(-2000),
             levels: this.levels,
             signals: this.signals,

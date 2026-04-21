@@ -354,6 +354,12 @@ export default function App() {
     wsRef.current.send(JSON.stringify({ type: 'RUN_GLOBAL_BACKTEST' }));
   };
 
+  const setLiveStrategy = (strat: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'SET_LIVE_STRATEGY', strategy: strat }));
+    }
+  };
+
   const switchBroker = (broker: 'faraz' | 'alpha') => {
     if (broker === activeBroker) return;
     
@@ -473,6 +479,34 @@ export default function App() {
             {activeBroker === 'faraz' && (
               <button onClick={() => setShowAuth(true)} className="btn btn-secondary">احراز هویت</button>
             )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-start' }}>
+              <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>استراتژی فعال:</span>
+              <select 
+                value={data?.liveStrategy || 'SCALP-ADV'} 
+                onChange={(e) => setLiveStrategy(e.target.value)}
+                style={{ 
+                  background: '#020617', 
+                  color: '#10b981', 
+                  border: '1px solid #1e293b', 
+                  borderRadius: '6px', 
+                  padding: '2px 8px',
+                  fontSize: '0.75rem',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="SCALP-ADV">اسکلپ</option>
+                <option value="PINBAR">پین‌بار</option>
+                <option value="N-PATTERN">الگوی N</option>
+                <option value="TREND-MT">روندی</option>
+                <option value="QUANT">کوانت</option>
+                <option value="RSI">RSI</option>
+                <option value="EMA-CROSS">کراس</option>
+                <option value="HST">HST</option>
+              </select>
+            </div>
+
             <button onClick={toggleRecording} className={`btn ${data?.isRecording ? 'btn-secondary' : 'btn-primary'}`}>
               {data?.isRecording ? <SquareIcon /> : <PlayIcon />}
               {data?.isRecording ? 'توقف' : 'ضبط'}

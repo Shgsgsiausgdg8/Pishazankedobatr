@@ -116,6 +116,10 @@ async function startServer() {
                         engine.stopRecording();
                     else if (command.type === 'SET_TIMEFRAME')
                         engine.setTimeframe(command.timeframe);
+                    else if (command.type === 'SET_LIVE_STRATEGY') {
+                        (engine as any).liveStrategyType = command.strategy;
+                        console.log(`[Server] ${currentBroker} live strategy set to ${command.strategy}`);
+                    }
                 }
             }
             catch (e) { }

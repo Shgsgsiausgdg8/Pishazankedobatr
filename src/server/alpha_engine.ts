@@ -18,6 +18,7 @@ export class AlphaGoldEngine {
     dataFile = path.join(process.cwd(), "alpha_recorded.jsonl");
 
     strategy = new TradingStrategy();
+    liveStrategyType = 'SCALP-ADV'; 
     lastLevelsUpdate = 0;
 
     constructor() {
@@ -252,7 +253,7 @@ export class AlphaGoldEngine {
     }
 
     runStrategy() {
-        const sig = this.strategy.analyze(this.candles, this.timeframe);
+        const sig = this.strategy.analyze(this.candles, this.timeframe, this.liveStrategyType);
         if (!sig) return;
         const last = this.signals[0];
         if (!last || Math.abs(last.time - sig.time) > 60000) {
@@ -283,6 +284,7 @@ export class AlphaGoldEngine {
             broker: 'alpha', // Explicitly include broker name in state
             price: this.price,
             timeframe: this.timeframe,
+            liveStrategy: this.liveStrategyType,
             candles: this.candles.slice(-2000),
             levels: this.levels,
             signals: this.signals,

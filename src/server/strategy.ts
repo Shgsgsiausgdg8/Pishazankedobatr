@@ -130,6 +130,7 @@ export class TradingStrategy {
         const rsi = this.calculateRSI(candles, periodRSI);
         const ema9 = this.calculateEMA(candles, emaFastP);
         const ema21 = this.calculateEMA(candles, emaSlowP);
+        const atr = this.calculateATR(candles, 14);
         
         const lastRSI = rsi[rsi.length - 1];
         const lastE9 = ema9[ema9.length - 1];
@@ -139,14 +140,14 @@ export class TradingStrategy {
 
         // Buy: Strong trend (9 > 21) + RSI oversold recovery or pullback to EMA
         if (lastE9 > lastE21) {
-            if (lastRSI < 40 && lastPrice > prevPrice) return { type: 'BUY', signalPrice: lastPrice };
-            if (lastPrice > lastE21 && prevPrice <= lastE21) return { type: 'BUY', signalPrice: lastPrice };
+            if (lastRSI < 40 && lastPrice > prevPrice) return { type: 'BUY', signalPrice: lastPrice, atr };
+            if (lastPrice > lastE21 && prevPrice <= lastE21) return { type: 'BUY', signalPrice: lastPrice, atr };
         }
         
         // Sell: Strong down trend (9 < 21) + RSI overbought recovery
         if (lastE9 < lastE21) {
-            if (lastRSI > 60 && lastPrice < prevPrice) return { type: 'SELL', signalPrice: lastPrice };
-            if (lastPrice < lastE21 && prevPrice >= lastE21) return { type: 'SELL', signalPrice: lastPrice };
+            if (lastRSI > 60 && lastPrice < prevPrice) return { type: 'SELL', signalPrice: lastPrice, atr };
+            if (lastPrice < lastE21 && prevPrice >= lastE21) return { type: 'SELL', signalPrice: lastPrice, atr };
         }
         
         return null;
@@ -161,14 +162,15 @@ export class TradingStrategy {
         const maxH = Math.max(...highs);
         const minL = Math.min(...lows);
         const lastPrice = candles[candles.length - 1].close;
+        const atr = this.calculateATR(candles, 14);
         
         // Double Bottom / Breakout
-        if (lastPrice > maxH * 0.999 && candles[candles.length - 2].close < maxH) {
-            return { type: 'BUY', signalPrice: lastPrice };
+        if (lastPrice > maxH * 0.9995 && candles[candles.length - 2].close < maxH) {
+            return { type: 'BUY', signalPrice: lastPrice, atr };
         }
         // Double Top / Breakdown
-        if (lastPrice < minL * 1.001 && candles[candles.length - 2].close > minL) {
-            return { type: 'SELL', signalPrice: lastPrice };
+        if (lastPrice < minL * 1.0005 && candles[candles.length - 2].close > minL) {
+            return { type: 'SELL', signalPrice: lastPrice, atr };
         }
         
         return null;
@@ -178,6 +180,7 @@ export class TradingStrategy {
         const maFast = this.calculateEMA(candles, 20);
         const maSlow = this.calculateEMA(candles, 50);
         const macd = this.calculateMACD(candles, 12, 26, 9);
+        const atr = this.calculateATR(candles, 14);
         
         if (!macd) return null;
         
@@ -186,8 +189,9 @@ export class TradingStrategy {
         const lastHist = macd.histogram;
         const lastPrice = candles[candles.length - 1].close;
 
-        if (lastFast > lastSlow && lastHist > 0) return { type: 'BUY', signalPrice: lastPrice };
-        if (lastFast < lastSlow && lastHist < 0) return { type: 'SELL', signalPrice: lastPrice };
+        // Long only if fast > slow AND macd hist increasing
+        if (lastFast > lastSlow && lastHist > 0) return { type: 'BUY', signalPrice: lastPrice, atr };
+        if (lastFast < lastSlow && lastHist < 0) return { type: 'SELL', signalPrice: lastPrice, atr };
         
         return null;
     }
@@ -195,12 +199,13 @@ export class TradingStrategy {
     private analyzeHST(candles: Candle[]) {
         // Simple HMA + Trend implementation
         const hma = this.calculateEMA(candles, 55); 
+        const atr = this.calculateATR(candles, 14);
         const lastH = hma[hma.length - 1];
         const prevH = hma[hma.length - 2];
         const lastPrice = candles[candles.length - 1].close;
 
-        if (lastPrice > lastH && lastH > prevH) return { type: 'BUY', signalPrice: lastPrice };
-        if (lastPrice < lastH && lastH < prevH) return { type: 'SELL', signalPrice: lastPrice };
+        if (lastPrice > lastH && lastH > prevH) return { type: 'BUY', signalPrice: lastPrice, atr };
+        if (lastPrice < lastH && lastH < prevH) return { type: 'SELL', signalPrice: lastPrice, atr };
         
         return null;
     }
@@ -208,6 +213,7 @@ export class TradingStrategy {
     private analyzePinBar(candles: Candle[]) {
         const c = candles[candles.length - 1];
         const range = c.high - c.low;
+        const atr = this.calculateATR(candles, 14);
         if (range === 0) return null;
         
         const body = Math.abs(c.close - c.open);
@@ -215,9 +221,9 @@ export class TradingStrategy {
         const lowerWick = Math.min(c.open, c.close) - c.low;
         
         // Bullish Pin
-        if (lowerWick > body * 3 && upperWick < body) return { type: 'BUY', signalPrice: c.close };
+        if (lowerWick > body * 3 && upperWick < body) return { type: 'BUY', signalPrice: c.close, atr };
         // Bearish Pin
-        if (upperWick > body * 3 && lowerWick < body) return { type: 'SELL', signalPrice: c.close };
+        if (upperWick > body * 3 && lowerWick < body) return { type: 'SELL', signalPrice: c.close, atr };
         
         return null;
     }
@@ -352,15 +358,16 @@ export class TradingStrategy {
     private createSignalFromPattern(pattern: any, timeframe: string): Signal {
         const isBuy = pattern.type === 'BUY';
         const entry = pattern.signalPrice;
+        
+        // Dynamic SL/TP based on ATR for high precision
+        const atr = pattern.atr || entry * 0.001; 
+        const slDist = atr * 1.5;
+        const tpDist = atr * 2.1; // Balanced RR Ratio
 
-        // Realistic scalping targets (0.2%, 0.4%, 0.6%) and Stop Loss (0.3%)
-        const tpPercents = [0.002, 0.004, 0.006];
-        const slPercent = 0.003;
-
-        const tp1 = isBuy ? entry * (1 + tpPercents[0]) : entry * (1 - tpPercents[0]);
-        const tp2 = isBuy ? entry * (1 + tpPercents[1]) : entry * (1 - tpPercents[1]);
-        const tp3 = isBuy ? entry * (1 + tpPercents[2]) : entry * (1 - tpPercents[2]);
-        const sl = isBuy ? entry * (1 - slPercent) : entry * (1 + slPercent);
+        const tp1 = isBuy ? entry + tpDist : entry - tpDist;
+        const tp2 = isBuy ? entry + (tpDist * 1.5) : entry - (tpDist * 1.5);
+        const tp3 = isBuy ? entry + (tpDist * 2.0) : entry - (tpDist * 2.0);
+        const sl = isBuy ? entry - slDist : entry + slDist;
 
         return {
             type: pattern.type,
@@ -372,5 +379,18 @@ export class TradingStrategy {
             time: Date.now(),
             timeframe: timeframe
         };
+    }
+
+    private calculateATR(candles: Candle[], period: number = 14) {
+        if (candles.length < period + 1) return candles[candles.length - 1].close * 0.001;
+        let totalTR = 0;
+        for (let i = candles.length - period; i < candles.length; i++) {
+            const h = candles[i].high;
+            const l = candles[i].low;
+            const pc = candles[i - 1].close;
+            const tr = Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc));
+            totalTR += tr;
+        }
+        return totalTR / period;
     }
 }
