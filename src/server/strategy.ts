@@ -287,16 +287,17 @@ export class TradingStrategy {
     }
 
     /**
-     * تشخیص الگوی N با استفاده از نسبت موج (Range)
+     * تشخیص الگوی N با استفاده از نسبت موج (Range) و پیوت‌های هوشمند
      * ورود: ۳٪ از رنج سقف تا کف
      */
     private detectNPattern(candles: Candle[]) {
-        const pivots = this.getSwingPivots(candles, 8); 
+        // شناسایی سطوح با عمق کم (۳) برای پیدا کردن آخرین حرکت‌های لحظه‌ای
+        const pivots = this.getSwingPivots(candles, 3); 
         if (pivots.length < 3) return null;
 
-        const p3 = pivots[pivots.length - 1]; // نقطه C
-        const p2 = pivots[pivots.length - 2]; // نقطه B
-        const p1 = pivots[pivots.length - 3]; // نقطه A
+        const p3 = pivots[pivots.length - 1]; // آخرین سقف/کف (C)
+        const p2 = pivots[pivots.length - 2]; // سقف/کف میانی (B)
+        const p1 = pivots[pivots.length - 3]; // شروع حرکت (A)
 
         const atr = this.calculateATR(candles, 14);
 
@@ -354,14 +355,35 @@ export class TradingStrategy {
     }
 
     /**
+     * شناسایی هوشمند پیوت‌ها (Major vs Minor)
+     * ماژور (عمق ۱۲): برای ساختار اصلی و دیروز/امروز
+     * مینور (عمق ۳): برای شناسایی سریع آخرین سقف و کف لحظه‌ای
+     */
+    public getSmartPivots(candles: Candle[]) {
+        const major = this.getSwingPivots(candles, 12);
+        const minor = this.getSwingPivots(candles, 3);
+        
+        // یافتن آخرین سقف و کف (چه مینور چه ماژور)
+        let lastSaghf = null;
+        let lastKaf = null;
+
+        for (let i = minor.length - 1; i >= 0; i--) {
+            const p = minor[i];
+            if (!lastSaghf && p.type === 'high') lastSaghf = p;
+            if (!lastKaf && p.type === 'low') lastKaf = p;
+            if (lastSaghf && lastKaf) break;
+        }
+
+        return { major, minor, lastSaghf, lastKaf };
+    }
+
+    /**
      * شناسایی نقاط سقف و کف (Pivots) با منطق تثبیت (Confirmation)
      */
     public getSwingPivots(candles: Candle[], depth: number = 8) {
         if (candles.length < depth * 2) return [];
 
         const pivots: { type: 'high' | 'low', price: number, index: number, time: number }[] = [];
-        
-        // فقط تا جایی که تثبیت شده‌اند پیش می‌رویم (Candles.length - depth)
         const limit = candles.length - depth;
 
         for (let i = depth; i < limit; i++) {
@@ -369,10 +391,9 @@ export class TradingStrategy {
             let isHigh = true;
             let isLow = true;
 
-            // بررسی طرفین (قبل و بعد از نقطه فعلی)
             for (let j = 1; j <= depth; j++) {
-                if (candles[i - j].high > curr.high || candles[i + j].high > curr.high) isHigh = false;
-                if (candles[i - j].low < curr.low || candles[i + j].low < curr.low) isLow = false;
+                if (candles[i - j].high > curr.high || (i + j < candles.length && candles[i + j].high > curr.high)) isHigh = false;
+                if (candles[i - j].low < curr.low || (i + j < candles.length && candles[i + j].low < curr.low)) isLow = false;
             }
 
             if (isHigh) {
@@ -382,7 +403,7 @@ export class TradingStrategy {
             }
         }
 
-        // فیلتر کردن برای تمیز کردن پیوت‌های پشت سر هم (ZigZag ساده)
+        // ZigZag: Filter consecutive peaks/troughs
         const filtered: typeof pivots = [];
         for (const p of pivots) {
             if (filtered.length === 0) {
@@ -391,17 +412,12 @@ export class TradingStrategy {
             }
             const last = filtered[filtered.length - 1];
             if (last.type === p.type) {
-                // اگر دو سقف یا دو کف پشت هم بود، بهترین را نگه دار
-                if (last.type === 'high' && p.price > last.price) {
-                    filtered[filtered.length - 1] = p;
-                } else if (last.type === 'low' && p.price < last.price) {
-                    filtered[filtered.length - 1] = p;
-                }
+                if (last.type === 'high' && p.price > last.price) filtered[filtered.length - 1] = p;
+                else if (last.type === 'low' && p.price < last.price) filtered[filtered.length - 1] = p;
             } else {
                 filtered.push(p);
             }
         }
-
         return filtered;
     }
 
