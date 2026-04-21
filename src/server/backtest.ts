@@ -75,6 +75,21 @@ export class BacktestEngine {
         };
     }
 
+    /**
+     * Runs all available strategies and compares them
+     */
+    runGlobalComparison(candles: Candle[], timeframe: string): { strategy: string, results: BacktestResult }[] {
+        const types = ['N-PATTERN', 'RSI', 'EMA-CROSS', 'SCALP-ADV', 'QUANT', 'TREND-MT', 'HST', 'PINBAR'];
+        const comparison = types.map(type => {
+            return {
+                strategy: type,
+                results: this.run(candles, timeframe, type)
+            };
+        });
+        
+        return comparison.sort((a, b) => b.results.totalProfit - a.results.totalProfit);
+    }
+
     private findOutcome(future: Candle[], signal: Signal) {
         for (const c of future) {
             if (signal.type === 'BUY') {

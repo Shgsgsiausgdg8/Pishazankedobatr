@@ -34,11 +34,26 @@ export class TradingStrategy {
      * تابع اصلی تحلیل
      */
     analyze(candles: Candle[], timeframe: string, strategyType: string = 'N-PATTERN'): Signal | null {
-        if (!candles || candles.length < 20) return null;
+        if (!candles || candles.length < 50) return null;
 
         let result: any = null;
 
         switch (strategyType) {
+            case 'SCALP-ADV':
+                result = this.analyzeScalp(candles);
+                break;
+            case 'QUANT':
+                result = this.analyzeQuant(candles);
+                break;
+            case 'TREND-MT':
+                result = this.analyzeTrend(candles);
+                break;
+            case 'HST':
+                result = this.analyzeHST(candles);
+                break;
+            case 'PINBAR':
+                result = this.analyzePinBar(candles);
+                break;
             case 'RSI':
                 result = this.analyzeRSI(candles);
                 break;
@@ -105,6 +120,122 @@ export class TradingStrategy {
         }
 
         return null;
+    }
+
+    private analyzeScalp(candles: Candle[]) {
+        const periodRSI = 14;
+        const emaFastP = 9;
+        const emaSlowP = 21;
+        
+        const rsi = this.calculateRSI(candles, periodRSI);
+        const ema9 = this.calculateEMA(candles, emaFastP);
+        const ema21 = this.calculateEMA(candles, emaSlowP);
+        
+        const lastRSI = rsi[rsi.length - 1];
+        const lastE9 = ema9[ema9.length - 1];
+        const lastE21 = ema21[ema21.length - 1];
+        const lastPrice = candles[candles.length - 1].close;
+        const prevPrice = candles[candles.length - 2].close;
+
+        // Buy: Strong trend (9 > 21) + RSI oversold recovery or pullback to EMA
+        if (lastE9 > lastE21) {
+            if (lastRSI < 40 && lastPrice > prevPrice) return { type: 'BUY', signalPrice: lastPrice };
+            if (lastPrice > lastE21 && prevPrice <= lastE21) return { type: 'BUY', signalPrice: lastPrice };
+        }
+        
+        // Sell: Strong down trend (9 < 21) + RSI overbought recovery
+        if (lastE9 < lastE21) {
+            if (lastRSI > 60 && lastPrice < prevPrice) return { type: 'SELL', signalPrice: lastPrice };
+            if (lastPrice < lastE21 && prevPrice >= lastE21) return { type: 'SELL', signalPrice: lastPrice };
+        }
+        
+        return null;
+    }
+
+    private analyzeQuant(candles: Candle[]) {
+        const lookback = 20;
+        const recent = candles.slice(-lookback);
+        const highs = recent.map(c => c.high);
+        const lows = recent.map(c => c.low);
+        
+        const maxH = Math.max(...highs);
+        const minL = Math.min(...lows);
+        const lastPrice = candles[candles.length - 1].close;
+        
+        // Double Bottom / Breakout
+        if (lastPrice > maxH * 0.999 && candles[candles.length - 2].close < maxH) {
+            return { type: 'BUY', signalPrice: lastPrice };
+        }
+        // Double Top / Breakdown
+        if (lastPrice < minL * 1.001 && candles[candles.length - 2].close > minL) {
+            return { type: 'SELL', signalPrice: lastPrice };
+        }
+        
+        return null;
+    }
+
+    private analyzeTrend(candles: Candle[]) {
+        const maFast = this.calculateEMA(candles, 20);
+        const maSlow = this.calculateEMA(candles, 50);
+        const macd = this.calculateMACD(candles, 12, 26, 9);
+        
+        if (!macd) return null;
+        
+        const lastFast = maFast[maFast.length - 1];
+        const lastSlow = maSlow[maSlow.length - 1];
+        const lastHist = macd.histogram;
+        const lastPrice = candles[candles.length - 1].close;
+
+        if (lastFast > lastSlow && lastHist > 0) return { type: 'BUY', signalPrice: lastPrice };
+        if (lastFast < lastSlow && lastHist < 0) return { type: 'SELL', signalPrice: lastPrice };
+        
+        return null;
+    }
+
+    private analyzeHST(candles: Candle[]) {
+        // Simple HMA + Trend implementation
+        const hma = this.calculateEMA(candles, 55); 
+        const lastH = hma[hma.length - 1];
+        const prevH = hma[hma.length - 2];
+        const lastPrice = candles[candles.length - 1].close;
+
+        if (lastPrice > lastH && lastH > prevH) return { type: 'BUY', signalPrice: lastPrice };
+        if (lastPrice < lastH && lastH < prevH) return { type: 'SELL', signalPrice: lastPrice };
+        
+        return null;
+    }
+
+    private analyzePinBar(candles: Candle[]) {
+        const c = candles[candles.length - 1];
+        const range = c.high - c.low;
+        if (range === 0) return null;
+        
+        const body = Math.abs(c.close - c.open);
+        const upperWick = c.high - Math.max(c.open, c.close);
+        const lowerWick = Math.min(c.open, c.close) - c.low;
+        
+        // Bullish Pin
+        if (lowerWick > body * 3 && upperWick < body) return { type: 'BUY', signalPrice: c.close };
+        // Bearish Pin
+        if (upperWick > body * 3 && lowerWick < body) return { type: 'SELL', signalPrice: c.close };
+        
+        return null;
+    }
+
+    private calculateMACD(candles: Candle[], fast: number, slow: number, signal: number) {
+        if (candles.length < slow + signal) return null;
+        const emaF = this.calculateEMA(candles, fast);
+        const emaS = this.calculateEMA(candles, slow);
+        
+        const macdLine = emaF.map((f, i) => f - emaS[i]);
+        // Simple signal line (SMA of macdLine)
+        const signalLine = macdLine.slice(-signal).reduce((a, b) => a + b, 0) / signal;
+        
+        return {
+            macd: macdLine[macdLine.length - 1],
+            signal: signalLine,
+            histogram: macdLine[macdLine.length - 1] - signalLine
+        };
     }
 
     private calculateRSI(candles: Candle[], period: number) {

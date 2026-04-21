@@ -285,8 +285,10 @@ export default function App() {
   const wsRef = useRef<WebSocket | null>(null);
 
   const [backtestResults, setBacktestResults] = useState<any>(null);
+  const [globalResults, setGlobalResults] = useState<any[] | null>(null);
   const [selectedStrategy, setSelectedStrategy] = useState('N-PATTERN');
   const [isBacktesting, setIsBacktesting] = useState(false);
+  const [isGlobalTesting, setIsGlobalTesting] = useState(false);
 
   useEffect(() => {
     activeBrokerRef.current = activeBroker;
@@ -316,7 +318,12 @@ export default function App() {
             }
           } else if (msg.type === 'BACKTEST_RESULTS') {
             setBacktestResults(msg.data);
+            setGlobalResults(null);
             setIsBacktesting(false);
+          } else if (msg.type === 'GLOBAL_BACKTEST_RESULTS') {
+            setGlobalResults(msg.data);
+            setBacktestResults(null);
+            setIsGlobalTesting(false);
           }
         } catch (err) {
           console.error("WS Parse Error", err);
@@ -337,6 +344,14 @@ export default function App() {
       type: 'RUN_BACKTEST', 
       strategyType: selectedStrategy 
     }));
+  };
+
+  const runGlobalBacktest = () => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    setIsGlobalTesting(true);
+    setGlobalResults(null);
+    setBacktestResults(null);
+    wsRef.current.send(JSON.stringify({ type: 'RUN_GLOBAL_BACKTEST' }));
   };
 
   const switchBroker = (broker: 'faraz' | 'alpha') => {
@@ -564,24 +579,74 @@ export default function App() {
                   <option value="N-PATTERN">الگوی N (N-Pattern)</option>
                   <option value="RSI">شاخص RSI (Oversold/Overbought)</option>
                   <option value="EMA-CROSS">کراس میانگین متحرک (EMA 9/21)</option>
+                  <option value="SCALP-ADV">اسکلپ پیشرفته (Adv Scalp)</option>
+                  <option value="QUANT">استراتژی کوانت (Patterns)</option>
+                  <option value="TREND-MT">روند میان‌مدت (Trend MT)</option>
+                  <option value="HST">استراتژی HST (SuperTrend)</option>
+                  <option value="PINBAR">پین بار (PinBar Reversal)</option>
                 </select>
               </div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', width: '100%', sm: 'auto' } as any}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', width: '100%', sm: 'auto' } as any}>
                 <button 
                   onClick={runBacktest} 
-                  disabled={isBacktesting}
+                  disabled={isBacktesting || isGlobalTesting}
                   className="btn btn-primary" 
-                  style={{ width: '100%', minWidth: '180px', justifyContent: 'center', height: '48px', fontSize: '1rem', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)' }}
+                  style={{ flex: 1, minWidth: '140px', justifyContent: 'center', height: '48px', fontSize: '0.9rem', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)' }}
                 >
-                  {isBacktesting ? (
-                    <>
-                      <div className="animate-spin" style={{ width: '16px', height: '16px', border: '2px solid white', borderTopColor: 'transparent', borderRadius: '50%' }} />
-                      در حال آنالیز...
-                    </>
-                  ) : 'شروع بک‌تست'}
+                  {isBacktesting ? '...' : 'تست تکی'}
+                </button>
+                <button 
+                  onClick={runGlobalBacktest} 
+                  disabled={isBacktesting || isGlobalTesting}
+                  className="btn btn-secondary" 
+                  style={{ flex: 1, minWidth: '140px', justifyContent: 'center', height: '48px', fontSize: '0.9rem', background: '#1e293b' }}
+                >
+                  {isGlobalTesting ? 'در حال آنالیز...' : 'آنالیز کلی (کدام بهتر است؟)'}
                 </button>
               </div>
             </div>
+
+            {globalResults && (
+              <div style={{ animation: 'fadeIn 0.5s ease', background: 'rgba(2, 6, 23, 0.5)', borderRadius: '16px', padding: '1rem', border: '1px solid #1e293b' }}>
+                <div style={{ fontWeight: 'bold', color: '#fff', marginBottom: '1rem', textAlign: 'center' }}>
+                  🏆 مقایسه عملکرد استراتژی‌ها (به ترتیب سودآوری)
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '2px solid #1e293b', textAlign: 'right' }}>
+                        <th style={{ padding: '12px', color: '#94a3b8' }}>نام استراتژی</th>
+                        <th style={{ padding: '12px', color: '#94a3b8' }}>وین ریت</th>
+                        <th style={{ padding: '12px', color: '#94a3b8' }}>سود خالص</th>
+                        <th style={{ padding: '12px', color: '#94a3b8' }}>معاملات</th>
+                        <th style={{ padding: '12px', color: '#94a3b8' }}>امتیاز</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {globalResults.map((res: any, i: number) => (
+                        <tr key={i} style={{ borderBottom: '1px solid #1e293b', background: i === 0 ? 'rgba(16, 185, 129, 0.1)' : 'transparent' }}>
+                          <td style={{ padding: '12px', color: i === 0 ? '#10b981' : '#fff', fontWeight: i === 0 ? 'bold' : 'normal' }}>
+                            {i === 0 && '⭐ '}{res.strategy}
+                          </td>
+                          <td style={{ padding: '12px', color: res.results.winRate >= 50 ? '#10b981' : '#ef4444' }}>
+                            {res.results.winRate.toFixed(1)}%
+                          </td>
+                          <td style={{ padding: '12px', fontWeight: 'bold', color: res.results.totalProfit >= 0 ? '#10b981' : '#ef4444' }}>
+                            {res.results.totalProfit.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                          </td>
+                          <td style={{ padding: '12px' }}>{res.results.totalTrades}</td>
+                          <td style={{ padding: '12px' }}>
+                             <div style={{ width: '60px', height: '6px', background: '#1e293b', borderRadius: '3px', overflow: 'hidden' }}>
+                                <div style={{ width: `${Math.min(100, (res.results.totalProfit / globalResults[0].results.totalProfit) * 100)}%`, height: '100%', background: '#10b981' }} />
+                             </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             {backtestResults && (
               <div style={{ animation: 'fadeIn 0.5s ease' }}>

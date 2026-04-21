@@ -76,6 +76,15 @@ async function startServer() {
                         broker: currentBroker,
                         data: results
                     }));
+                } else if (command.type === 'RUN_GLOBAL_BACKTEST') {
+                    const engine = engines[currentBroker];
+                    const state = engine.getState();
+                    const results = backtestEngine.runGlobalComparison(state.candles, state.timeframe);
+                    ws.send(JSON.stringify({
+                        type: 'GLOBAL_BACKTEST_RESULTS',
+                        broker: currentBroker,
+                        data: results
+                    }));
                 } else {
                     const engine = engines[currentBroker];
                     if (!engine) return;
