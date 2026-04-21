@@ -353,9 +353,9 @@ export class TradingStrategy {
         const isBuy = pattern.type === 'BUY';
         const entry = pattern.signalPrice;
 
-        // درصدهای تارگت (۲٪، ۳.۳٪، ۳.۹٪)
-        const tpPercents = [0.02, 0.033, 0.039];
-        const slPercent = 0.02;   // استاپ لاس ۲٪
+        // Realistic scalping targets (0.2%, 0.4%, 0.6%) and Stop Loss (0.3%)
+        const tpPercents = [0.002, 0.004, 0.006];
+        const slPercent = 0.003;
 
         const tp1 = isBuy ? entry * (1 + tpPercents[0]) : entry * (1 - tpPercents[0]);
         const tp2 = isBuy ? entry * (1 + tpPercents[1]) : entry * (1 - tpPercents[1]);

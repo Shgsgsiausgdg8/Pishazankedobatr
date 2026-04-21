@@ -5,6 +5,8 @@ export interface BacktestResult {
     winRate: number;
     totalProfit: number;
     maxDrawdown: number;
+    bestHour: number;
+    bestDay: string;
     trades: {
         type: 'BUY' | 'SELL';
         entry: number;
@@ -30,6 +32,11 @@ export class BacktestEngine {
         let peak = 0;
         let maxDrawdown = 0;
 
+        // Statistics for best hour/day
+        const hourStats: Record<number, number> = {};
+        const dayStats: Record<string, number> = {};
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
         // Iterate through candles to find signals
         for (let i = 50; i < candles.length - 10; i++) {
             const window = candles.slice(0, i + 1);
@@ -39,19 +46,28 @@ export class BacktestEngine {
                 // Find outcome (TP or SL) in the future candles
                 const outcome = this.findOutcome(candles.slice(i + 1), signal);
                 if (outcome) {
-                    trades.push({
+                    const trade = {
                         type: signal.type,
                         entry: signal.entry,
                         exit: outcome.price,
                         profit: outcome.profit,
-                        result: outcome.profit > 0 ? 'WIN' : 'LOSS',
+                        result: outcome.profit > 0 ? 'WIN' : 'LOSS' as 'WIN' | 'LOSS',
                         entryTime: candles[i].time,
                         exitTime: outcome.time
-                    });
+                    };
+                    trades.push(trade);
 
                     totalProfit += outcome.profit;
                     if (outcome.profit > 0) wins++;
                     
+                    // Track hour/day
+                    const date = new Date(trade.entryTime);
+                    const hour = date.getHours();
+                    const day = days[date.getDay()];
+                    
+                    hourStats[hour] = (hourStats[hour] || 0) + outcome.profit;
+                    dayStats[day] = (dayStats[day] || 0) + outcome.profit;
+
                     // Basic drawdown calculation
                     if (totalProfit > peak) peak = totalProfit;
                     const dd = peak - totalProfit;
@@ -64,11 +80,32 @@ export class BacktestEngine {
             }
         }
 
+        // Find best hour and day
+        let bestHour = -1;
+        let maxHProfit = -Infinity;
+        for (const h in hourStats) {
+            if (hourStats[h] > maxHProfit) {
+                maxHProfit = hourStats[h];
+                bestHour = parseInt(h);
+            }
+        }
+
+        let bestDay = 'N/A';
+        let maxDProfit = -Infinity;
+        for (const d in dayStats) {
+            if (dayStats[d] > maxDProfit) {
+                maxDProfit = dayStats[d];
+                bestDay = d;
+            }
+        }
+
         return {
             totalTrades: trades.length,
             winRate: trades.length > 0 ? (wins / trades.length) * 100 : 0,
             totalProfit: totalProfit,
             maxDrawdown: maxDrawdown,
+            bestHour,
+            bestDay,
             trades: trades
         };
     }

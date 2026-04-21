@@ -618,6 +618,8 @@ export default function App() {
                         <th style={{ padding: '12px', color: '#94a3b8' }}>نام استراتژی</th>
                         <th style={{ padding: '12px', color: '#94a3b8' }}>وین ریت</th>
                         <th style={{ padding: '12px', color: '#94a3b8' }}>سود خالص</th>
+                        <th style={{ padding: '12px', color: '#94a3b8' }}>بهترین ساعت</th>
+                        <th style={{ padding: '12px', color: '#94a3b8' }}>بهترین روز</th>
                         <th style={{ padding: '12px', color: '#94a3b8' }}>معاملات</th>
                         <th style={{ padding: '12px', color: '#94a3b8' }}>امتیاز</th>
                       </tr>
@@ -634,6 +636,8 @@ export default function App() {
                           <td style={{ padding: '12px', fontWeight: 'bold', color: res.results.totalProfit >= 0 ? '#10b981' : '#ef4444' }}>
                             {res.results.totalProfit.toLocaleString(undefined, { maximumFractionDigits: 1 })}
                           </td>
+                          <td style={{ padding: '12px', color: '#3b82f6' }}>{res.results.bestHour !== -1 ? `${res.results.bestHour}:00` : '---'}</td>
+                          <td style={{ padding: '12px', color: '#a855f7' }}>{res.results.bestDay}</td>
                           <td style={{ padding: '12px' }}>{res.results.totalTrades}</td>
                           <td style={{ padding: '12px' }}>
                              <div style={{ width: '60px', height: '6px', background: '#1e293b', borderRadius: '3px', overflow: 'hidden' }}>
@@ -648,7 +652,13 @@ export default function App() {
               </div>
             )}
 
-            {backtestResults && (
+            {backtestResults?.error && (
+              <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '15px', borderRadius: '12px', border: '1px solid #ef4444', color: '#ef4444', marginBottom: '1rem', textAlign: 'center' }}>
+                {backtestResults.error}
+              </div>
+            )}
+
+            {backtestResults && !backtestResults.error && (
               <div style={{ animation: 'fadeIn 0.5s ease' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
                   <div style={{ background: 'rgba(16, 185, 129, 0.05)', padding: '15px', borderRadius: '12px', textAlign: 'center', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
@@ -671,6 +681,21 @@ export default function App() {
                     <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>افت (DD)</div>
                     <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#ef4444' }}>
                       {backtestResults.maxDrawdown.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                  <div style={{ background: 'rgba(59, 130, 246, 0.05)', padding: '15px', borderRadius: '12px', textAlign: 'center', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>بهترین ساعت معامله</div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#3b82f6' }}>
+                      {backtestResults.bestHour !== -1 ? `${backtestResults.bestHour}:00` : '---'}
+                    </div>
+                  </div>
+                  <div style={{ background: 'rgba(168, 85, 247, 0.05)', padding: '15px', borderRadius: '12px', textAlign: 'center', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
+                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>بهترین روز هفته</div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#a855f7' }}>
+                      {backtestResults.bestDay || '---'}
                     </div>
                   </div>
                 </div>

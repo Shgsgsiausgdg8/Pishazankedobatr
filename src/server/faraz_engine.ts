@@ -420,7 +420,7 @@ export class FarazGoldEngine {
             broker: 'faraz',
             price: this.price,
             timeframe: this.timeframe,
-            candles: this.candles.slice(-300),
+            candles: this.candles.slice(-2000),
             levels: this.levels,
             signals: this.signals,
             isRecording: this.isRecording

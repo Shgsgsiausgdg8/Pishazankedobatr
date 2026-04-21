@@ -70,21 +70,42 @@ async function startServer() {
                 } else if (command.type === 'RUN_BACKTEST') {
                     const engine = engines[currentBroker];
                     const state = engine.getState();
-                    const results = backtestEngine.run(state.candles, state.timeframe, command.strategyType);
-                    ws.send(JSON.stringify({
-                        type: 'BACKTEST_RESULTS',
-                        broker: currentBroker,
-                        data: results
-                    }));
+                    console.log(`[Server] Running backtest for ${currentBroker} (${command.strategyType}) with ${state.candles?.length || 0} candles`);
+                    
+                    if (!state.candles || state.candles.length < 60) {
+                        ws.send(JSON.stringify({ 
+                            type: 'BACKTEST_RESULTS', 
+                            broker: currentBroker, 
+                            data: { totalTrades: 0, winRate: 0, totalProfit: 0, maxDrawdown: 0, bestHour: -1, bestDay: 'N/A', trades: [], error: 'Not enough data (min 60 candles)' } 
+                        }));
+                    } else {
+                        const results = backtestEngine.run(state.candles, state.timeframe, command.strategyType);
+                        ws.send(JSON.stringify({
+                            type: 'BACKTEST_RESULTS',
+                            broker: currentBroker,
+                            data: results
+                        }));
+                    }
                 } else if (command.type === 'RUN_GLOBAL_BACKTEST') {
                     const engine = engines[currentBroker];
                     const state = engine.getState();
-                    const results = backtestEngine.runGlobalComparison(state.candles, state.timeframe);
-                    ws.send(JSON.stringify({
-                        type: 'GLOBAL_BACKTEST_RESULTS',
-                        broker: currentBroker,
-                        data: results
-                    }));
+                    console.log(`[Server] Running global backtest for ${currentBroker} with ${state.candles?.length || 0} candles`);
+                    
+                    if (!state.candles || state.candles.length < 60) {
+                        ws.send(JSON.stringify({ 
+                            type: 'GLOBAL_BACKTEST_RESULTS', 
+                            broker: currentBroker, 
+                            data: [],
+                            error: 'Not enough data (min 60 candles)'
+                        }));
+                    } else {
+                        const results = backtestEngine.runGlobalComparison(state.candles, state.timeframe);
+                        ws.send(JSON.stringify({
+                            type: 'GLOBAL_BACKTEST_RESULTS',
+                            broker: currentBroker,
+                            data: results
+                        }));
+                    }
                 } else {
                     const engine = engines[currentBroker];
                     if (!engine) return;

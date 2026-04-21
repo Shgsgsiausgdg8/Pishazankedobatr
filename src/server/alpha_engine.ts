@@ -43,7 +43,7 @@ export class AlphaGoldEngine {
         try {
             const resolution = this.timeframe;
             const now = Math.floor(Date.now() / 1000);
-            const limit = 500;
+            const limit = 2000;
             const fromTs = now - (limit * parseInt(resolution) * 60);
             const toTs = now;
 
@@ -283,7 +283,7 @@ export class AlphaGoldEngine {
             broker: 'alpha', // Explicitly include broker name in state
             price: this.price,
             timeframe: this.timeframe,
-            candles: this.candles.slice(-600),
+            candles: this.candles.slice(-2000),
             levels: this.levels,
             signals: this.signals,
             isRecording: this.isRecording
@@ -291,6 +291,6 @@ export class AlphaGoldEngine {
     }
 
     cleanupCandles() {
-        if (this.candles.length > 1500) this.candles = this.candles.slice(-800);
+        if (this.candles.length > 3000) this.candles = this.candles.slice(-2000);
     }
 }
