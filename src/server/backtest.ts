@@ -17,14 +17,13 @@ export interface BacktestResult {
 }
 
 export class BacktestEngine {
-    private strategy = new TradingStrategy();
-
     constructor() {}
 
     /**
      * Executes a simulation on historical candles
      */
     run(candles: Candle[], timeframe: string, strategyType: string): BacktestResult {
+        const strategy = new TradingStrategy(); // Create fresh instance for each run
         const trades = [];
         let totalProfit = 0;
         let wins = 0;
@@ -32,10 +31,9 @@ export class BacktestEngine {
         let maxDrawdown = 0;
 
         // Iterate through candles to find signals
-        // Use a window of 50 candles to simulate "current state"
         for (let i = 50; i < candles.length - 10; i++) {
             const window = candles.slice(0, i + 1);
-            const signal = this.strategy.analyze(window, timeframe, strategyType);
+            const signal = strategy.analyze(window, timeframe, strategyType);
 
             if (signal) {
                 // Find outcome (TP or SL) in the future candles
