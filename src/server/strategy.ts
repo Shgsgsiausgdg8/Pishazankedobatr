@@ -356,70 +356,73 @@ export class TradingStrategy {
     }
 
     /**
-     * شناسایی هوشمند سقف و کف (Major & Minor)
-     * این تابع سقف و کف‌های "آخر" را با دقت بالا شناسایی می‌کند
+     * شناسایی نزدیک‌ترین سقف و کف نسبت به قیمت لحظه‌ای (Trading Range)
+     * این تابع دقیقاً سطوحی که قیمت بین آن‌ها در حال نوسان است را پیدا می‌کند
      */
-    public getSwingPivots(candles: Candle[], majorDepth: number = 12, minorDepth: number = 4) {
+    public getNearestLevels(candles: Candle[], currentPrice: number) {
+        // شناسایی تمام چرخش‌های چارت با حساسیت بالا برای سطوح نزدیک
+        const pivots = this.getSwingPivots(candles, 4, 2); 
+        
+        let resistance = 0;
+        let support = 0;
+
+        // ۱. پیدا کردن اولین سقف معتبری که "بالای" قیمت فعلی است
+        const highs = pivots.filter(p => p.type === 'high' && p.price > currentPrice).sort((a, b) => a.price - b.price);
+        if (highs.length > 0) resistance = highs[0].price;
+
+        // ۲. پیدا کردن اولین کف معتبری که "پایین" قیمت فعلی است
+        const lows = pivots.filter(p => p.type === 'low' && p.price < currentPrice).sort((a, b) => b.price - a.price);
+        if (lows.length > 0) support = lows[0].price;
+
+        // ۳. اگر در محدوده نزدیک سطحی نبود، از سقف و کف مطلق ۵۰ کندل اخیر استفاده کن
+        const recent = candles.slice(-50);
+        if (resistance === 0) resistance = Math.max(...recent.map(c => c.high));
+        if (support === 0) support = Math.min(...recent.map(c => c.low));
+
+        return { support, resistance };
+    }
+
+    /**
+     * شناسایی هوشمند سقف و کف (Major & Minor)
+     * اصلاح شده برای حساسیت بالا به انتهای چارت و چرخش‌های لحظه‌ای
+     */
+    public getSwingPivots(candles: Candle[], majorDepth: number = 8, minorDepth: number = 3) {
         if (candles.length < majorDepth) return [];
 
-        const pivots: { type: 'high' | 'low', price: number, index: number, time: number, levelType: 'major' | 'minor' | 'live' }[] = [];
+        const pivots: { type: 'high' | 'low', price: number, index: number, time: number }[] = [];
 
-        // 1. شناسایی سطوح اصلی (Major) برای ساختار کلی
-        const majorPivots = this.findPivotsInRange(candles, majorDepth, 0, candles.length - majorDepth, 'major');
-        
-        // 2. شناسایی سطوح فرعی (Minor) برای دقت در انتهای چارت چرخش‌های سریع
-        const minorPivots = this.findPivotsInRange(candles, minorDepth, candles.length - 50, candles.length - minorDepth, 'minor');
+        // اسکن کل چارت برای پیدا کردن پیوت‌ها
+        for (let i = minorDepth; i < candles.length - 1; i++) {
+            const curr = candles[i];
+            let isHigh = true;
+            let isLow = true;
 
-        // ترکیب و مرتب‌سازی
-        const allPending = [...majorPivots, ...minorPivots].sort((a, b) => a.index - b.index);
-        
-        const mergedPivots: any[] = [];
-        for (const p of allPending) {
-            if (mergedPivots.length === 0) {
-                mergedPivots.push(p);
-                continue;
+            // تشخیص سقف و کف با عمق متغیر (نزدیک انتهای چارت حساس‌تر می‌شود)
+            const leftDepth = Math.min(i, majorDepth);
+            const rightDepth = Math.min(candles.length - 1 - i, majorDepth);
+            const checkDepth = Math.max(minorDepth, rightDepth); 
+
+            for (let j = 1; j <= leftDepth; j++) {
+                if (candles[i - j].high > curr.high) isHigh = false;
+                if (candles[i - j].low < curr.low) isLow = false;
             }
-            const last = mergedPivots[mergedPivots.length - 1];
-            if (Math.abs(p.index - last.index) < minorDepth) {
-                if (p.levelType === 'major' || (p.type === 'high' && p.price > last.price) || (p.type === 'low' && p.price < last.price)) {
-                    mergedPivots[mergedPivots.length - 1] = p;
-                }
-                continue;
+            for (let j = 1; j <= checkDepth; j++) {
+                if (candles[i + j].high > curr.high) isHigh = false;
+                if (candles[i + j].low < curr.low) isLow = false;
             }
-            mergedPivots.push(p);
+
+            if (isHigh) pivots.push({ type: 'high', price: curr.high, index: i, time: curr.time });
+            else if (isLow) pivots.push({ type: 'low', price: curr.low, index: i, time: curr.time });
         }
 
-        // 3. شناسایی سقف و کف "لحظه‌ای" (Live) که هنوز به عمق نرسیده‌اند
-        const lastConfirmed = mergedPivots[mergedPivots.length - 1];
-        const startIndex = lastConfirmed ? lastConfirmed.index + 1 : 0;
-        
-        let liveHigh = -Infinity;
-        let liveLow = Infinity;
-        let liveHighIdx = -1;
-        let liveLowIdx = -1;
-
-        for (let i = startIndex; i < candles.length; i++) {
-            if (candles[i].high > liveHigh) { liveHigh = candles[i].high; liveHighIdx = i; }
-            if (candles[i].low < liveLow) { liveLow = candles[i].low; liveLowIdx = i; }
-        }
-
-        if (liveHighIdx !== -1) {
-            mergedPivots.push({ type: 'high', price: liveHigh, index: liveHighIdx, time: candles[liveHighIdx].time, levelType: 'live' });
-        }
-        if (liveLowIdx !== -1) {
-            mergedPivots.push({ type: 'low', price: liveLow, index: liveLowIdx, time: candles[liveLowIdx].time, levelType: 'live' });
-        }
-
-        // فیلتر نهایی ZigZag
+        // فیلتر کردن برای ایجاد ساختار زیگزاگی (حذف نویزهای پشت هم)
         const zigzag: typeof pivots = [];
-        for (const p of mergedPivots) {
-            if (zigzag.length === 0) {
-                zigzag.push(p);
-                continue;
-            }
+        for (const p of pivots) {
+            if (zigzag.length === 0) { zigzag.push(p); continue; }
             const last = zigzag[zigzag.length - 1];
             if (last.type === p.type) {
-                if ((p.type === 'high' && p.price > last.price) || (p.type === 'low' && p.price < last.price)) {
+                // اگر دو پیوت همنوع پشت هم بود، آنکه قیمت بهتری دارد (سقف بالاتر/کف پایین‌تر) را نگه دار
+                if ((p.type === 'high' && p.price >= last.price) || (p.type === 'low' && p.price <= last.price)) {
                     zigzag[zigzag.length - 1] = p;
                 }
             } else {
@@ -428,25 +431,6 @@ export class TradingStrategy {
         }
 
         return zigzag;
-    }
-
-    private findPivotsInRange(candles: Candle[], depth: number, start: number, end: number, levelType: 'major' | 'minor') {
-        const result: any[] = [];
-        const safeStart = Math.max(depth, start);
-        const safeEnd = Math.min(candles.length - depth, end);
-
-        for (let i = safeStart; i < safeEnd; i++) {
-            const curr = candles[i];
-            let isHigh = true;
-            let isLow = true;
-            for (let j = 1; j <= depth; j++) {
-                if (candles[i - j].high > curr.high || candles[i + j].high > curr.high) isHigh = false;
-                if (candles[i - j].low < curr.low || candles[i + j].low < curr.low) isLow = false;
-            }
-            if (isHigh) result.push({ type: 'high', price: curr.high, index: i, time: curr.time, levelType });
-            else if (isLow) result.push({ type: 'low', price: curr.low, index: i, time: curr.time, levelType });
-        }
-        return result;
     }
 
     /**

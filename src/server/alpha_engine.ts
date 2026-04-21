@@ -209,15 +209,13 @@ export class AlphaGoldEngine {
     detectLevels() {
         if (this.candles.length < 50) return;
         
-        // استفاده از الگوریتم شناسایی نقاط سقف و کف اصلی از استراتژی
-        const pivots = this.strategy.getSwingPivots(this.candles, 8);
+        // پیدا کردن سقف و کف "فعلی" که قیمت در آن محصور است
+        const range = this.strategy.getNearestLevels(this.candles, this.price);
         
-        this.levels = pivots.map(p => ({
-            type: (p.type === 'high' ? 'RESISTANCE' : 'SUPPORT') as 'SUPPORT' | 'RESISTANCE',
-            price: p.price,
-            time: p.time,
-            hits: 1 // سازگاری با کدهای قبلی
-        })).slice(-20);
+        this.levels = [
+            { type: 'RESISTANCE', price: range.resistance, time: Date.now(), hits: 1 },
+            { type: 'SUPPORT', price: range.support, time: Date.now(), hits: 1 }
+        ];
     }
 
     calcATR(period = 14) {

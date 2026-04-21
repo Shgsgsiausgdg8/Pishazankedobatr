@@ -379,13 +379,11 @@ export class FarazGoldEngine {
         if (this.candles.length < 50) return;
         
         // استفاده از الگوریتم شناسایی نقاط سقف و کف اصلی از استراتژی
-        const pivots = this.strategy.getSwingPivots(this.candles, 8);
-        
-        this.levels = pivots.map(p => ({
-            type: p.type === 'high' ? 'RESISTANCE' : 'SUPPORT' as 'SUPPORT' | 'RESISTANCE',
-            price: p.price,
-            time: p.time * 1000
-        })).slice(-20); // فقط 20 سطح اخیر برای جلوگیری از شلوغی
+        const range = this.strategy.getNearestLevels(this.candles, this.price);
+        this.levels = [
+            { type: 'RESISTANCE', price: range.resistance, time: Date.now() },
+            { type: 'SUPPORT', price: range.support, time: Date.now() }
+        ];
     }
 
     addLevel(type: 'SUPPORT' | 'RESISTANCE', price: number, time: number) {
