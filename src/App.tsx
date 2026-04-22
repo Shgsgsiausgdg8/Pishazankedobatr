@@ -507,10 +507,12 @@ export default function App() {
               </select>
             </div>
 
-            <button onClick={toggleRecording} className={`btn ${data?.isRecording ? 'btn-secondary' : 'btn-primary'}`}>
-              {data?.isRecording ? <SquareIcon /> : <PlayIcon />}
-              {data?.isRecording ? 'توقف' : 'ضبط'}
-            </button>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <button onClick={toggleRecording} className={`btn ${data?.isRecording ? 'btn-secondary' : 'btn-primary'}`}>
+                {data?.isRecording ? <SquareIcon /> : <PlayIcon />}
+                {data?.isRecording ? 'توقف' : 'ضبط'}
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -832,6 +834,32 @@ export default function App() {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* N-Pattern Checklist / Market Info */}
+          <div className="card" style={{ padding: '15px', border: '1px solid #1e293b' }}>
+             <h3 style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <ActivityIcon size={14} />
+                چک‌لیست تایید ساختار N
+             </h3>
+             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', color: '#cbd5e1' }}>
+                   <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: (data?.levels?.length || 0) > 2 ? '#10b981' : '#475569' }} />
+                   ۱. شناسایی سقف و کف اصلی (Maneuver)
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', color: '#cbd5e1' }}>
+                   <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }} />
+                   ۲. محاسبه عمق اصلاح (Measure 3%)
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', color: '#cbd5e1' }}>
+                   <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: data?.liveStrategy === 'N-PATTERN' ? '#10b981' : '#475569' }} />
+                   ۳. پایش نقطه ورود بهینه‌ (Target Entry)
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', color: '#cbd5e1' }}>
+                   <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#3b82f6' }} />
+                   ۴. تایید حد سود و ضرر (0.2% - 0.38%)
+                </div>
+             </div>
           </div>
         </div>
       </main>

@@ -287,69 +287,90 @@ export class TradingStrategy {
     }
 
     /**
-     * تشخیص الگوی N با استفاده از نسبت موج (Range)
-     * ورود: ۳٪ از رنج سقف تا کف
+     * تشخیص الگوی N با استفاده از نسبت موج (Maneuver & Measure)
+     * ورود: ۳٪ پولبک از رنج موج اصلی (A-B)
      */
     private detectNPattern(candles: Candle[]) {
         const pivots = this.getSwingPivots(candles, 6, 2); 
-        if (pivots.length < 3) return null;
+        if (pivots.length < 2) return null;
 
-        // ما به دنبال آخرین ساختار تشکیل شده هستیم
-        const p3 = pivots[pivots.length - 1]; // می‌تواند نقطه C (کف اصلاحی) باشد
-        const p2 = pivots[pivots.length - 2]; // سقف موج Maneuver (نقطه B)
-        const p1 = pivots[pivots.length - 3]; // شروع موج Maneuver (نقطه A)
-
+        const lastPrice = candles[candles.length - 1].close;
+        const prevPrice = candles[candles.length - 2]?.close || lastPrice;
         const atr = this.calculateATR(candles, 14);
 
-        // الگوی N صعودی
-        if (p1.type === 'low' && p2.type === 'high' && p3.type === 'low') {
+        // ما به دنبال آخرین ساختار تایید شده A-B هستیم
+        // نقطه B باید آخرین پیوت معتبر (Major/Minor) باشد
+        const p2 = pivots[pivots.length - 1]; // می‌تواند نقطه B باشد
+        const p1 = pivots[pivots.length - 2]; // می‌تواند نقطه A باشد
+
+        if (!p1 || !p2) return null;
+
+        // الگوی N صعودی: پایش پولبک ۳٪ بعد از تشکیل سقف B
+        if (p1.type === 'low' && p2.type === 'high') {
             const A = p1.price;
             const B = p2.price;
-            const C = p3.price;
+            const range = B - A;
             
-            if (B > A && C < B && C > A) {
-                const range = B - A;
-                // ورود ۳٪ پایین‌تر از سقف بر مبنای کل رنج موج
-                const signalPrice = B - (range * 0.03); 
+            if (range <= 0 || B <= A) return null;
+
+            // سطح ورود دقیق: ۳٪ پایین‌تر از سقف
+            const entryLevel = B - (range * 0.03); 
+            
+            // شرط سیگنال:
+            // ۱. قیمت فعلی به سطح ۳٪ رسیده باشد (یا عبور کرده باشد)
+            // ۲. قیمت هنوز کف A را نشکسته باشد (ابطال الگو)
+            // ۳. این اولین باری باشد که در این موج (A-B) سیگنال می‌دهیم
+            if (lastPrice <= entryLevel && lastPrice > A) {
+                // اگر قبلا در همین موج وارد شده‌ایم، دوباره سیگنال نده
+                // قیمت قبل از این کندل باید بالای سطح بوده باشد (تست لمس سطح)
+                const isFirstTouch = prevPrice > entryLevel;
                 
-                const patternKey = `N_UP|${p1.index}|${p2.index}|${p3.index}`;
-                if (this.lastPatternKey === patternKey) return null;
-                this.lastPatternKey = patternKey;
-                return { 
-                    type: 'BUY', 
-                    signalPrice, 
-                    atr, 
-                    range, // ارسال رنج برای محاسبات تناسبی
-                    kaf: A, 
-                    saghf: B, 
-                    isNPattern: true 
-                };
+                if (isFirstTouch) {
+                    const patternKey = `N_BUY_${p1.time}_${p2.time}`;
+                    if (this.lastPatternKey === patternKey) return null;
+                    this.lastPatternKey = patternKey;
+
+                    return { 
+                        type: 'BUY', 
+                        signalPrice: lastPrice, 
+                        atr, 
+                        range,
+                        kaf: A, 
+                        saghf: B, 
+                        isNPattern: true 
+                    };
+                }
             }
         }
 
-        // الگوی N نزولی
-        if (p1.type === 'high' && p2.type === 'low' && p3.type === 'high') {
+        // الگوی N نزولی: پایش پولبک ۳٪ بعد از تشکیل کف B
+        if (p1.type === 'high' && p2.type === 'low') {
             const A = p1.price;
             const B = p2.price;
-            const C = p3.price;
+            const range = A - B;
 
-            if (B < A && C > B && C < A) {
-                const range = A - B;
-                // ورود ۳٪ بالاتر از کف بر مبنای کل رنج موج
-                const signalPrice = B + (range * 0.03);
+            if (range <= 0 || B >= A) return null;
+
+            const entryLevel = B + (range * 0.03); // ۳٪ بالاتر از کف
+            
+            if (lastPrice >= entryLevel && lastPrice < A) {
+                const isFirstTouch = prevPrice < entryLevel;
                 
-                const patternKey = `N_DOWN|${p1.index}|${p2.index}|${p3.index}`;
-                if (this.lastPatternKey === patternKey) return null;
-                this.lastPatternKey = patternKey;
-                return { 
-                    type: 'SELL', 
-                    signalPrice, 
-                    atr, 
-                    range, // ارسال رنج
-                    kaf: B, 
-                    saghf: A, 
-                    isNPattern: true 
-                };
+                if (isFirstTouch) {
+                    const patternKey = `N_SELL_${p1.time}_${p2.time}`;
+                    if (this.lastPatternKey === patternKey) return null;
+                    this.lastPatternKey = patternKey;
+
+                    return { 
+                        type: 'SELL', 
+                        signalPrice: lastPrice, 
+                        atr, 
+                        range,
+                        kaf: B, 
+                        saghf: A, 
+                        isNPattern: true 
+                    };
+                }
             }
         }
 
