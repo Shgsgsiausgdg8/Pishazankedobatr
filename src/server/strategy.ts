@@ -70,12 +70,12 @@ export class TradingStrategy {
 
         if (!result) return null;
 
-        // جلوگیری از سیگنال‌های تکراری
-        const now = Date.now();
-        if (this.lastSignalTime && (now - this.lastSignalTime) < 60000 && strategyType === 'N-PATTERN') return null;
+        // جلوگیری از سیگنال‌های تکراری بر اساس زمان بازار
+        const candleTime = candles[candles.length - 1].time;
+        if (this.lastSignalTime && (candleTime - this.lastSignalTime) < 60000 && strategyType === 'N-PATTERN') return null;
 
         const signal = this.createSignalFromPattern(result, timeframe);
-        this.lastSignalTime = now;
+        this.lastSignalTime = candleTime;
         return signal;
     }
 
@@ -293,8 +293,8 @@ export class TradingStrategy {
     private detectNPattern(candles: Candle[]) {
         if (candles.length < 50) return null;
 
-        // استفاده از عمق مناسب برای شناسایی موج‌های میان‌مدت (Maneuver)
-        const pivots = this.getSwingPivots(candles, 10, 3); 
+        // استفاده از عمق مناسب برای شناسایی موج‌های میان‌مدت
+        const pivots = this.getSwingPivots(candles, 7, 2); 
         if (pivots.length < 2) return null;
 
         const lastPrice = candles[candles.length - 1].close;
@@ -311,12 +311,12 @@ export class TradingStrategy {
 
         if (!p1 || !p2) return null;
 
-        // فیلتر قدرت موج: رنج موج A-B باید حداقل ۱.۵ برابر ATR باشد
+        // فیلتر قدرت موج: رنج موج A-B باید حداقل ۱ برابر ATR باشد
         const waveRange = Math.abs(p2.price - p1.price);
-        if (waveRange < atr * 1.5) return null;
+        if (waveRange < atr * 1.0) return null;
 
-        // فیلتر زمان: بین نقطه A و B باید حداقل ۵ کندل فاصله باشد تا موج واقعی شکل گرفته باشد
-        if (Math.abs(p2.index - p1.index) < 5) return null;
+        // فیلتر زمان: بین نقطه A و B باید حداقل ۳ کندل فاصله باشد
+        if (Math.abs(p2.index - p1.index) < 3) return null;
 
         // الگوی N صعودی (A: Low -> B: High)
         if (p1.type === 'low' && p2.type === 'high') {
@@ -330,7 +330,7 @@ export class TradingStrategy {
             const entryLevel = B - (range * 0.03); 
             
             if (lastPrice <= entryLevel && lastPrice > A) {
-                const patternKey = `N_V3_BUY_${p1.time}_${p2.time}`;
+                const patternKey = `N_V4_BUY_${p1.time}_${p2.time}`;
                 if (this.lastPatternKey === patternKey) return null;
 
                 if (prevPrice > entryLevel || lastPrice === entryLevel) {
@@ -360,7 +360,7 @@ export class TradingStrategy {
             const entryLevel = B + (range * 0.03); 
             
             if (lastPrice >= entryLevel && lastPrice < A) {
-                const patternKey = `N_V3_SELL_${p1.time}_${p2.time}`;
+                const patternKey = `N_V4_SELL_${p1.time}_${p2.time}`;
                 if (this.lastPatternKey === patternKey) return null;
 
                 if (prevPrice < entryLevel || lastPrice === entryLevel) {
