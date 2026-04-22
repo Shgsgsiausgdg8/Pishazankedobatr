@@ -198,40 +198,57 @@ const CandlestickChart = ({ data, levels, nPattern }: { data: any[], levels: any
       ctx.beginPath();
       
       let drewFirst = false;
-      nPattern.points.forEach((p: any, idx: number) => {
+      nPattern.points.forEach((p: any) => {
+        let x = 0;
         const cIdx = data.findIndex(c => c.time === p.time);
+        
         if (cIdx !== -1) {
-          const x = getX(cIdx);
-          const y = getY(p.price);
-          if (!drewFirst) {
-            ctx.moveTo(x, y);
-            drewFirst = true;
-          } else {
-            ctx.lineTo(x, y);
-          }
+          x = getX(cIdx);
+        } else {
+          // Future projection for Target D
+          const lastCandleIdx = data.length - 1;
+          const timeDiff = p.time - data[lastCandleIdx].time;
+          const candleInterval = data.length > 1 ? data[1].time - data[0].time : 60000;
+          x = getX(lastCandleIdx + (timeDiff / candleInterval));
+        }
+        
+        const y = getY(p.price);
+        if (!drewFirst) {
+          ctx.moveTo(x, y);
+          drewFirst = true;
+        } else {
+          ctx.lineTo(x, y);
         }
       });
       ctx.stroke();
       ctx.setLineDash([]);
       
-      // Draw labels A, B, C for clarity
-      const labels = ['A', 'B', 'P'];
-      nPattern.points.forEach((p: any, idx: number) => {
+      // Draw labels A, B, C, D for clarity
+      nPattern.points.forEach((p: any) => {
+          let x = 0;
           const cIdx = data.findIndex(c => c.time === p.time);
+          
           if (cIdx !== -1) {
-              const x = getX(cIdx);
-              const y = getY(p.price);
-              
-              // Points
-              ctx.fillStyle = nPattern.type === 'BUY' ? '#10b981' : '#ef4444';
-              ctx.beginPath();
-              ctx.arc(x, y, 4, 0, Math.PI * 2);
-              ctx.fill();
-              
-              ctx.fillStyle = '#fff';
-              ctx.font = 'bold 12px Inter';
-              ctx.fillText(labels[idx], x - 5, idx === 1 ? y - 12 : y + 22);
+              x = getX(cIdx);
+          } else {
+              // Future projection
+              const lastCandleIdx = data.length - 1;
+              const timeDiff = p.time - data[lastCandleIdx].time;
+              const candleInterval = data.length > 1 ? data[1].time - data[0].time : 60000;
+              x = getX(lastCandleIdx + (timeDiff / candleInterval));
           }
+          const y = getY(p.price);
+          
+          // Points
+          ctx.fillStyle = nPattern.type === 'BUY' ? '#10b981' : '#ef4444';
+          ctx.beginPath();
+          ctx.arc(x, y, 4, 0, Math.PI * 2);
+          ctx.fill();
+          
+          ctx.fillStyle = '#fff';
+          ctx.font = 'bold 13px Inter';
+          ctx.textAlign = 'center';
+          ctx.fillText(p.label || '', x, y - 10);
       });
     }
 

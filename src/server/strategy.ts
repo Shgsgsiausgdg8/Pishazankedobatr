@@ -33,6 +33,7 @@ export class TradingStrategy {
     private activeStructure: { 
         A: { type: 'high' | 'low', price: number, index: number, time: number }, 
         B: { type: 'high' | 'low', price: number, index: number, time: number },
+        C: { price: number, time: number } | null,
         isLockedB: boolean,
         targetD: number
     } | null = null;
@@ -311,22 +312,31 @@ export class TradingStrategy {
         
         const lastCandle = candles[candles.length - 1];
 
-        // اگر ساختار فعال داریم، آن را تا انتها رسم می‌کنیم
+        // اگر ساختار فعال داریم، آن را تا انتها رسم می‌کنیم (A-B-C-D)
         if (this.activeStructure) {
-            const { A, B, targetD } = this.activeStructure;
+            const { A, B, C, targetD } = this.activeStructure;
+            const points = [
+                { price: A.price, time: A.time, label: 'A' },
+                { price: B.price, time: B.time, label: 'B' }
+            ];
+
+            // اگر نقطه C (ورود) مشخص شده، آن را ثابت نشان بده، در غیر این صورت قیمت فعلی C است
+            if (C) {
+                points.push({ price: C.price, time: C.time, label: 'C' });
+                // اضافه کردن نقطه D برای تکمیل شکل N
+                points.push({ price: targetD, time: lastCandle.time + (lastCandle.time - C.time), label: 'D' });
+            } else {
+                points.push({ price: lastCandle.close, time: lastCandle.time, label: 'C' });
+            }
+
             return {
-                points: [
-                    { price: A.price, time: A.time, label: 'A' },
-                    { price: B.price, time: B.time, label: 'B' },
-                    { price: lastCandle.close, time: lastCandle.time, label: 'C' },
-                    { price: targetD, time: lastCandle.time + 3600000, label: 'D (Profit)' } // نمایش هدف تقریبی در آینده
-                ],
+                points: points,
                 type: A.type === 'low' ? 'BUY' : 'SELL',
                 isLockedB: this.activeStructure.isLockedB
             };
         }
         
-        // نمایش پیوت‌های آخر قبل از قفل شدن لنگر A
+        // نمایش پیوت‌های آخر قبل از شروع موج فعال
         const pivots = this.getSwingPivots(candles, 6, 2);
         if (pivots.length < 2) return null;
         
@@ -358,20 +368,20 @@ export class TradingStrategy {
             if (A.type === 'low' && lastPrice < A.price) { this.activeStructure = null; return null; }
             if (A.type === 'high' && lastPrice > A.price) { this.activeStructure = null; return null; }
 
-            // تکمیل الگو: اگر به هدف D رسیدیم یا اصلاح خیلی عمیق شد (۴۰٪+)، الگو را تمام کن
+            // تکمیل الگو: اگر به هدف D رسیدیم یا اصلاح خیلی عمیق شد (۴۵٪+)، الگو را تمام کن
             const currentRange = Math.abs(B.price - A.price);
             const currentPullback = Math.abs(B.price - lastPrice);
             const pullbackPct = currentPullback / currentRange;
 
             if (A.type === 'low') {
-                if (lastPrice >= targetD && targetD > 0) { this.activeStructure = null; return null; } // رسیدن به سود
-                if (pullbackPct > 0.45) { this.activeStructure = null; return null; } // اصلاح خیلی عمیق
+                if (lastPrice >= targetD && targetD > 0) { this.activeStructure = null; return null; } // تکمیل سود
+                if (pullbackPct > 0.45) { this.activeStructure = null; return null; } // باطل شدن اصلاح عمیق
             } else {
                 if (lastPrice <= targetD && targetD > 0) { this.activeStructure = null; return null; }
                 if (pullbackPct > 0.45) { this.activeStructure = null; return null; }
             }
 
-            // اگر سقف B هنوز قفل نشده، آن را دنبال کن (Dynamic B)
+            // اگر هنوز در مرحله AB هستیم (قفل نشده)، سقف/کف را دنبال کن
             if (!isLockedB) {
                 if (A.type === 'low' && lastPrice > B.price) {
                     this.activeStructure.B = { type: 'high', price: lastPrice, index: candles.length - 1, time: candles[candles.length - 1].time };
@@ -392,36 +402,38 @@ export class TradingStrategy {
                 const p2 = pivots[pivots.length - 1];
                 const waveRange = Math.abs(p2.price - p1.price);
                 
+                // شروع فاز پایش: یعنی یک موج AB قوی پیدا شد
                 if (p1.type !== p2.type && waveRange >= atr * 0.6) {
-                    this.activeStructure = { A: p1, B: p2, isLockedB: false, targetD: 0 };
+                    this.activeStructure = { A: p1, B: p2, C: null, isLockedB: false, targetD: 0 };
                 }
             }
         }
 
         if (!this.activeStructure) return null;
 
-        // ۳. بررسی شرایط ورود و قفل کردن نقطه B برای سیگنال‌دهی
+        // ۳. بررسی شرایط ورود (اصلاح نجیب)
         const { A, B, isLockedB } = this.activeStructure;
         const range = Math.abs(B.price - A.price);
         const pullback = Math.abs(B.price - lastPrice);
         const pullbackPercent = pullback / range;
 
-        // فقط اگر هنوز سیگنال نداده‌ایم و اصلاح شروع شده است
-        if (!isLockedB && pullbackPercent >= 0.02 && pullbackPercent <= 0.40) {
-            this.activeStructure.isLockedB = true; // نقطه B برای این الگو قفل شد
+        // اگر اصلاح شروع شده (بیش از ۵٪) و در بازه مجاز (تا ۴۰٪) است
+        if (!isLockedB && pullbackPercent >= 0.05 && pullbackPercent <= 0.40) {
+            this.activeStructure.isLockedB = true; 
+            this.activeStructure.C = { price: lastPrice, time: candles[candles.length - 1].time };
             
-            // محاسبه هدف D (۱۰۰٪ موج AB از نقطه ورود C)
+            // هدف D = اندازه موج AB از نقطه C
             const targetD = A.type === 'low' ? lastPrice + range : lastPrice - range;
             this.activeStructure.targetD = targetD;
 
-            const patternKey = `N_D_V10_${A.time}_${B.time}`;
+            const patternKey = `N_D_V11_${A.time}_${B.time}`;
             if (this.lastPatternKey === patternKey) return null;
             this.lastPatternKey = patternKey;
 
             return { 
                 type: A.type === 'low' ? 'BUY' : 'SELL', 
                 signalPrice: lastPrice, atr, range, kaf: A.price, saghf: B.price, isNPattern: true, 
-                confidence: 90 
+                confidence: 95 
             };
         }
 
