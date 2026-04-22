@@ -32,7 +32,9 @@ export class TradingStrategy {
     private lastPatternKey: string | null = null;    // کلید منحصربه‌فرد الگو
     private activeStructure: { 
         A: { type: 'high' | 'low', price: number, index: number, time: number }, 
-        B: { type: 'high' | 'low', price: number, index: number, time: number } 
+        B: { type: 'high' | 'low', price: number, index: number, time: number },
+        isLockedB: boolean,
+        targetD: number
     } | null = null;
 
     constructor() {}
@@ -309,32 +311,36 @@ export class TradingStrategy {
         
         const lastCandle = candles[candles.length - 1];
 
-        // اگر ساختار فعال داریم، از همان استفاده کن برای ترسیم دائم
+        // اگر ساختار فعال داریم، آن را تا انتها رسم می‌کنیم
         if (this.activeStructure) {
+            const { A, B, targetD } = this.activeStructure;
             return {
                 points: [
-                    { price: this.activeStructure.A.price, time: this.activeStructure.A.time },
-                    { price: this.activeStructure.B.price, time: this.activeStructure.B.time },
-                    { price: lastCandle.close, time: lastCandle.time }
+                    { price: A.price, time: A.time, label: 'A' },
+                    { price: B.price, time: B.time, label: 'B' },
+                    { price: lastCandle.close, time: lastCandle.time, label: 'C' },
+                    { price: targetD, time: lastCandle.time + 3600000, label: 'D (Profit)' } // نمایش هدف تقریبی در آینده
                 ],
-                type: this.activeStructure.A.type === 'low' ? 'BUY' : 'SELL'
+                type: A.type === 'low' ? 'BUY' : 'SELL',
+                isLockedB: this.activeStructure.isLockedB
             };
         }
         
-        // در غیر این صورت، آخرین پیوت‌ها را برای نمایش اولیه پیدا کن
+        // نمایش پیوت‌های آخر قبل از قفل شدن لنگر A
         const pivots = this.getSwingPivots(candles, 6, 2);
         if (pivots.length < 2) return null;
         
-        const p1 = pivots[pivots.length - 2]; // A
-        const p2 = pivots[pivots.length - 1]; // B
+        const p1 = pivots[pivots.length - 2]; 
+        const p2 = pivots[pivots.length - 1]; 
         
         return {
             points: [
-                { price: p1.price, time: p1.time },
-                { price: p2.price, time: p2.time },
-                { price: lastCandle.close, time: lastCandle.time }
+                { price: p1.price, time: p1.time, label: 'A' },
+                { price: p2.price, time: p2.time, label: 'B' },
+                { price: lastCandle.close, time: lastCandle.time, label: 'C' }
             ],
-            type: p1.type === 'low' ? 'BUY' : 'SELL'
+            type: p1.type === 'low' ? 'BUY' : 'SELL',
+            isLockedB: false
         };
     }
 
@@ -342,87 +348,81 @@ export class TradingStrategy {
         if (candles.length < 40) return null;
 
         const lastPrice = candles[candles.length - 1].close;
-        const prevPrice = candles[candles.length - 2]?.close || lastPrice;
         const atr = this.calculateATR(candles, 14);
 
-        // ۱. مدیریت ساختار فعال
+        // ۱. مدیریت و پایش ساختار فعال (لنگر A قفل است)
         if (this.activeStructure) {
-            const { A, B } = this.activeStructure;
+            const { A, B, isLockedB, targetD } = this.activeStructure;
             
-            // باطل شدن یا آپدیت سقف/کف فعلی
+            // باطل شدن الگو: اگر قیمت لنگر A را بشکند، کل ساختار نابود می‌شود
+            if (A.type === 'low' && lastPrice < A.price) { this.activeStructure = null; return null; }
+            if (A.type === 'high' && lastPrice > A.price) { this.activeStructure = null; return null; }
+
+            // تکمیل الگو: اگر به هدف D رسیدیم یا اصلاح خیلی عمیق شد (۴۰٪+)، الگو را تمام کن
+            const currentRange = Math.abs(B.price - A.price);
+            const currentPullback = Math.abs(B.price - lastPrice);
+            const pullbackPct = currentPullback / currentRange;
+
             if (A.type === 'low') {
-                if (lastPrice < A.price) { this.activeStructure = null; } 
-                else if (lastPrice > B.price) {
-                    this.activeStructure.B = { type: 'high', price: lastPrice, index: candles.length - 1, time: candles[candles.length - 1].time };
-                }
+                if (lastPrice >= targetD && targetD > 0) { this.activeStructure = null; return null; } // رسیدن به سود
+                if (pullbackPct > 0.45) { this.activeStructure = null; return null; } // اصلاح خیلی عمیق
             } else {
-                if (lastPrice > A.price) { this.activeStructure = null; } 
-                else if (lastPrice < B.price) {
+                if (lastPrice <= targetD && targetD > 0) { this.activeStructure = null; return null; }
+                if (pullbackPct > 0.45) { this.activeStructure = null; return null; }
+            }
+
+            // اگر سقف B هنوز قفل نشده، آن را دنبال کن (Dynamic B)
+            if (!isLockedB) {
+                if (A.type === 'low' && lastPrice > B.price) {
+                    this.activeStructure.B = { type: 'high', price: lastPrice, index: candles.length - 1, time: candles[candles.length - 1].time };
+                    return null;
+                }
+                if (A.type === 'high' && lastPrice < B.price) {
                     this.activeStructure.B = { type: 'low', price: lastPrice, index: candles.length - 1, time: candles[candles.length - 1].time };
+                    return null;
                 }
             }
         }
 
-        // ۲. شناسایی ساختار جدید در صورت لزوم
+        // ۲. شناسایی ساختار جدید (فقط اگر ساختار فعلی وجود نداشته باشد)
         if (!this.activeStructure) {
-            const pivots = this.getSwingPivots(candles, 3, 1); // حساسیت بسیار بالا
+            const pivots = this.getSwingPivots(candles, 4, 1);
             if (pivots.length >= 2) {
                 const p1 = pivots[pivots.length - 2];
                 const p2 = pivots[pivots.length - 1];
                 const waveRange = Math.abs(p2.price - p1.price);
                 
-                // تایید قدرت موج اولیه (Maneuver)
-                if (p1.type !== p2.type && waveRange >= atr * 0.5) {
-                    this.activeStructure = { A: p1, B: p2 };
+                if (p1.type !== p2.type && waveRange >= atr * 0.6) {
+                    this.activeStructure = { A: p1, B: p2, isLockedB: false, targetD: 0 };
                 }
             }
         }
 
         if (!this.activeStructure) return null;
 
-        const { A, B } = this.activeStructure;
+        // ۳. بررسی شرایط ورود و قفل کردن نقطه B برای سیگنال‌دهی
+        const { A, B, isLockedB } = this.activeStructure;
         const range = Math.abs(B.price - A.price);
         const pullback = Math.abs(B.price - lastPrice);
-        const pullbackPercent = (pullback / range);
+        const pullbackPercent = pullback / range;
 
-        // صعودی (A: Low -> B: High)
-        if (A.type === 'low') {
-            // شرایط ورود: پولبک بین ۲٪ تا ۴۰٪ کل موج باشد
-            // این بازه وسیع باعث می‌شود هیچ فرصتی در طلا از دست نرود
-            if (pullbackPercent >= 0.02 && pullbackPercent <= 0.40) {
-                const patternKey = `N_V9_BUY_${A.time}_${B.time}`;
-                if (this.lastPatternKey === patternKey) return null;
+        // فقط اگر هنوز سیگنال نداده‌ایم و اصلاح شروع شده است
+        if (!isLockedB && pullbackPercent >= 0.02 && pullbackPercent <= 0.40) {
+            this.activeStructure.isLockedB = true; // نقطه B برای این الگو قفل شد
+            
+            // محاسبه هدف D (۱۰۰٪ موج AB از نقطه ورود C)
+            const targetD = A.type === 'low' ? lastPrice + range : lastPrice - range;
+            this.activeStructure.targetD = targetD;
 
-                // تریگر: شروع اصلاح یا حضور در محدوده اصلاح
-                this.lastPatternKey = patternKey;
-                this.activeStructure = null; 
-                
-                let confidence = 80;
-                if (range > atr * 1.5) confidence += 10;
-                if (pullbackPercent <= 0.15) confidence += 10; // پولبک کم‌عمق نشان تداوم پرقدرت است
-                
-                return { 
-                    type: 'BUY', signalPrice: lastPrice, atr, range, kaf: A.price, saghf: B.price, isNPattern: true, confidence: Math.min(100, confidence)
-                };
-            }
-        } 
-        // نزولی (A: High -> B: Low)
-        else {
-            if (pullbackPercent >= 0.02 && pullbackPercent <= 0.40) {
-                const patternKey = `N_V9_SELL_${A.time}_${B.time}`;
-                if (this.lastPatternKey === patternKey) return null;
+            const patternKey = `N_D_V10_${A.time}_${B.time}`;
+            if (this.lastPatternKey === patternKey) return null;
+            this.lastPatternKey = patternKey;
 
-                this.lastPatternKey = patternKey;
-                this.activeStructure = null;
-
-                let confidence = 80;
-                if (range > atr * 1.5) confidence += 10;
-                if (pullbackPercent <= 0.15) confidence += 10;
-
-                return { 
-                    type: 'SELL', signalPrice: lastPrice, atr, range, kaf: B.price, saghf: A.price, isNPattern: true, confidence: Math.min(100, confidence)
-                };
-            }
+            return { 
+                type: A.type === 'low' ? 'BUY' : 'SELL', 
+                signalPrice: lastPrice, atr, range, kaf: A.price, saghf: B.price, isNPattern: true, 
+                confidence: 90 
+            };
         }
 
         return null;
