@@ -298,56 +298,52 @@ export class TradingStrategy {
      * این نسخه بهینه‌سازی شده تا از سقف و کف‌های تایید شده و "آخرین" ساختار استفاده کند.
      */
     private detectNPattern(candles: Candle[]) {
-        if (candles.length < 50) return null;
+        if (candles.length < 40) return null;
 
-        // استفاده از عمق مناسب برای شناسایی موج‌های میان‌مدت
-        const pivots = this.getSwingPivots(candles, 7, 2); 
+        // عمق کمتر برای شناسایی سریع‌تر الگوهای کوچک و بزرگ
+        const pivots = this.getSwingPivots(candles, 4, 1); 
         if (pivots.length < 2) return null;
 
         const lastPrice = candles[candles.length - 1].close;
         const prevPrice = candles[candles.length - 2]?.close || lastPrice;
         const atr = this.calculateATR(candles, 14);
         
-        // فیلتر روند: الگوی N در جهت روند اعتبار بیشتری دارد (EMA 21)
-        const ema21Values = this.calculateEMA(candles, 21);
-        const lastEma21 = ema21Values[ema21Values.length - 1];
-
         // یافتن آخرین پیوت‌های معتبر
-        const p2 = pivots[pivots.length - 1]; 
-        const p1 = pivots[pivots.length - 2]; 
+        const p2 = pivots[pivots.length - 1]; // آخرین سقف یا کف
+        const p1 = pivots[pivots.length - 2]; // سقف یا کف قبلی
 
         if (!p1 || !p2) return null;
 
-        // فیلتر قدرت موج: رنج موج A-B باید حداقل ۱ برابر ATR باشد
         const waveRange = Math.abs(p2.price - p1.price);
-        if (waveRange < atr * 1.0) return null;
+        
+        // فیلتر قدرت موج: منعطف‌تر شده تا سیگنال‌های بیشتری صادر شود (حداقل ۰.۶ برابر ATR)
+        if (waveRange < atr * 0.6) return null;
 
-        // فیلتر زمان: بین نقطه A و B باید حداقل ۳ کندل فاصله باشد
-        if (Math.abs(p2.index - p1.index) < 3) return null;
-
-        // صعودی
+        // صعودی: از کف به سقف (A -> B)
         if (p1.type === 'low' && p2.type === 'high') {
             const A = p1.price;
             const B = p2.price;
             const range = B - A;
             
-            // EMA فیلتر موقتاً برداشته شد تا سیگنال بیشتری صادر شود
-            // اما در محاسبه امتیاز اعتماد تاثیر می‌گذارد
-            const trendAligned = lastPrice > lastEma21;
-
+            // نقطه ورود: ۳٪ پولبک از سقف
             const entryLevel = B - (range * 0.03); 
+            // محدوده پذیرش: برای اینکه سیگنال در لحظه دقیقاً شکار شود، یک تلورانس کوچک اضافه می‌کنیم
+            const entryTolerance = range * 0.01; 
             
-            if (lastPrice <= entryLevel && lastPrice > A) {
-                const patternKey = `N_V5_BUY_${p1.time}_${p2.time}`;
+            // اگر قیمت در محدوده پولبک ۳٪ (یا کمی بیشتر) باشد و هنوز به کف A نرسیده باشد
+            if (lastPrice <= (entryLevel + entryTolerance) && lastPrice > A + entryTolerance) {
+                const patternKey = `N_V6_BUY_${p1.time}_${p2.time}`;
                 if (this.lastPatternKey === patternKey) return null;
 
-                if (prevPrice > entryLevel || lastPrice === entryLevel) {
+                // تریگر: قیمت باید در حال لمس یا عبور از سطح ۳٪ باشد
+                if (prevPrice > entryLevel || (lastPrice <= entryLevel && lastPrice >= entryLevel - entryTolerance)) {
                     this.lastPatternKey = patternKey;
                     
-                    // محاسبه درصد اطمینان (Confidence)
-                    let confidence = 70; // پایه
-                    if (trendAligned) confidence += 20; // هم‌جهتی با روند
-                    if (waveRange > atr * 1.5) confidence += 10; // قدرت موج بالا
+                    // محاسبه درصد اطمینان
+                    let confidence = 80; // شروع از ۸۰ چون فیلترها هوشمندتر شدند
+                    if (waveRange > atr * 1.5) confidence += 10; // موج شارپ
+                    if (Math.abs(p2.index - p1.index) > 5) confidence += 10; // موج با تداوم بالا
+                    if (confidence > 100) confidence = 100;
                     
                     return { 
                         type: 'BUY', 
@@ -363,26 +359,26 @@ export class TradingStrategy {
             }
         }
 
-        // نزولی
+        // نزولی: از سقف به کف (A -> B)
         if (p1.type === 'high' && p2.type === 'low') {
             const A = p1.price;
             const B = p2.price;
             const range = A - B;
 
-            const trendAligned = lastPrice < lastEma21;
-
             const entryLevel = B + (range * 0.03); 
-            
-            if (lastPrice >= entryLevel && lastPrice < A) {
-                const patternKey = `N_V5_SELL_${p1.time}_${p2.time}`;
+            const entryTolerance = range * 0.01;
+
+            if (lastPrice >= (entryLevel - entryTolerance) && lastPrice < A - entryTolerance) {
+                const patternKey = `N_V6_SELL_${p1.time}_${p2.time}`;
                 if (this.lastPatternKey === patternKey) return null;
 
-                if (prevPrice < entryLevel || lastPrice === entryLevel) {
+                if (prevPrice < entryLevel || (lastPrice >= entryLevel && lastPrice <= entryLevel + entryTolerance)) {
                     this.lastPatternKey = patternKey;
 
-                    let confidence = 70;
-                    if (trendAligned) confidence += 20;
+                    let confidence = 80;
                     if (waveRange > atr * 1.5) confidence += 10;
+                    if (Math.abs(p2.index - p1.index) > 5) confidence += 10;
+                    if (confidence > 100) confidence = 100;
 
                     return { 
                         type: 'SELL', 
