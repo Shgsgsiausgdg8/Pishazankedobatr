@@ -12,7 +12,7 @@ const SquareIcon = () => (
 );
 
 // --- Custom Canvas Chart Component ---
-const CandlestickChart = ({ data, levels }: { data: any[], levels: any[] }) => {
+const CandlestickChart = ({ data, levels, nPattern }: { data: any[], levels: any[], nPattern?: any }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [viewState, setViewState] = useState({ offset: 0, zoom: 1, followLatest: true });
@@ -190,7 +190,52 @@ const CandlestickChart = ({ data, levels }: { data: any[], levels: any[] }) => {
       ctx.fillText(Math.round(lastCandle.close).toLocaleString(), chartWidth + 5, y + 4);
     }
 
-  }, [data, levels, viewState, mousePos, dimensions]);
+    // Draw N-Pattern ZigZag Visualization
+    if (nPattern && nPattern.points && nPattern.points.length >= 2) {
+      ctx.strokeStyle = nPattern.type === 'BUY' ? '#10b981' : '#ef4444';
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([8, 4]);
+      ctx.beginPath();
+      
+      let drewFirst = false;
+      nPattern.points.forEach((p: any, idx: number) => {
+        const cIdx = data.findIndex(c => c.time === p.time);
+        if (cIdx !== -1) {
+          const x = getX(cIdx);
+          const y = getY(p.price);
+          if (!drewFirst) {
+            ctx.moveTo(x, y);
+            drewFirst = true;
+          } else {
+            ctx.lineTo(x, y);
+          }
+        }
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+      
+      // Draw labels A, B, C for clarity
+      const labels = ['A', 'B', 'P'];
+      nPattern.points.forEach((p: any, idx: number) => {
+          const cIdx = data.findIndex(c => c.time === p.time);
+          if (cIdx !== -1) {
+              const x = getX(cIdx);
+              const y = getY(p.price);
+              
+              // Points
+              ctx.fillStyle = nPattern.type === 'BUY' ? '#10b981' : '#ef4444';
+              ctx.beginPath();
+              ctx.arc(x, y, 4, 0, Math.PI * 2);
+              ctx.fill();
+              
+              ctx.fillStyle = '#fff';
+              ctx.font = 'bold 12px Inter';
+              ctx.fillText(labels[idx], x - 5, idx === 1 ? y - 12 : y + 22);
+          }
+      });
+    }
+
+  }, [data, levels, nPattern, viewState, mousePos, dimensions]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     isDragging.current = true;
@@ -604,6 +649,7 @@ export default function App() {
               key={activeBroker} 
               data={data?.candles || []} 
               levels={data?.levels || []} 
+              nPattern={data?.nPattern}
             />
           </div>
 
@@ -713,8 +759,11 @@ export default function App() {
                     </div>
                   </div>
                   <div style={{ background: '#020617', padding: '15px', borderRadius: '12px', textAlign: 'center', border: '1px solid #1e293b' }}>
-                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>معاملات</div>
+                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>مجموع الگوها</div>
                     <div style={{ fontSize: '1.4rem', fontWeight: 'bold' }}>{backtestResults.totalTrades}</div>
+                    <div style={{ fontSize: '0.65rem', color: '#475569', marginTop: '4px' }}>
+                      N: {backtestResults.buyTrades || 0} | Inv N: {backtestResults.sellTrades || 0}
+                    </div>
                   </div>
                   <div style={{ background: 'rgba(16, 185, 129, 0.05)', padding: '15px', borderRadius: '12px', textAlign: 'center', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
                     <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>سود خالص</div>

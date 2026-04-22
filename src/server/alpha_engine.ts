@@ -216,7 +216,8 @@ export class AlphaGoldEngine {
             type: (p.type === 'high' ? 'RESISTANCE' : 'SUPPORT') as 'SUPPORT' | 'RESISTANCE',
             price: p.price,
             time: p.time,
-            hits: 1 
+            hits: 1,
+            pivots: pivots // کل پیوت‌ها را برای ترسیم خطوط N می‌فرستیم
         })).slice(-30);
     }
 
@@ -260,6 +261,7 @@ export class AlphaGoldEngine {
     }
 
     getState() {
+        const nPattern = this.strategy.getNPatternDrawing(this.candles);
         return {
             broker: 'alpha', // Explicitly include broker name in state
             price: this.price,
@@ -268,7 +270,8 @@ export class AlphaGoldEngine {
             candles: this.candles.slice(-400), // Cap at 400 for UI performance
             levels: this.levels,
             signals: this.signals,
-            isRecording: this.isRecording
+            isRecording: this.isRecording,
+            nPattern: nPattern // ترسیم زنده الگو
         };
     }
 

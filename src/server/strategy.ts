@@ -297,6 +297,33 @@ export class TradingStrategy {
      * تشخیص الگوی N بر اساس موج Maneuver (A-B) و Measure (Pullback)
      * این نسخه بهینه‌سازی شده تا از سقف و کف‌های تایید شده و "آخرین" ساختار استفاده کند.
      */
+    /**
+     * اطلاعات ترسیم زنده الگوی N برای نمایش در چارت
+     */
+    public getNPatternDrawing(candles: Candle[]) {
+        if (candles.length < 30) return null;
+        
+        // تشخیص ساختار فعلی بازار
+        const pivots = this.getSwingPivots(candles, 6, 2);
+        if (pivots.length < 2) return null;
+        
+        const p1 = pivots[pivots.length - 2]; // A
+        const p2 = pivots[pivots.length - 1]; // B
+        const lastCandle = candles[candles.length - 1];
+        
+        // محاسبه فاصله زمانی برای تخمین زاویه موج (فقط برای نمایش)
+        const waveType = p1.type === 'low' ? 'BUY' : 'SELL';
+        
+        return {
+            points: [
+                { price: p1.price, time: p1.time },
+                { price: p2.price, time: p2.time },
+                { price: lastCandle.close, time: lastCandle.time }
+            ],
+            type: waveType
+        };
+    }
+
     private detectNPattern(candles: Candle[]) {
         if (candles.length < 40) return null;
 
@@ -327,22 +354,21 @@ export class TradingStrategy {
             
             // نقطه ورود: ۳٪ پولبک از سقف
             const entryLevel = B - (range * 0.03); 
-            // محدوده پذیرش: برای اینکه سیگنال در لحظه دقیقاً شکار شود، یک تلورانس کوچک اضافه می‌کنیم
-            const entryTolerance = range * 0.01; 
+            const entryTolerance = range * 0.015; // تلورانس کمی بیشتر برای شکار هوشمندتر
             
-            // اگر قیمت در محدوده پولبک ۳٪ (یا کمی بیشتر) باشد و هنوز به کف A نرسیده باشد
+            // اعتبار ساختار: نقطه فعلی نباید زیر ۵۰٪ موج قبلی باشد (برای رعایت فرم N)
+            if (lastPrice < A + (range * 0.5)) return null;
+
             if (lastPrice <= (entryLevel + entryTolerance) && lastPrice > A + entryTolerance) {
-                const patternKey = `N_V6_BUY_${p1.time}_${p2.time}`;
+                const patternKey = `N_V7_BUY_${p1.time}_${p2.time}`;
                 if (this.lastPatternKey === patternKey) return null;
 
-                // تریگر: قیمت باید در حال لمس یا عبور از سطح ۳٪ باشد
                 if (prevPrice > entryLevel || (lastPrice <= entryLevel && lastPrice >= entryLevel - entryTolerance)) {
                     this.lastPatternKey = patternKey;
                     
-                    // محاسبه درصد اطمینان
-                    let confidence = 80; // شروع از ۸۰ چون فیلترها هوشمندتر شدند
-                    if (waveRange > atr * 1.5) confidence += 10; // موج شارپ
-                    if (Math.abs(p2.index - p1.index) > 5) confidence += 10; // موج با تداوم بالا
+                    let confidence = 85; 
+                    if (range > atr * 1.8) confidence += 10;
+                    if (Math.abs(p2.index - p1.index) > 10) confidence += 5;
                     if (confidence > 100) confidence = 100;
                     
                     return { 
@@ -366,18 +392,21 @@ export class TradingStrategy {
             const range = A - B;
 
             const entryLevel = B + (range * 0.03); 
-            const entryTolerance = range * 0.01;
+            const entryTolerance = range * 0.015;
+
+            // اعتبار ساختار: نقطه فعلی نباید بالای ۵۰٪ موج قبلی باشد
+            if (lastPrice > A - (range * 0.5)) return null;
 
             if (lastPrice >= (entryLevel - entryTolerance) && lastPrice < A - entryTolerance) {
-                const patternKey = `N_V6_SELL_${p1.time}_${p2.time}`;
+                const patternKey = `N_V7_SELL_${p1.time}_${p2.time}`;
                 if (this.lastPatternKey === patternKey) return null;
 
                 if (prevPrice < entryLevel || (lastPrice >= entryLevel && lastPrice <= entryLevel + entryTolerance)) {
                     this.lastPatternKey = patternKey;
 
-                    let confidence = 80;
-                    if (waveRange > atr * 1.5) confidence += 10;
-                    if (Math.abs(p2.index - p1.index) > 5) confidence += 10;
+                    let confidence = 85;
+                    if (range > atr * 1.8) confidence += 10;
+                    if (Math.abs(p2.index - p1.index) > 10) confidence += 5;
                     if (confidence > 100) confidence = 100;
 
                     return { 

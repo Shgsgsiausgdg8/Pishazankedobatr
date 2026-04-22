@@ -420,6 +420,7 @@ export class FarazGoldEngine {
     }
 
     getState() {
+        const nPattern = this.strategy.getNPatternDrawing(this.candles);
         return {
             broker: 'faraz',
             price: this.price,
@@ -428,7 +429,8 @@ export class FarazGoldEngine {
             candles: this.candles.slice(-400), // Cap at 400 candles for the UI
             levels: this.levels,
             signals: this.signals,
-            isRecording: this.isRecording
+            isRecording: this.isRecording,
+            nPattern: nPattern // اضافه شدن اطلاعات ترسیم الگو
         };
     }
 }

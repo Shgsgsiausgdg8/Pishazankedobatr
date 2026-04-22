@@ -2,6 +2,8 @@ import { TradingStrategy, Candle, Signal } from "./strategy.js";
 
 export interface BacktestResult {
     totalTrades: number;
+    buyTrades: number;
+    sellTrades: number;
     winRate: number;
     totalProfit: number;
     maxDrawdown: number;
@@ -27,6 +29,8 @@ export class BacktestEngine {
     run(candles: Candle[], timeframe: string, strategyType: string): BacktestResult {
         const strategy = new TradingStrategy(); // Create fresh instance for each run
         const trades = [];
+        let buyTradesCount = 0;
+        let sellTradesCount = 0;
         let totalProfit = 0;
         let wins = 0;
         let peak = 0;
@@ -56,6 +60,8 @@ export class BacktestEngine {
                         exitTime: outcome.time
                     };
                     trades.push(trade);
+                    if (trade.type === 'BUY') buyTradesCount++;
+                    else sellTradesCount++;
 
                     totalProfit += outcome.profit;
                     if (outcome.profit > 0) wins++;
@@ -104,6 +110,8 @@ export class BacktestEngine {
 
         return {
             totalTrades: trades.length,
+            buyTrades: buyTradesCount,
+            sellTrades: sellTradesCount,
             winRate: trades.length > 0 ? (wins / trades.length) * 100 : 0,
             totalProfit: totalProfit,
             maxDrawdown: maxDrawdown,
