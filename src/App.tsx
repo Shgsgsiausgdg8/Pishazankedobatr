@@ -192,11 +192,21 @@ const CandlestickChart = ({ data, levels, nPattern }: { data: any[], levels: any
 
     // Draw N-Pattern ZigZag Visualization
     if (nPattern && nPattern.points && nPattern.points.length >= 2) {
+      const isConfirmed = nPattern.isConfirmed;
       ctx.strokeStyle = nPattern.type === 'BUY' ? '#10b981' : '#ef4444';
-      ctx.lineWidth = 2.5;
-      ctx.setLineDash([8, 4]);
-      ctx.beginPath();
+      ctx.lineWidth = isConfirmed ? 4 : 2.5; // ضخیم‌تر برای سیگنال تایید شده
       
+      // اگر سیگنال تایید شده است، خط توپر بکش، در غیر این صورت خط‌چین (Pending)
+      if (!isConfirmed) {
+        ctx.setLineDash([8, 4]);
+      } else {
+        ctx.setLineDash([]);
+        // افکت درخشش برای دید بهتر (Glow)
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = nPattern.type === 'BUY' ? '#10b981' : '#ef4444';
+      }
+      
+      ctx.beginPath();
       let drewFirst = false;
       nPattern.points.forEach((p: any) => {
         let x = 0;
@@ -221,17 +231,19 @@ const CandlestickChart = ({ data, levels, nPattern }: { data: any[], levels: any
         }
       });
       ctx.stroke();
+      
+      // Reset Shadow
+      ctx.shadowBlur = 0;
       ctx.setLineDash([]);
       
-      // Draw labels A, B, C, D for clarity
-      nPattern.points.forEach((p: any) => {
+      // Draw labels A, B, C, D with high visibility
+      nPattern.points.forEach((p: any, idx: number) => {
           let x = 0;
           const cIdx = data.findIndex(c => c.time === p.time);
           
           if (cIdx !== -1) {
               x = getX(cIdx);
           } else {
-              // Future projection
               const lastCandleIdx = data.length - 1;
               const timeDiff = p.time - data[lastCandleIdx].time;
               const candleInterval = data.length > 1 ? data[1].time - data[0].time : 60000;
@@ -239,16 +251,21 @@ const CandlestickChart = ({ data, levels, nPattern }: { data: any[], levels: any
           }
           const y = getY(p.price);
           
-          // Points
+          // Points Glow
           ctx.fillStyle = nPattern.type === 'BUY' ? '#10b981' : '#ef4444';
           ctx.beginPath();
-          ctx.arc(x, y, 4, 0, Math.PI * 2);
+          ctx.arc(x, y, 6, 0, Math.PI * 2); // نقاط بزرگتر برای موبایل
           ctx.fill();
           
+          // Label Box
+          const label = p.label || '';
+          ctx.fillStyle = 'rgba(0,0,0,0.7)';
+          ctx.fillRect(x - 12, y - 32, 24, 20);
+          
           ctx.fillStyle = '#fff';
-          ctx.font = 'bold 13px Inter';
+          ctx.font = 'bold 15px Inter';
           ctx.textAlign = 'center';
-          ctx.fillText(p.label || '', x, y - 10);
+          ctx.fillText(label, x, y - 17);
       });
     }
 
