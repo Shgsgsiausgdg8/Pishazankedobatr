@@ -806,30 +806,65 @@ export default function App() {
                 <div key={idx} style={{ 
                   background: '#020617', 
                   borderRadius: '12px', 
-                  padding: '12px', 
-                  border: `1px solid ${sig.type === 'BUY' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`
+                  padding: '16px', 
+                  border: `1px solid ${sig.type === 'BUY' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`,
+                  position: 'relative',
+                  overflow: 'hidden'
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <span style={{ 
-                      color: sig.type === 'BUY' ? '#10b981' : '#ef4444', 
-                      fontWeight: 'bold',
-                      fontSize: '0.9rem'
+                  {/* Confidence Indicator */}
+                  {sig.confidence && (
+                    <div style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '3px',
+                      background: '#1e293b'
                     }}>
-                      {sig.type === 'BUY' ? 'خرید (BUY)' : 'فروش (SELL)'}
-                    </span>
+                      <div style={{
+                        width: `${sig.confidence}%`,
+                        height: '100%',
+                        background: sig.confidence > 85 ? '#10b981' : sig.confidence > 75 ? '#3b82f6' : '#f59e0b',
+                        boxShadow: `0 0 8px ${sig.confidence > 85 ? '#10b981' : '#3b82f6'}`
+                      }} />
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ 
+                        color: sig.type === 'BUY' ? '#10b981' : '#ef4444', 
+                        fontWeight: 'bold',
+                        fontSize: '1rem'
+                      }}>
+                        {sig.type === 'BUY' ? 'خرید (BUY)' : 'فروش (SELL)'}
+                      </span>
+                      {sig.confidence && (
+                        <span style={{ 
+                          fontSize: '0.65rem', 
+                          padding: '2px 6px', 
+                          borderRadius: '4px', 
+                          background: 'rgba(59, 130, 246, 0.1)', 
+                          color: '#3b82f6',
+                          border: '1px solid rgba(59, 130, 246, 0.2)'
+                        }}>
+                          اطمینان: {sig.confidence}%
+                        </span>
+                      )}
+                    </div>
                     <span style={{ color: '#475569', fontSize: '0.7rem' }}>
                       {new Date(sig.time).toLocaleTimeString('fa-IR')}
                     </span>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.8rem' }}>
-                    <div style={{ color: '#94a3b8' }}>ورود: <span style={{ color: '#fff' }}>{sig.entry.toLocaleString()}</span></div>
-                    <div style={{ color: '#94a3b8' }}>استاپ: <span style={{ color: '#ef4444' }}>{sig.sl.toLocaleString()}</span></div>
-                    <div style={{ color: '#94a3b8' }}>تارگت ۱: <span style={{ color: '#10b981' }}>{sig.tp1.toLocaleString()}</span></div>
-                    <div style={{ color: '#94a3b8' }}>تارگت ۲: <span style={{ color: '#10b981' }}>{sig.tp2.toLocaleString()}</span></div>
-                    <div style={{ color: '#94a3b8' }}>تارگت ۳: <span style={{ color: '#10b981' }}>{sig.tp3.toLocaleString()}</span></div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '0.85rem' }}>
+                    <div style={{ color: '#94a3b8' }}>ورود: <span style={{ color: '#fff', fontFamily: 'var(--font-mono)' }}>{sig.entry.toLocaleString()}</span></div>
+                    <div style={{ color: '#94a3b8' }}>استاپ: <span style={{ color: '#ef4444', fontFamily: 'var(--font-mono)' }}>{sig.sl.toLocaleString()}</span></div>
+                    <div style={{ color: '#94a3b8' }}>تارگت ۱: <span style={{ color: '#10b981', fontFamily: 'var(--font-mono)' }}>{sig.tp1.toLocaleString()}</span></div>
+                    <div style={{ color: '#94a3b8' }}>تارگت ۲: <span style={{ color: '#10b981', fontFamily: 'var(--font-mono)' }}>{sig.tp2.toLocaleString()}</span></div>
+                    <div style={{ color: '#94a3b8' }}>تارگت ۳: <span style={{ color: '#10b981', fontFamily: 'var(--font-mono)' }}>{sig.tp3.toLocaleString()}</span></div>
                     <div style={{ color: '#94a3b8' }}>تایم: <span style={{ color: '#fff' }}>{sig.timeframe}m</span></div>
-                    {sig.saghf && <div style={{ color: '#94a3b8' }}>سقف: <span style={{ color: '#fff' }}>{sig.saghf.toLocaleString()}</span></div>}
-                    {sig.kaf && <div style={{ color: '#94a3b8' }}>کف: <span style={{ color: '#fff' }}>{sig.kaf.toLocaleString()}</span></div>}
+                    {sig.saghf && <div style={{ color: '#94a3b8' }}>سقف: <span style={{ color: '#fff', fontFamily: 'var(--font-mono)' }}>{sig.saghf.toLocaleString()}</span></div>}
+                    {sig.kaf && <div style={{ color: '#94a3b8' }}>کف: <span style={{ color: '#fff', fontFamily: 'var(--font-mono)' }}>{sig.kaf.toLocaleString()}</span></div>}
                   </div>
                 </div>
               ))}

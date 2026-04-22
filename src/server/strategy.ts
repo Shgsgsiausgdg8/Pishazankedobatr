@@ -24,6 +24,7 @@ export interface Signal {
   timeframe: string;
   kaf?: number;
   saghf?: number;
+  confidence?: number; // درصد اطمینان سیگنال
 }
 
 export class TradingStrategy {
@@ -247,11 +248,15 @@ export class TradingStrategy {
     }
 
     private calculateRSI(candles: Candle[], period: number) {
+        // Limit calculation window to 200 to save memory/CPU
+        const data = candles.slice(-(period + 150));
+        if (data.length < period + 1) return [];
+
         let gains = 0;
         let losses = 0;
 
         for (let i = 1; i <= period; i++) {
-            const diff = candles[i].close - candles[i - 1].close;
+            const diff = data[i].close - data[i - 1].close;
             if (diff >= 0) gains += diff;
             else losses -= diff;
         }
@@ -260,8 +265,8 @@ export class TradingStrategy {
         let avgLoss = losses / period;
 
         const rsi = [];
-        for (let i = period + 1; i < candles.length; i++) {
-            const diff = candles[i].close - candles[i - 1].close;
+        for (let i = period + 1; i < data.length; i++) {
+            const diff = data[i].close - data[i - 1].close;
             const gain = diff >= 0 ? diff : 0;
             const loss = diff < 0 ? -diff : 0;
 
@@ -275,12 +280,14 @@ export class TradingStrategy {
     }
 
     private calculateEMA(candles: Candle[], period: number) {
+        // Limit data to 200 last candles for performance and stable results
+        const data = candles.slice(-200); 
         const k = 2 / (period + 1);
-        let ema = candles[0].close;
+        let ema = data[0].close;
         const emaArray = [ema];
 
-        for (let i = 1; i < candles.length; i++) {
-            ema = (candles[i].close * k) + (ema * (1 - k));
+        for (let i = 1; i < data.length; i++) {
+            ema = (data[i].close * k) + (ema * (1 - k));
             emaArray.push(ema);
         }
         return emaArray;
@@ -318,23 +325,30 @@ export class TradingStrategy {
         // فیلتر زمان: بین نقطه A و B باید حداقل ۳ کندل فاصله باشد
         if (Math.abs(p2.index - p1.index) < 3) return null;
 
-        // الگوی N صعودی (A: Low -> B: High)
+        // صعودی
         if (p1.type === 'low' && p2.type === 'high') {
             const A = p1.price;
             const B = p2.price;
             const range = B - A;
             
-            // فیلتر روند خرید: قیمت بالای EMA 21 باشد
-            if (lastPrice < lastEma21) return null;
+            // EMA فیلتر موقتاً برداشته شد تا سیگنال بیشتری صادر شود
+            // اما در محاسبه امتیاز اعتماد تاثیر می‌گذارد
+            const trendAligned = lastPrice > lastEma21;
 
             const entryLevel = B - (range * 0.03); 
             
             if (lastPrice <= entryLevel && lastPrice > A) {
-                const patternKey = `N_V4_BUY_${p1.time}_${p2.time}`;
+                const patternKey = `N_V5_BUY_${p1.time}_${p2.time}`;
                 if (this.lastPatternKey === patternKey) return null;
 
                 if (prevPrice > entryLevel || lastPrice === entryLevel) {
                     this.lastPatternKey = patternKey;
+                    
+                    // محاسبه درصد اطمینان (Confidence)
+                    let confidence = 70; // پایه
+                    if (trendAligned) confidence += 20; // هم‌جهتی با روند
+                    if (waveRange > atr * 1.5) confidence += 10; // قدرت موج بالا
+                    
                     return { 
                         type: 'BUY', 
                         signalPrice: lastPrice, 
@@ -342,29 +356,34 @@ export class TradingStrategy {
                         range,
                         kaf: A, 
                         saghf: B, 
-                        isNPattern: true 
+                        isNPattern: true,
+                        confidence 
                     };
                 }
             }
         }
 
-        // الگوی N نزولی (A: High -> B: Low)
+        // نزولی
         if (p1.type === 'high' && p2.type === 'low') {
             const A = p1.price;
             const B = p2.price;
             const range = A - B;
 
-            // فیلتر روند فروش: قیمت پایین EMA 21 باشد
-            if (lastPrice > lastEma21) return null;
+            const trendAligned = lastPrice < lastEma21;
 
             const entryLevel = B + (range * 0.03); 
             
             if (lastPrice >= entryLevel && lastPrice < A) {
-                const patternKey = `N_V4_SELL_${p1.time}_${p2.time}`;
+                const patternKey = `N_V5_SELL_${p1.time}_${p2.time}`;
                 if (this.lastPatternKey === patternKey) return null;
 
                 if (prevPrice < entryLevel || lastPrice === entryLevel) {
                     this.lastPatternKey = patternKey;
+
+                    let confidence = 70;
+                    if (trendAligned) confidence += 20;
+                    if (waveRange > atr * 1.5) confidence += 10;
+
                     return { 
                         type: 'SELL', 
                         signalPrice: lastPrice, 
@@ -372,7 +391,8 @@ export class TradingStrategy {
                         range,
                         kaf: B, 
                         saghf: A, 
-                        isNPattern: true 
+                        isNPattern: true,
+                        confidence 
                     };
                 }
             }
@@ -504,17 +524,21 @@ export class TradingStrategy {
             time: Date.now(),
             timeframe: timeframe,
             kaf: pattern.kaf,
-            saghf: pattern.saghf
+            saghf: pattern.saghf,
+            confidence: pattern.confidence
         };
     }
 
     private calculateATR(candles: Candle[], period: number = 14) {
-        if (candles.length < period + 1) return candles[candles.length - 1].close * 0.001;
+        const windowSize = period + 5;
+        const data = candles.slice(-windowSize);
+        if (data.length < period + 1) return candles[candles.length - 1].close * 0.001;
+        
         let totalTR = 0;
-        for (let i = candles.length - period; i < candles.length; i++) {
-            const h = candles[i].high;
-            const l = candles[i].low;
-            const pc = candles[i - 1].close;
+        for (let i = 1; i < data.length; i++) {
+            const h = data[i].high;
+            const l = data[i].low;
+            const pc = data[i - 1].close;
             const tr = Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc));
             totalTR += tr;
         }

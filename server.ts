@@ -56,7 +56,7 @@ async function startServer() {
             if (ws.readyState === WebSocket.OPEN) {
                 sendState('UPDATE');
             }
-        }, 1000);
+        }, 3000); // Reduce frequency to 3 seconds to save memory/CPU
 
         ws.on("message", (message) => {
             try {

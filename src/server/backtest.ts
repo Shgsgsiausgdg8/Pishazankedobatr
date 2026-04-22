@@ -39,11 +39,11 @@ export class BacktestEngine {
 
         // Iterate through candles to find signals
         for (let i = 50; i < candles.length - 10; i++) {
-            const window = candles.slice(0, i + 1);
+            // Optimization: avoid slicing large datasets repeatedly where possible
+            const window = candles.slice(Math.max(0, i - 300), i + 1);
             const signal = strategy.analyze(window, timeframe, strategyType);
 
             if (signal) {
-                // Find outcome (TP or SL) in the future candles
                 const outcome = this.findOutcome(candles.slice(i + 1), signal);
                 if (outcome) {
                     const trade = {
@@ -60,7 +60,6 @@ export class BacktestEngine {
                     totalProfit += outcome.profit;
                     if (outcome.profit > 0) wins++;
                     
-                    // Track hour/day
                     const date = new Date(trade.entryTime);
                     const hour = date.getHours();
                     const day = days[date.getDay()];
@@ -68,14 +67,18 @@ export class BacktestEngine {
                     hourStats[hour] = (hourStats[hour] || 0) + outcome.profit;
                     dayStats[day] = (dayStats[day] || 0) + outcome.profit;
 
-                    // Basic drawdown calculation
                     if (totalProfit > peak) peak = totalProfit;
                     const dd = peak - totalProfit;
                     if (dd > maxDrawdown) maxDrawdown = dd;
 
-                    // Skip candles until exit to avoid multiple signals for same move
+                    // Safety exit indexing to prevent infinite loops
                     const exitIdx = candles.findIndex(c => c.time === outcome.time);
-                    if (exitIdx > i) i = exitIdx;
+                    if (exitIdx > i) {
+                        i = exitIdx;
+                    } else {
+                        // If something went wrong, just move to next candle
+                        continue;
+                    }
                 }
             }
         }

@@ -265,7 +265,7 @@ export class AlphaGoldEngine {
             price: this.price,
             timeframe: this.timeframe,
             liveStrategy: this.liveStrategyType,
-            candles: this.candles.slice(-2000),
+            candles: this.candles.slice(-400), // Cap at 400 for UI performance
             levels: this.levels,
             signals: this.signals,
             isRecording: this.isRecording
