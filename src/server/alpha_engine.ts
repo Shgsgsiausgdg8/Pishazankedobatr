@@ -190,8 +190,9 @@ export class AlphaGoldEngine {
             last.close = newPrice;
         }
 
-        if (now - this.lastLevelsUpdate > 2000) {
+        if (now - this.lastLevelsUpdate > 1000) {
             this.detectLevels();
+            this.runStrategy(); // آپدیت استراتژی در هر تیک برای جلوگیری از ماندن خطوط باطل شده
             this.lastLevelsUpdate = now;
         }
     }

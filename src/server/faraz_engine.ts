@@ -332,8 +332,8 @@ export class FarazGoldEngine {
             }
         }
 
-        // بروزرسانی سطوح سقف و کف به صورت لحظه‌ای با تراتل 2 ثانیه
-        if (!this.lastLevelsUpdate || now - this.lastLevelsUpdate > 2000) {
+        // بروزرسانی سطوح سقف و کف به صورت لحظه‌ای با تراتل 1 ثانیه
+        if (!this.lastLevelsUpdate || now - this.lastLevelsUpdate > 1000) {
             this.detectLevels();
             this.runStrategy();
             this.lastLevelsUpdate = now;

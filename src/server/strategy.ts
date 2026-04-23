@@ -367,54 +367,52 @@ export class TradingStrategy {
     }
 
     private detectNPattern(candles: Candle[]) {
-        if (candles.length < 40) return null;
+        if (candles.length < 50) return null;
 
         const lastCandle = candles[candles.length - 1];
+        const prevCandle = candles[candles.length - 2];
         const lastPrice = lastCandle.close;
         const atr = this.calculateATR(candles, 14);
 
-        // ۱. مدیریت ساختار در حال پایش
+        // ۱. مدیریت ساختار (باطل کردن سریع)
         if (this.activeStructure) {
             const { A, B, targetD, status, isLockedB } = this.activeStructure;
             
-            // شرط ابطال: شکست قطعی لنگر اصلی A (دشمن اصلی الگو)
-            if (A.type === 'low' && lastPrice < (A.price * 0.9999)) { this.activeStructure = null; return null; }
-            if (A.type === 'high' && lastPrice > (A.price * 1.0001)) { this.activeStructure = null; return null; }
+            // باطل شدن: اگر قیمت از کف A (در بای) یا سقف A (در سل) عبور کند
+            if (A.type === 'low' && lastPrice < A.price) { this.activeStructure = null; return null; }
+            if (A.type === 'high' && lastPrice > A.price) { this.activeStructure = null; return null; }
 
             const abRange = Math.abs(B.price - A.price);
             const currentPullback = Math.abs(B.price - lastPrice);
             const pullbackPct = currentPullback / abRange;
 
-            // شرط تکمیل: برخورد با هدف یا پایان اصلاح عمیق
+            // اگر به هدف رسیدیم یا اصلاح خیلی عمیق شد (بیش از ۸۰٪ موج)
             if (targetD > 0) {
                 const reached = A.type === 'low' ? lastPrice >= targetD : lastPrice <= targetD;
                 if (reached) { this.activeStructure = null; return null; }
             }
-            if (pullbackPct > 0.65) { this.activeStructure = null; return null; }
+            if (pullbackPct > 0.85) { this.activeStructure = null; return null; }
 
-            // دنبال کردن نقطه B (تا زمان شروع اصلاح معتبر)
+            // دنبال کردن نقطه B (تا قبل از تایید برگشت)
             if (!isLockedB) {
                 if (A.type === 'low' && lastPrice > B.price) {
                     this.activeStructure.B = { type: 'high', price: lastPrice, index: candles.length - 1, time: lastCandle.time };
-                    return null;
-                }
-                if (A.type === 'high' && lastPrice < B.price) {
+                } else if (A.type === 'high' && lastPrice < B.price) {
                     this.activeStructure.B = { type: 'low', price: lastPrice, index: candles.length - 1, time: lastCandle.time };
-                    return null;
                 }
             }
         }
 
-        // ۲. شناسایی موج استارت (A -> B)
+        // ۲. شناسایی موج جدید
         if (!this.activeStructure) {
-            const pivots = this.getSwingPivots(candles, 6, 3);
+            const pivots = this.getSwingPivots(candles, 7, 3);
             if (pivots.length >= 2) {
                 const p1 = pivots[pivots.length - 2];
                 const p2 = pivots[pivots.length - 1];
-                const distance = Math.abs(p2.index - p1.index);
                 const wave = Math.abs(p2.price - p1.price);
+                const timeDist = Math.abs(p2.index - p1.index);
 
-                if (p1.type !== p2.type && distance >= 5 && wave >= atr * 0.6) {
+                if (p1.type !== p2.type && timeDist >= 5 && wave >= atr * 0.7) {
                     this.activeStructure = {
                         A: p1, B: p2, C: null, isLockedB: false, targetD: 0, status: 'MONITORING'
                     };
@@ -424,7 +422,7 @@ export class TradingStrategy {
 
         if (!this.activeStructure) return null;
 
-        // ۳. بررسی شرط ورود (نقطه C معتبر)
+        // ۳. سیگنال‌دهی با تاییدیه برگشت (C Confirmation)
         const { A, B, isLockedB, status } = this.activeStructure;
         if (status === 'SIGNALLED') return null;
 
@@ -432,18 +430,22 @@ export class TradingStrategy {
         const pullback = Math.abs(B.price - lastPrice);
         const pullbackPct = pullback / abRange;
 
-        // ورود هوشمند در اصلاح ۱۰٪ تا ۴۰٪
-        if (!isLockedB && pullbackPct >= 0.10 && pullbackPct <= 0.40) {
+        // شرط ورود:
+        // ۱. قیمت در محدوده ۳۰٪ تا ۷۰٪ اصلاح باشد
+        // ۲. یک تاییدیه بازگشت (مثلاً کندل فعلی بالاتر از قبلی در بای) ببینیم
+        const isReversing = A.type === 'low' ? (lastPrice > prevCandle.close) : (lastPrice < prevCandle.close);
+
+        if (!isLockedB && pullbackPct >= 0.30 && pullbackPct <= 0.70 && isReversing) {
             this.activeStructure.isLockedB = true;
             this.activeStructure.C = { price: lastPrice, time: lastCandle.time };
             this.activeStructure.status = 'SIGNALLED';
             
-            // هدف D = گسترش ۱۰۰٪ فیبوناچی
+            // محاسبه تارگت D (صد درصد پراجکشن)
             const targetD = A.type === 'low' ? lastPrice + (abRange * 1.0) : lastPrice - (abRange * 1.0);
             this.activeStructure.targetD = targetD;
-            this.totalPatternsCount++; // افزایش شمارنده دقیق
+            this.totalPatternsCount++;
 
-            const patternKey = `N_V15_FINAL_${A.time}_${B.time}`;
+            const patternKey = `N_V16_${A.time}_${B.time}`;
             if (this.lastPatternKey === patternKey) return null;
             this.lastPatternKey = patternKey;
 

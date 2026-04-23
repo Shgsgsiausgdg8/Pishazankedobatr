@@ -664,7 +664,7 @@ export default function App() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold', color: '#3b82f6' }}>
                <div className="pulse" />
                {data?.liveStrategy === 'N-PATTERN' 
-                 ? `در حال پایش (الگوها: ${data?.nPattern?.totalCount || 0})` 
+                 ? `پایش ${data?.nPattern?.type === 'BUY' ? 'خرید' : 'فروش'} (الگوها: ${data?.nPattern?.totalCount || 0})` 
                  : 'اسکلپ لحظه‌ای'}
             </div>
             <div style={{ fontSize: '0.65rem', color: '#475569', marginTop: '4px' }}>
