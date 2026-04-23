@@ -120,6 +120,12 @@ async function startServer() {
                         (engine as any).liveStrategyType = command.strategy;
                         console.log(`[Server] ${currentBroker} live strategy set to ${command.strategy}`);
                     }
+                    else if (command.type === 'UPDATE_BALE_CONFIG') {
+                        const { token, chatId } = command;
+                        farazEngine.updateBaleConfig(token, chatId);
+                        alphaEngine.updateBaleConfig(token, chatId);
+                        console.log(`[Server] Bale config updated for both engines.`);
+                    }
                 }
             }
             catch (e) { }

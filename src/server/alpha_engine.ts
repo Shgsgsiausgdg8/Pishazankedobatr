@@ -20,9 +20,40 @@ export class AlphaGoldEngine {
     strategy = new TradingStrategy();
     liveStrategyType = 'SCALP-ADV'; 
     lastLevelsUpdate = 0;
+    brokerName = 'آلفا گلد (انس جهانی)';
+    settingsFile = path.join(process.cwd(), 'alpha_settings.json');
+
+    // Bale Config
+    baleToken: string = '1892918835:dxRdPwhkUUgmFogKzLD7B8xmygvnRKq_DOA';
+    baleChatId: string = '6211548865';
 
     constructor() {
         console.log("\n[AlphaGoldEngine] Syncing with chrt.alphagoldx.com logic...");
+        this.loadSettings();
+    }
+
+    loadSettings() {
+        try {
+            if (fs.existsSync(this.settingsFile)) {
+                const settings = JSON.parse(fs.readFileSync(this.settingsFile, 'utf8'));
+                if (settings.baleToken) this.baleToken = settings.baleToken;
+                if (settings.baleChatId) this.baleChatId = settings.baleChatId;
+            }
+        } catch (e) {
+            console.error("Error loading Alpha settings:", e);
+        }
+    }
+
+    saveSettings() {
+        try {
+            const settings = {
+                baleToken: this.baleToken,
+                baleChatId: this.baleChatId
+            };
+            fs.writeFileSync(this.settingsFile, JSON.stringify(settings, null, 2));
+        } catch (e) {
+            console.error("Error saving Alpha settings:", e);
+        }
     }
 
     async start() {
@@ -234,6 +265,63 @@ export class AlphaGoldEngine {
         return sum / period;
     }
 
+    private async sendBaleNotification(signal: Signal) {
+        const botToken = this.baleToken;
+        const chatId = this.baleChatId;
+        const url = `https://tapi.bale.ai/bot${botToken}/sendMessage`;
+
+        const date = new Date(signal.time).toLocaleDateString('fa-IR');
+        const time = new Date(signal.time).toLocaleTimeString('fa-IR');
+        
+        const strategyNames: Record<string, string> = {
+            'HYBRID': 'Smart N (ترکیبی)',
+            'N-PATTERN': 'الگوی N',
+            'SCALP-ADV': 'اسکلپ پیشرفته',
+            'EMA-CROSS': 'تقاطع طلایی EMA'
+        };
+
+        const message = `
+🌟 **سیگنال جدید ربات فراز گلد** 🌟
+
+📊 **بازار:** ${this.brokerName}
+📌 **استراتژی:** ${strategyNames[this.liveStrategyType] || this.liveStrategyType}
+🕒 **زمان:** ${time}
+📅 **تاریخ:** ${date}
+⏳ **تایم‌فریم:** ${signal.timeframe}m
+
+🛑 **نوع معامله:** ${signal.type === 'BUY' ? 'خرید (BUY) 🟢' : 'فروش (SELL) 🔴'}
+🎯 **اطمینان:** ${signal.confidence || 99}%
+
+💵 **نقطه ورود:** ${signal.entry.toFixed(2)}
+🛡 **حد ضرر (SL):** ${signal.sl.toFixed(2)}
+
+💰 **تارگت ۱:** ${signal.tp1.toFixed(2)}
+💰 **تارگت ۲:** ${signal.tp2.toFixed(2)}
+💰 **تارگت ۳:** ${signal.tp3.toFixed(2)}
+
+--------------------------
+🔍 **وضعیت ساختار:**
+📏 سقف (Saghf): ${signal.saghf?.toFixed(2) || '---'}
+📏 کف (Kaf): ${signal.kaf?.toFixed(2) || '---'}
+--------------------------
+⚠️ مدیریت سرمایه فراموش نشود!
+`;
+
+        try {
+            await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: parseInt(chatId),
+                    text: message
+                })
+            });
+            console.log(`[Notification-Alpha] Signal sent to Bale.`);
+        } catch (error) {
+            console.error(`[Notification-Alpha] Failed to send to Bale:`, error);
+        }
+    }
+
     runStrategy() {
         const sig = this.strategy.analyze(this.candles, this.timeframe, this.liveStrategyType);
         if (!sig) return;
@@ -241,6 +329,9 @@ export class AlphaGoldEngine {
         if (!last || Math.abs(last.time - sig.time) > 60000) {
             this.signals.unshift(sig);
             if (this.signals.length > 20) this.signals.pop();
+            
+            // ارسال به بله
+            this.sendBaleNotification(sig);
         }
     }
 
@@ -273,8 +364,16 @@ export class AlphaGoldEngine {
             signals: this.signals,
             isRecording: this.isRecording,
             totalCandles: this.candles.length,
-            nPattern: nPattern // ترسیم زنده الگو
+            nPattern: nPattern,
+            baleToken: this.baleToken,
+            baleChatId: this.baleChatId
         };
+    }
+
+    updateBaleConfig(token: string, chatId: string) {
+        this.baleToken = token;
+        this.baleChatId = chatId;
+        this.saveSettings();
     }
 
     cleanupCandles() {

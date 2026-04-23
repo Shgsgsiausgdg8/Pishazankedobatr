@@ -379,6 +379,9 @@ export default function App() {
   }, [activeBroker]);
   
   const [showAuth, setShowAuth] = useState(false);
+  const [showBaleSettings, setShowBaleSettings] = useState(false);
+  const [baleToken, setBaleToken] = useState('');
+  const [baleChatId, setBaleChatId] = useState('');
   const [refreshToken, setRefreshToken] = useState('');
   const [accountType, setAccountType] = useState('demo');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -416,6 +419,9 @@ export default function App() {
             // CRITICAL FIX: Ensure broker name is part of the data so the loading check passes
             if (msg.broker === activeBrokerRef.current) {
               setData({ ...msg.data, broker: msg.broker });
+              // Sync Bale settings from engine
+              if (msg.data.baleToken) setBaleToken(msg.data.baleToken);
+              if (msg.data.baleChatId) setBaleChatId(msg.data.baleChatId);
             }
           } else if (msg.type === 'BACKTEST_RESULTS') {
             setBacktestResults(msg.data);
@@ -478,6 +484,17 @@ export default function App() {
 
   const setTimeframe = (tf: string) => {
     wsRef.current?.send(JSON.stringify({ type: 'SET_TIMEFRAME', timeframe: tf }));
+  };
+
+  const updateBaleConfig = () => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: 'UPDATE_BALE_CONFIG',
+        token: baleToken,
+        chatId: baleChatId
+      }));
+      setShowBaleSettings(false);
+    }
   };
 
   const handleSetToken = async (e: React.FormEvent) => {
@@ -568,6 +585,23 @@ export default function App() {
           </div>
 
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <button 
+              onClick={() => setShowBaleSettings(true)}
+              style={{
+                background: '#1e293b',
+                color: '#94a3b8',
+                border: '1px solid #334155',
+                borderRadius: '8px',
+                padding: '4px 10px',
+                fontSize: '0.7rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              ⚙️ تنظیمات بله
+            </button>
             <div className="ltr" style={{ textAlign: 'right' }}>
               <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>قیمت لحظه‌ای {activeBroker === 'faraz' ? '(مظنه)' : '(انس)'}</div>
               <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#10b981', fontFamily: 'var(--font-mono)' }}>
@@ -1007,6 +1041,44 @@ export default function App() {
           </div>
         </div>
       </main>
+
+      {showBaleSettings && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+          <div className="card" style={{ width: '100%', maxWidth: '400px' }}>
+            <h2 style={{ marginBottom: '1.5rem' }}>⚙️ تنظیمات اعلان بله</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '6px' }}>توکن ربات بله:</label>
+                <input 
+                  type="text" 
+                  value={baleToken} 
+                  onChange={e => setBaleToken(e.target.value)}
+                  placeholder="1892918835:dxRd..."
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#1e293b', border: 'none', color: 'white' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '6px' }}>آیدی عددی چت:</label>
+                <input 
+                  type="text" 
+                  value={baleChatId} 
+                  onChange={e => setBaleChatId(e.target.value)}
+                  placeholder="6211548865"
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#1e293b', border: 'none', color: 'white' }}
+                />
+              </div>
+              <button 
+                onClick={updateBaleConfig}
+                className="btn btn-primary" 
+                style={{ width: '100%', marginTop: '0.5rem', justifyContent: 'center' }}
+              >
+                ذخیره تنظیمات
+              </button>
+              <button onClick={() => setShowBaleSettings(false)} className="btn btn-secondary" style={{ justifyContent: 'center' }}>انصراف</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showAuth && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>

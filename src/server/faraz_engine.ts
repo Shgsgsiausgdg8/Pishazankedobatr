@@ -13,6 +13,11 @@ export class FarazGoldEngine {
     strategy = new TradingStrategy();
     liveStrategyType = 'SCALP-ADV';
     recordingStartTime: number | null = null;
+    brokerName = 'فراز گلد (مظنه)';
+
+    // Bale Config
+    baleToken: string = '1892918835:dxRdPwhkUUgmFogKzLD7B8xmygvnRKq_DOA';
+    baleChatId: string = '6211548865';
 
     // Auth State
     accessToken: string | null = null;
@@ -144,6 +149,8 @@ export class FarazGoldEngine {
                 this.refreshToken = settings.refreshToken || null;
                 this.sessionId = settings.sessionId || null;
                 this.csrfToken = settings.csrfToken || null;
+                if (settings.baleToken) this.baleToken = settings.baleToken;
+                if (settings.baleChatId) this.baleChatId = settings.baleChatId;
             }
         } catch (e) {
             console.error("Error loading settings:", e);
@@ -156,7 +163,9 @@ export class FarazGoldEngine {
                 accessToken: this.accessToken,
                 refreshToken: this.refreshToken,
                 sessionId: this.sessionId,
-                csrfToken: this.csrfToken
+                csrfToken: this.csrfToken,
+                baleToken: this.baleToken,
+                baleChatId: this.baleChatId
             };
             fs.writeFileSync(this.settingsFile, JSON.stringify(settings, null, 2));
         } catch (e) {
@@ -340,6 +349,63 @@ export class FarazGoldEngine {
         }
     }
 
+    private async sendBaleNotification(signal: Signal) {
+        const botToken = this.baleToken;
+        const chatId = this.baleChatId;
+        const url = `https://tapi.bale.ai/bot${botToken}/sendMessage`;
+
+        const date = new Date(signal.time).toLocaleDateString('fa-IR');
+        const time = new Date(signal.time).toLocaleTimeString('fa-IR');
+        
+        const strategyNames: Record<string, string> = {
+            'HYBRID': 'Smart N (ترکیبی)',
+            'N-PATTERN': 'الگوی N',
+            'SCALP-ADV': 'اسکلپ پیشرفته',
+            'EMA-CROSS': 'تقاطع طلایی EMA'
+        };
+
+        const message = `
+🌟 **سیگنال جدید ربات فراز گلد** 🌟
+
+📊 **بازار:** ${this.brokerName}
+📌 **استراتژی:** ${strategyNames[this.liveStrategyType] || this.liveStrategyType}
+🕒 **زمان:** ${time}
+📅 **تاریخ:** ${date}
+⏳ **تایم‌فریم:** ${signal.timeframe}m
+
+🛑 **نوع معامله:** ${signal.type === 'BUY' ? 'خرید (BUY) 🟢' : 'فروش (SELL) 🔴'}
+🎯 **اطمینان:** ${signal.confidence || 99}%
+
+💵 **نقطه ورود:** ${signal.entry.toLocaleString()}
+🛡 **حد ضرر (SL):** ${signal.sl.toLocaleString()}
+
+💰 **تارگت ۱:** ${signal.tp1.toLocaleString()}
+💰 **تارگت ۲:** ${signal.tp2.toLocaleString()}
+💰 **تارگت ۳:** ${signal.tp3.toLocaleString()}
+
+--------------------------
+🔍 **وضعیت ساختار:**
+📏 سقف (Saghf): ${signal.saghf?.toLocaleString() || '---'}
+📏 کف (Kaf): ${signal.kaf?.toLocaleString() || '---'}
+--------------------------
+⚠️ مدیریت سرمایه فراموش نشود!
+`;
+
+        try {
+            await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: parseInt(chatId),
+                    text: message
+                })
+            });
+            console.log(`[Notification] Signal sent to Bale.`);
+        } catch (error) {
+            console.error(`[Notification] Failed to send to Bale:`, error);
+        }
+    }
+
     runStrategy() {
         const signal = this.strategy.analyze(this.candles, this.timeframe, this.liveStrategyType);
         if (signal) {
@@ -348,6 +414,9 @@ export class FarazGoldEngine {
                 this.signals.unshift(signal);
                 if (this.signals.length > 4) this.signals.pop();
                 console.log(`[Strategy] New Signal: ${signal.type} at ${signal.entry}`);
+                
+                // ارسال اعلان به بله
+                this.sendBaleNotification(signal);
             }
         }
     }
@@ -431,7 +500,15 @@ export class FarazGoldEngine {
             signals: this.signals,
             isRecording: this.isRecording,
             totalCandles: this.candles.length,
-            nPattern: nPattern // اضافه شدن اطلاعات ترسیم الگو
+            nPattern: nPattern, 
+            baleToken: this.baleToken,
+            baleChatId: this.baleChatId
         };
+    }
+
+    updateBaleConfig(token: string, chatId: string) {
+        this.baleToken = token;
+        this.baleChatId = chatId;
+        this.saveSettings();
     }
 }
