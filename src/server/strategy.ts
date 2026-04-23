@@ -318,32 +318,23 @@ export class TradingStrategy {
      */
     public getNPatternDrawing(candles: Candle[]) {
         if (candles.length < 20) return null;
-        
-        // همگام‌سازی با اسلایس ۴۰۰ کندلی که به کلاینت ارسال می‌شود
-        const sliceStart = Math.max(0, candles.length - 400);
         const lastCandle = candles[candles.length - 1];
 
         if (this.activeStructure) {
             const { A, B, C, targetD, status } = this.activeStructure;
             const points = [
-                { price: A.price, time: A.time, index: A.index - sliceStart, label: 'A' },
-                { price: B.price, time: B.time, index: B.index - sliceStart, label: 'B' }
+                { price: A.price, time: A.time, index: A.index, label: 'A' },
+                { price: B.price, time: B.time, index: B.index, label: 'B' }
             ];
 
             if (C) {
-                // نقطه C تثبیت شده در لحظه صدور سیگنال
-                points.push({ price: C.price, time: C.time, index: C.index - sliceStart, label: 'C' });
-                
-                // تخمین زمانی و ایندکسی برای نقطه D
+                points.push({ price: C.price, time: C.time, index: C.index, label: 'C' });
                 const idxDiff = Math.abs(B.index - A.index);
-                const estIdxD = (C.index - sliceStart) + Math.round(idxDiff * 0.8);
+                const estIdxD = C.index + Math.round(idxDiff * 0.8);
                 const timeDiff = Math.abs(B.time - A.time);
-                const estTimeD = C.time + (timeDiff * 0.8);
-                
-                points.push({ price: targetD, time: estTimeD, index: estIdxD, label: 'D' });
+                points.push({ price: targetD, time: C.time + (timeDiff * 0.8), index: estIdxD, label: 'D' });
             } else {
-                // در حال طی کردن موج اصلاحی (C متحرک)
-                points.push({ price: lastCandle.close, time: lastCandle.time, index: (candles.length - 1) - sliceStart, label: 'C' });
+                points.push({ price: lastCandle.close, time: lastCandle.time, index: candles.length - 1, label: 'C' });
             }
 
             return {
@@ -354,8 +345,7 @@ export class TradingStrategy {
             };
         }
         
-        // نمایش آماده‌باش برای شروع موج جدید (بصری)
-        const pivots = this.getSwingPivots(candles, 6, 3);
+        const pivots = this.getSwingPivots(candles, 7, 3);
         if (pivots.length >= 2) {
             const p1 = pivots[pivots.length - 2]; 
             const p2 = pivots[pivots.length - 1]; 
@@ -411,7 +401,6 @@ export class TradingStrategy {
             }
         }
 
-        // ۲. شناسایی موج جدید
         if (!this.activeStructure) {
             const pivots = this.getSwingPivots(candles, 7, 3);
             if (pivots.length >= 2) {
@@ -419,8 +408,11 @@ export class TradingStrategy {
                 const p2 = pivots[pivots.length - 1];
                 const wave = Math.abs(p2.price - p1.price);
                 const timeDist = Math.abs(p2.index - p1.index);
+                
+                // حساسیت هوشمند بر اساس قیمت: حداقل ۰.۰۵٪ نوسان برای شروع موج
+                const minWave = lastCandle.close * 0.0005;
 
-                if (p1.type !== p2.type && timeDist >= 5 && wave >= atr * 0.7) {
+                if (p1.type !== p2.type && timeDist >= 4 && wave >= minWave) {
                     this.activeStructure = {
                         A: p1, B: p2, C: null, isLockedB: false, targetD: 0, status: 'MONITORING'
                     };

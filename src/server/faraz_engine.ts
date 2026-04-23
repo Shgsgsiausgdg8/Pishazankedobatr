@@ -430,6 +430,7 @@ export class FarazGoldEngine {
             levels: this.levels,
             signals: this.signals,
             isRecording: this.isRecording,
+            totalCandles: this.candles.length,
             nPattern: nPattern // اضافه شدن اطلاعات ترسیم الگو
         };
     }

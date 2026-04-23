@@ -12,7 +12,7 @@ const SquareIcon = () => (
 );
 
 // --- Custom Canvas Chart Component ---
-const CandlestickChart = ({ data, levels, nPattern }: { data: any[], levels: any[], nPattern?: any }) => {
+const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount }: { data: any[], levels: any[], nPattern?: any, originalCandlesCount: number }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [viewState, setViewState] = useState({ offset: 0, zoom: 1, followLatest: true });
@@ -211,21 +211,24 @@ const CandlestickChart = ({ data, levels, nPattern }: { data: any[], levels: any
       const lastCandleIdx = data.length - 1;
       const candleInterval = data.length > 1 ? data[1].time - data[0].time : 60000;
 
+      // محاسبه ایندکس شروع برای همگام‌سازی با ایندکس‌های مطلق سرور
+      const sliceStart = Math.max(0, originalCandlesCount - data.length);
+
       nPattern.points.forEach((p: any) => {
         let x = 0;
         
-        // اولویت اول: استفاده از ایندکس دقیق سرور (Zero-Lag)
+        // همگام‌سازی ایندکس با کسر کردن آفستِ اسلایس ۴۰۰ تایی
         if (p.index !== undefined) {
-          x = getX(p.index);
+          x = getX(p.index - sliceStart);
         } else {
-          // بک‌آپ: پیدا کردن بر اساس زمان
+          // فال‌بک زمانی (برای اطمینان)
           const cIdx = data.findIndex(c => c.time === p.time);
           if (cIdx !== -1) {
             x = getX(cIdx);
           } else {
             const lastCandleTime = data[lastCandleIdx].time;
             let offset = (p.time - lastCandleTime) / candleInterval;
-            x = getX(lastCandleIdx + Math.min(Math.max(offset, -100), 50));
+            x = getX(lastCandleIdx + Math.min(Math.max(offset, -50), 50));
           }
         }
         
@@ -249,14 +252,14 @@ const CandlestickChart = ({ data, levels, nPattern }: { data: any[], levels: any
       nPattern.points.forEach((p: any) => {
           let x = 0;
           if (p.index !== undefined) {
-              x = getX(p.index);
+              x = getX(p.index - sliceStart);
           } else {
               const cIdx = data.findIndex(c => c.time === p.time);
               if (cIdx !== -1) {
                   x = getX(cIdx);
               } else {
                   let offset = (p.time - data[lastCandleIdx].time) / candleInterval;
-                  x = getX(lastCandleIdx + Math.min(Math.max(offset, -100), 50));
+                  x = getX(lastCandleIdx + Math.min(Math.max(offset, -50), 50));
               }
           }
           const y = getY(p.price);
@@ -705,6 +708,7 @@ export default function App() {
               data={data?.candles || []} 
               levels={data?.levels || []} 
               nPattern={data?.nPattern}
+              originalCandlesCount={data?.totalCandles || 0}
             />
           </div>
 

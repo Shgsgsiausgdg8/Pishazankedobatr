@@ -272,6 +272,7 @@ export class AlphaGoldEngine {
             levels: this.levels,
             signals: this.signals,
             isRecording: this.isRecording,
+            totalCandles: this.candles.length,
             nPattern: nPattern // ترسیم زنده الگو
         };
     }
