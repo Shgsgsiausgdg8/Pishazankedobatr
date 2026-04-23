@@ -451,7 +451,12 @@ export class TradingStrategy {
 
             return {
                 type: A.type === 'low' ? 'BUY' : 'SELL',
-                signalPrice: lastPrice, atr, range: abRange, kaf: A.price, saghf: B.price, isNPattern: true,
+                signalPrice: lastPrice, 
+                atr, 
+                range: abRange, 
+                kaf: A.type === 'low' ? A.price : B.price, 
+                saghf: A.type === 'low' ? B.price : A.price, 
+                isNPattern: true,
                 confidence: 99
             };
         }
