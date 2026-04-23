@@ -364,13 +364,23 @@ export class TradingStrategy {
         return { points: [], totalCount: this.totalPatternsCount };
     }
 
+    private calculateSMA(candles: Candle[], period: number) {
+        if (candles.length < period) return null;
+        let sum = 0;
+        for (let i = candles.length - period; i < candles.length; i++) {
+            sum += candles[i].close;
+        }
+        return sum / period;
+    }
+
     private detectNPattern(candles: Candle[]) {
-        if (candles.length < 50) return null;
+        if (candles.length < 200) return null;
 
         const lastCandle = candles[candles.length - 1];
         const prevCandle = candles[candles.length - 2];
         const lastPrice = lastCandle.close;
         const atr = this.calculateATR(candles, 14);
+        const sma200 = this.calculateSMA(candles, 200);
 
         // ۱. مدیریت ساختار (باطل کردن سریع)
         if (this.activeStructure) {
@@ -463,12 +473,15 @@ export class TradingStrategy {
             ? (lastPrice > extremeC + reversalThreshold) 
             : (lastPrice < extremeC - reversalThreshold);
 
-        if (!isLockedB && pullbackPct >= 0.30 && pullbackPct <= 0.85 && isReversing) {
+        // فیلتر SMA-200: فقط در جهت روند اصلی وارد شو
+        const isTrendAligned = A.type === 'low' ? (lastPrice > sma200!) : (lastPrice < sma200!);
+
+        if (!isLockedB && pullbackPct >= 0.30 && pullbackPct <= 0.85 && isReversing && isTrendAligned) {
             this.activeStructure.isLockedB = true;
             this.activeStructure.status = 'SIGNALLED';
             this.totalPatternsCount++;
             
-            const patternKey = `N_V18.2_${A.time}_${B.time}`;
+            const patternKey = `N_V19_${A.time}_${B.time}`;
             if (this.lastPatternKey === patternKey) return null;
             this.lastPatternKey = patternKey;
 
