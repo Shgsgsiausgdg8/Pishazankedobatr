@@ -30,12 +30,14 @@ export interface Signal {
 export class TradingStrategy {
     private lastSignalTime: number = 0;       // جلوگیری از سیگنال‌های تکراری
     private lastPatternKey: string | null = null;    // کلید منحصربه‌فرد الگو
+    private totalPatternsCount: number = 0;
     private activeStructure: { 
         A: { type: 'high' | 'low', price: number, index: number, time: number }, 
         B: { type: 'high' | 'low', price: number, index: number, time: number },
         C: { price: number, time: number } | null,
         isLockedB: boolean,
-        targetD: number
+        targetD: number,
+        status: 'MONITORING' | 'SIGNALLED'
     } | null = null;
 
     constructor() {}
@@ -307,115 +309,114 @@ export class TradingStrategy {
     /**
      * اطلاعات ترسیم زنده الگوی N برای نمایش در چارت
      */
+    public getTotalPatternsCount() {
+        return this.totalPatternsCount;
+    }
+
+    /**
+     * اطلاعات ترسیم زنده الگوی N برای نمایش در چارت
+     */
     public getNPatternDrawing(candles: Candle[]) {
         if (candles.length < 20) return null;
-        
         const lastCandle = candles[candles.length - 1];
 
-        // نمایش پیوت‌های معتبر برای جلب اطمینان کاربر از روند فعلی
         if (this.activeStructure) {
-            const { A, B, C, targetD } = this.activeStructure;
+            const { A, B, C, targetD, status } = this.activeStructure;
             const points = [
                 { price: A.price, time: A.time, label: 'A' },
                 { price: B.price, time: B.time, label: 'B' }
             ];
 
             if (C) {
+                // نقطه C تثبیت شده در لحظه صدور سیگنال
                 points.push({ price: C.price, time: C.time, label: 'C' });
-                // برای D یک زمان تخمینی در آینده (بر اساس طول موج AB)
-                const timeDiff = B.time - A.time;
-                points.push({ price: targetD, time: lastCandle.time + (timeDiff * 0.7), label: 'D' });
+                // تخمین زمانی برای نقطه D (با حفظ تناسب زمانی موج AB)
+                const abDuration = B.time - A.time;
+                points.push({ price: targetD, time: lastCandle.time + (abDuration * 0.6), label: 'D' });
             } else {
+                // در حال طی کردن موج اصلاحی (C متحرک)
                 points.push({ price: lastCandle.close, time: lastCandle.time, label: 'C' });
             }
 
             return {
                 points,
                 type: A.type === 'low' ? 'BUY' : 'SELL',
-                isConfirmed: !!C
+                isConfirmed: status === 'SIGNALLED',
+                totalCount: this.totalPatternsCount
             };
         }
         
-        // اگر ساختار فعال نداریم، آخرین نوسان شناسایی شده را نشان بده
-        const pivots = this.getSwingPivots(candles, 5, 2);
-        if (pivots.length < 2) return null;
-        
-        const p1 = pivots[pivots.length - 2]; 
-        const p2 = pivots[pivots.length - 1]; 
-        
-        return {
-            points: [
-                { price: p1.price, time: p1.time, label: 'A' },
-                { price: p2.price, time: p2.time, label: 'B' },
-                { price: lastCandle.close, time: lastCandle.time, label: 'C' }
-            ],
-            type: p1.type === 'low' ? 'BUY' : 'SELL',
-            isConfirmed: false
-        };
+        // نمایش آماده‌باش برای شروع موج جدید (بصری)
+        const pivots = this.getSwingPivots(candles, 6, 3);
+        if (pivots.length >= 2) {
+            const p1 = pivots[pivots.length - 2]; 
+            const p2 = pivots[pivots.length - 1]; 
+            return {
+                points: [
+                    { price: p1.price, time: p1.time, label: 'A' },
+                    { price: p2.price, time: p2.time, label: 'B' },
+                    { price: lastCandle.close, time: lastCandle.time, label: 'C' }
+                ],
+                type: p1.type === 'low' ? 'BUY' : 'SELL',
+                isConfirmed: false,
+                totalCount: this.totalPatternsCount
+            };
+        }
+
+        return { points: [], totalCount: this.totalPatternsCount };
     }
 
     private detectNPattern(candles: Candle[]) {
         if (candles.length < 40) return null;
 
-        const lastPrice = candles[candles.length - 1].close;
+        const lastCandle = candles[candles.length - 1];
+        const lastPrice = lastCandle.close;
         const atr = this.calculateATR(candles, 14);
 
-        // ۱. نگهداری ساختار در حال اجرا (لنگر A نباید جابجا شود)
+        // ۱. مدیریت ساختار در حال پایش
         if (this.activeStructure) {
-            const { A, B, isLockedB, targetD } = this.activeStructure;
+            const { A, B, targetD, status, isLockedB } = this.activeStructure;
             
-            // باطل شدن ساختار (شکست لنگر A)
-            if (A.type === 'low' && lastPrice < A.price) { this.activeStructure = null; return null; }
-            if (A.type === 'high' && lastPrice > A.price) { this.activeStructure = null; return null; }
+            // شرط ابطال: شکست قطعی لنگر اصلی A (دشمن اصلی الگو)
+            if (A.type === 'low' && lastPrice < (A.price * 0.9999)) { this.activeStructure = null; return null; }
+            if (A.type === 'high' && lastPrice > (A.price * 1.0001)) { this.activeStructure = null; return null; }
 
-            const waveRange = Math.abs(B.price - A.price);
+            const abRange = Math.abs(B.price - A.price);
             const currentPullback = Math.abs(B.price - lastPrice);
-            const pullbackPct = currentPullback / waveRange;
+            const pullbackPct = currentPullback / abRange;
 
-            // اگر به هدف سود (D) رسیدیم، الگو را تمام کن
+            // شرط تکمیل: برخورد با هدف یا پایان اصلاح عمیق
             if (targetD > 0) {
                 const reached = A.type === 'low' ? lastPrice >= targetD : lastPrice <= targetD;
                 if (reached) { this.activeStructure = null; return null; }
             }
+            if (pullbackPct > 0.65) { this.activeStructure = null; return null; }
 
-            // فیلتر هوشمند: اگر اصلاح خیلی عمیق شد (بیش از ۵۰٪ موج)، این دیگر الگوی N اسکالپ نیست
-            if (pullbackPct > 0.50) {
-                this.activeStructure = null; 
-                return null; 
-            }
-
-            // دنبال کردن نقطه B (Dynamic B trailing)
+            // دنبال کردن نقطه B (تا زمان شروع اصلاح معتبر)
             if (!isLockedB) {
                 if (A.type === 'low' && lastPrice > B.price) {
-                    this.activeStructure.B = { type: 'high', price: lastPrice, index: candles.length - 1, time: candles[candles.length - 1].time };
+                    this.activeStructure.B = { type: 'high', price: lastPrice, index: candles.length - 1, time: lastCandle.time };
                     return null;
                 }
                 if (A.type === 'high' && lastPrice < B.price) {
-                    this.activeStructure.B = { type: 'low', price: lastPrice, index: candles.length - 1, time: candles[candles.length - 1].time };
+                    this.activeStructure.B = { type: 'low', price: lastPrice, index: candles.length - 1, time: lastCandle.time };
                     return null;
                 }
             }
         }
 
-        // ۲. شناسایی موج اصلی جدید (مناسب برای اسکالپ)
+        // ۲. شناسایی موج استارت (A -> B)
         if (!this.activeStructure) {
-            // استفاده از عمق ۵ برای پیدا کردن پیوت‌های پرایس‌اکشنی
-            const pivots = this.getSwingPivots(candles, 5, 2);
+            const pivots = this.getSwingPivots(candles, 6, 3);
             if (pivots.length >= 2) {
                 const p1 = pivots[pivots.length - 2];
                 const p2 = pivots[pivots.length - 1];
-                const barDistance = Math.abs(p2.index - p1.index);
-                const waveRange = Math.abs(p2.price - p1.price);
+                const distance = Math.abs(p2.index - p1.index);
+                const wave = Math.abs(p2.price - p1.price);
 
-                // فیلترهای پایداری (مناسب اسکالپ): 
-                // فاصله زمانی حداقل ۴ کندل، قدرت موج حداقل ۰.۵ ATR
-                if (p1.type !== p2.type && barDistance >= 4 && waveRange >= atr * 0.5) {
-                    this.activeStructure = { 
-                        A: p1, 
-                        B: p2, 
-                        C: null, 
-                        isLockedB: false, 
-                        targetD: 0 
+                if (p1.type !== p2.type && distance >= 5 && wave >= atr * 0.6) {
+                    this.activeStructure = {
+                        A: p1, B: p2, C: null, isLockedB: false, targetD: 0, status: 'MONITORING'
                     };
                 }
             }
@@ -423,34 +424,33 @@ export class TradingStrategy {
 
         if (!this.activeStructure) return null;
 
-        // ۳. بررسی شرایط ورود (اصلاح نجیب برای الگوی N)
-        const { A, B, isLockedB } = this.activeStructure;
-        const range = Math.abs(B.price - A.price);
+        // ۳. بررسی شرط ورود (نقطه C معتبر)
+        const { A, B, isLockedB, status } = this.activeStructure;
+        if (status === 'SIGNALLED') return null;
+
+        const abRange = Math.abs(B.price - A.price);
         const pullback = Math.abs(B.price - lastPrice);
-        const pullbackPercent = pullback / range;
+        const pullbackPct = pullback / abRange;
 
-        // شرايط ورود (اصلاح بین ۵٪ تا ۴۰٪ موج اصلی)
-        if (!isLockedB && pullbackPercent >= 0.05 && pullbackPercent <= 0.40) {
-            this.activeStructure.isLockedB = true; 
-            this.activeStructure.C = { price: lastPrice, time: candles[candles.length - 1].time };
+        // ورود هوشمند در اصلاح ۱۰٪ تا ۴۰٪
+        if (!isLockedB && pullbackPct >= 0.10 && pullbackPct <= 0.40) {
+            this.activeStructure.isLockedB = true;
+            this.activeStructure.C = { price: lastPrice, time: lastCandle.time };
+            this.activeStructure.status = 'SIGNALLED';
             
-            // محاسبه هدف D (تارگت کلاسیک ۹۰٪ موج AB برای اطمینان بیشتر در اسکالپ)
-            const targetD = A.type === 'low' ? lastPrice + (range * 0.9) : lastPrice - (range * 0.9);
+            // هدف D = گسترش ۱۰۰٪ فیبوناچی
+            const targetD = A.type === 'low' ? lastPrice + (abRange * 1.0) : lastPrice - (abRange * 1.0);
             this.activeStructure.targetD = targetD;
+            this.totalPatternsCount++; // افزایش شمارنده دقیق
 
-            const patternKey = `N_SCALP_V14_${A.time}_${B.time}`;
+            const patternKey = `N_V15_FINAL_${A.time}_${B.time}`;
             if (this.lastPatternKey === patternKey) return null;
             this.lastPatternKey = patternKey;
 
-            return { 
-                type: A.type === 'low' ? 'BUY' : 'SELL', 
-                signalPrice: lastPrice, 
-                atr, 
-                range, 
-                kaf: A.price, 
-                saghf: B.price, 
-                isNPattern: true, 
-                confidence: 96 
+            return {
+                type: A.type === 'low' ? 'BUY' : 'SELL',
+                signalPrice: lastPrice, atr, range: abRange, kaf: A.price, saghf: B.price, isNPattern: true,
+                confidence: 99
             };
         }
 

@@ -194,7 +194,7 @@ const CandlestickChart = ({ data, levels, nPattern }: { data: any[], levels: any
     if (nPattern && nPattern.points && nPattern.points.length >= 2) {
       const isConfirmed = nPattern.isConfirmed;
       ctx.strokeStyle = nPattern.type === 'BUY' ? '#10b981' : '#ef4444';
-      ctx.lineWidth = isConfirmed ? 4 : 2.5; // ضخیم‌تر برای سیگنال تایید شده
+      ctx.lineWidth = isConfirmed ? 5 : 2.5; // ضخیم‌تر برای سیگنال تایید شده
       
       // اگر سیگنال تایید شده است، خط توپر بکش، در غیر این صورت خط‌چین (Pending)
       if (!isConfirmed) {
@@ -202,12 +202,15 @@ const CandlestickChart = ({ data, levels, nPattern }: { data: any[], levels: any
       } else {
         ctx.setLineDash([]);
         // افکت درخشش برای دید بهتر (Glow)
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = nPattern.type === 'BUY' ? '#10b981' : '#ef4444';
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = nPattern.type === 'BUY' ? 'rgba(16, 185, 129, 0.8)' : 'rgba(239, 68, 68, 0.8)';
       }
       
       ctx.beginPath();
       let drewFirst = false;
+      const lastCandleIdx = data.length - 1;
+      const candleInterval = data.length > 1 ? data[1].time - data[0].time : 60000;
+
       nPattern.points.forEach((p: any) => {
         let x = 0;
         const cIdx = data.findIndex(c => c.time === p.time);
@@ -215,11 +218,15 @@ const CandlestickChart = ({ data, levels, nPattern }: { data: any[], levels: any
         if (cIdx !== -1) {
           x = getX(cIdx);
         } else {
-          // Future projection for Target D
-          const lastCandleIdx = data.length - 1;
-          const timeDiff = p.time - data[lastCandleIdx].time;
-          const candleInterval = data.length > 1 ? data[1].time - data[0].time : 60000;
-          x = getX(lastCandleIdx + (timeDiff / candleInterval));
+          // Future projection safety check: don't let it jump to infinity or far backwards
+          const lastCandleTime = data[lastCandleIdx].time;
+          let timeDiff = p.time - lastCandleTime;
+          let offset = timeDiff / candleInterval;
+          
+          if (offset < 0) offset = 0; 
+          if (offset > 50) offset = 50; // Max 50 candles future projection
+          
+          x = getX(lastCandleIdx + offset);
         }
         
         const y = getY(p.price);
@@ -244,28 +251,39 @@ const CandlestickChart = ({ data, levels, nPattern }: { data: any[], levels: any
           if (cIdx !== -1) {
               x = getX(cIdx);
           } else {
-              const lastCandleIdx = data.length - 1;
-              const timeDiff = p.time - data[lastCandleIdx].time;
-              const candleInterval = data.length > 1 ? data[1].time - data[0].time : 60000;
-              x = getX(lastCandleIdx + (timeDiff / candleInterval));
+              const lastCandleTime = data[lastCandleIdx].time;
+              let timeDiff = p.time - lastCandleTime;
+              let offset = timeDiff / candleInterval;
+              if (offset < 0) offset = 0;
+              if (offset > 50) offset = 50;
+              x = getX(lastCandleIdx + offset);
           }
           const y = getY(p.price);
           
-          // Points Glow
+          // Points Glow Marker
           ctx.fillStyle = nPattern.type === 'BUY' ? '#10b981' : '#ef4444';
           ctx.beginPath();
-          ctx.arc(x, y, 6, 0, Math.PI * 2); // نقاط بزرگتر برای موبایل
+          ctx.arc(x, y, 7, 0, Math.PI * 2); // نقاط بزرگتر برای موبایل
           ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2;
+          ctx.stroke();
           
           // Label Box
           const label = p.label || '';
-          ctx.fillStyle = 'rgba(0,0,0,0.7)';
-          ctx.fillRect(x - 12, y - 32, 24, 20);
+          const labelOffset = (label === 'A' || label === 'C') ? 28 : -28;
           
-          ctx.fillStyle = '#fff';
-          ctx.font = 'bold 15px Inter';
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
+          ctx.fillRect(x - 14, y + labelOffset - 12, 28, 24);
+          ctx.strokeStyle = nPattern.type === 'BUY' ? '#10b981' : '#ef4444';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(x - 14, y + labelOffset - 12, 28, 24);
+          
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 16px Inter';
           ctx.textAlign = 'center';
-          ctx.fillText(label, x, y - 17);
+          ctx.textBaseline = 'middle';
+          ctx.fillText(label, x, y + labelOffset);
       });
     }
 
@@ -645,7 +663,9 @@ export default function App() {
             <div style={{ color: '#94a3b8', fontSize: '0.8rem', marginBottom: '8px' }}>وضعیت ساختار بازار</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold', color: '#3b82f6' }}>
                <div className="pulse" />
-               {data?.liveStrategy === 'N-PATTERN' ? 'در حال پایش الگوی N' : 'اسکلپ لحظه‌ای'}
+               {data?.liveStrategy === 'N-PATTERN' 
+                 ? `در حال پایش (الگوها: ${data?.nPattern?.totalCount || 0})` 
+                 : 'اسکلپ لحظه‌ای'}
             </div>
             <div style={{ fontSize: '0.65rem', color: '#475569', marginTop: '4px' }}>
                آپدیت خودکار (مانور و میژور)
