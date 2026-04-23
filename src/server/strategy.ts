@@ -426,26 +426,49 @@ export class TradingStrategy {
         const { A, B, isLockedB, status } = this.activeStructure;
         if (status === 'SIGNALLED') return null;
 
+        // پیدا کردن سقف/کفِ واقعی موج اصلاحی (C)
+        let extremeC = B.price;
+        let cIdx = B.index;
+        let cTime = B.time;
+
+        for (let i = B.index + 1; i < candles.length; i++) {
+            if (A.type === 'low') { // N صعودی -> دنبال کمترین قیمت اصلاحی
+                if (candles[i].low <= extremeC) {
+                    extremeC = candles[i].low;
+                    cIdx = i;
+                    cTime = candles[i].time;
+                }
+            } else { // N نزولی -> دنبال بیشترین قیمت اصلاحی
+                if (candles[i].high >= extremeC) {
+                    extremeC = candles[i].high;
+                    cIdx = i;
+                    cTime = candles[i].time;
+                }
+            }
+        }
+
+        // آپدیت نقطه C و هدف D به صورت لحظه‌ای
+        // این کار باعث می‌شود چارت قبل از سیگنال هم دقیق باشد
+        this.activeStructure.C = { price: extremeC, time: cTime, index: cIdx };
         const abRange = Math.abs(B.price - A.price);
-        const pullback = Math.abs(B.price - lastPrice);
+        const targetD = A.type === 'low' ? extremeC + (abRange * 1.0) : extremeC - (abRange * 1.0);
+        this.activeStructure.targetD = targetD;
+
+        const pullback = Math.abs(B.price - extremeC);
         const pullbackPct = pullback / abRange;
 
-        // شرط ورود:
-        // ۱. قیمت در محدوده ۳۰٪ تا ۷۰٪ اصلاح باشد
-        // ۲. یک تاییدیه بازگشت (مثلاً کندل فعلی بالاتر از قبلی در بای) ببینیم
-        const isReversing = A.type === 'low' ? (lastPrice > prevCandle.close) : (lastPrice < prevCandle.close);
+        // تاییدیه بازگشت: قیمت باید حداقل ۲٪ از کل موج از سقفِ C فاصله بگیرد
+        const reversalThreshold = abRange * 0.02; 
+        const isReversing = A.type === 'low' 
+            ? (lastPrice > extremeC + reversalThreshold) 
+            : (lastPrice < extremeC - reversalThreshold);
 
-        if (!isLockedB && pullbackPct >= 0.30 && pullbackPct <= 0.70 && isReversing) {
+        if (!isLockedB && pullbackPct >= 0.30 && pullbackPct <= 0.85 && isReversing) {
             this.activeStructure.isLockedB = true;
-            this.activeStructure.C = { price: lastPrice, time: lastCandle.time, index: candles.length - 1 };
             this.activeStructure.status = 'SIGNALLED';
-            
-            // محاسبه تارگت D (صد درصد پراجکشن)
-            const targetD = A.type === 'low' ? lastPrice + (abRange * 1.0) : lastPrice - (abRange * 1.0);
-            this.activeStructure.targetD = targetD;
             this.totalPatternsCount++;
-
-            const patternKey = `N_V16_${A.time}_${B.time}`;
+            
+            const patternKey = `N_V18.2_${A.time}_${B.time}`;
             if (this.lastPatternKey === patternKey) return null;
             this.lastPatternKey = patternKey;
 
