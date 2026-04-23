@@ -213,23 +213,25 @@ const CandlestickChart = ({ data, levels, nPattern }: { data: any[], levels: any
 
       nPattern.points.forEach((p: any) => {
         let x = 0;
-        const cIdx = data.findIndex(c => c.time === p.time);
         
-        if (cIdx !== -1) {
-          x = getX(cIdx);
+        // اولویت اول: استفاده از ایندکس دقیق سرور (Zero-Lag)
+        if (p.index !== undefined) {
+          x = getX(p.index);
         } else {
-          // Future projection safety check: don't let it jump to infinity or far backwards
-          const lastCandleTime = data[lastCandleIdx].time;
-          let timeDiff = p.time - lastCandleTime;
-          let offset = timeDiff / candleInterval;
-          
-          if (offset < 0) offset = 0; 
-          if (offset > 50) offset = 50; // Max 50 candles future projection
-          
-          x = getX(lastCandleIdx + offset);
+          // بک‌آپ: پیدا کردن بر اساس زمان
+          const cIdx = data.findIndex(c => c.time === p.time);
+          if (cIdx !== -1) {
+            x = getX(cIdx);
+          } else {
+            const lastCandleTime = data[lastCandleIdx].time;
+            let offset = (p.time - lastCandleTime) / candleInterval;
+            x = getX(lastCandleIdx + Math.min(Math.max(offset, -100), 50));
+          }
         }
         
         const y = getY(p.price);
+        if (Number.isNaN(x) || Number.isNaN(y)) return;
+
         if (!drewFirst) {
           ctx.moveTo(x, y);
           drewFirst = true;
@@ -244,46 +246,45 @@ const CandlestickChart = ({ data, levels, nPattern }: { data: any[], levels: any
       ctx.setLineDash([]);
       
       // Draw labels A, B, C, D with high visibility
-      nPattern.points.forEach((p: any, idx: number) => {
+      nPattern.points.forEach((p: any) => {
           let x = 0;
-          const cIdx = data.findIndex(c => c.time === p.time);
-          
-          if (cIdx !== -1) {
-              x = getX(cIdx);
+          if (p.index !== undefined) {
+              x = getX(p.index);
           } else {
-              const lastCandleTime = data[lastCandleIdx].time;
-              let timeDiff = p.time - lastCandleTime;
-              let offset = timeDiff / candleInterval;
-              if (offset < 0) offset = 0;
-              if (offset > 50) offset = 50;
-              x = getX(lastCandleIdx + offset);
+              const cIdx = data.findIndex(c => c.time === p.time);
+              if (cIdx !== -1) {
+                  x = getX(cIdx);
+              } else {
+                  let offset = (p.time - data[lastCandleIdx].time) / candleInterval;
+                  x = getX(lastCandleIdx + Math.min(Math.max(offset, -100), 50));
+              }
           }
           const y = getY(p.price);
+          if (Number.isNaN(x) || Number.isNaN(y)) return;
           
-          // Points Glow Marker
           ctx.fillStyle = nPattern.type === 'BUY' ? '#10b981' : '#ef4444';
           ctx.beginPath();
-          ctx.arc(x, y, 7, 0, Math.PI * 2); // نقاط بزرگتر برای موبایل
+          ctx.arc(x, y, 6, 0, Math.PI * 2); 
           ctx.fill();
           ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 2;
+          ctx.lineWidth = 1.5;
           ctx.stroke();
           
-          // Label Box
           const label = p.label || '';
-          const labelOffset = (label === 'A' || label === 'C') ? 28 : -28;
+          const isUpper = label === 'B' || label === 'D';
+          const labelY = isUpper ? y - 32 : y + 32;
           
-          ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
-          ctx.fillRect(x - 14, y + labelOffset - 12, 28, 24);
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+          ctx.fillRect(x - 12, labelY - 10, 24, 20);
           ctx.strokeStyle = nPattern.type === 'BUY' ? '#10b981' : '#ef4444';
           ctx.lineWidth = 1;
-          ctx.strokeRect(x - 14, y + labelOffset - 12, 28, 24);
+          ctx.strokeRect(x - 12, labelY - 10, 24, 20);
           
           ctx.fillStyle = '#ffffff';
-          ctx.font = 'bold 16px Inter';
           ctx.textAlign = 'center';
+          ctx.font = 'bold 12px Inter';
           ctx.textBaseline = 'middle';
-          ctx.fillText(label, x, y + labelOffset);
+          ctx.fillText(label, x, labelY);
       });
     }
 

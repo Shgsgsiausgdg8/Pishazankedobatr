@@ -34,7 +34,7 @@ export class TradingStrategy {
     private activeStructure: { 
         A: { type: 'high' | 'low', price: number, index: number, time: number }, 
         B: { type: 'high' | 'low', price: number, index: number, time: number },
-        C: { price: number, time: number } | null,
+        C: { price: number, time: number, index: number } | null,
         isLockedB: boolean,
         targetD: number,
         status: 'MONITORING' | 'SIGNALLED'
@@ -318,24 +318,32 @@ export class TradingStrategy {
      */
     public getNPatternDrawing(candles: Candle[]) {
         if (candles.length < 20) return null;
+        
+        // همگام‌سازی با اسلایس ۴۰۰ کندلی که به کلاینت ارسال می‌شود
+        const sliceStart = Math.max(0, candles.length - 400);
         const lastCandle = candles[candles.length - 1];
 
         if (this.activeStructure) {
             const { A, B, C, targetD, status } = this.activeStructure;
             const points = [
-                { price: A.price, time: A.time, label: 'A' },
-                { price: B.price, time: B.time, label: 'B' }
+                { price: A.price, time: A.time, index: A.index - sliceStart, label: 'A' },
+                { price: B.price, time: B.time, index: B.index - sliceStart, label: 'B' }
             ];
 
             if (C) {
                 // نقطه C تثبیت شده در لحظه صدور سیگنال
-                points.push({ price: C.price, time: C.time, label: 'C' });
-                // تخمین زمانی برای نقطه D (با حفظ تناسب زمانی موج AB)
-                const abDuration = B.time - A.time;
-                points.push({ price: targetD, time: lastCandle.time + (abDuration * 0.6), label: 'D' });
+                points.push({ price: C.price, time: C.time, index: C.index - sliceStart, label: 'C' });
+                
+                // تخمین زمانی و ایندکسی برای نقطه D
+                const idxDiff = Math.abs(B.index - A.index);
+                const estIdxD = (C.index - sliceStart) + Math.round(idxDiff * 0.8);
+                const timeDiff = Math.abs(B.time - A.time);
+                const estTimeD = C.time + (timeDiff * 0.8);
+                
+                points.push({ price: targetD, time: estTimeD, index: estIdxD, label: 'D' });
             } else {
                 // در حال طی کردن موج اصلاحی (C متحرک)
-                points.push({ price: lastCandle.close, time: lastCandle.time, label: 'C' });
+                points.push({ price: lastCandle.close, time: lastCandle.time, index: (candles.length - 1) - sliceStart, label: 'C' });
             }
 
             return {
@@ -353,9 +361,9 @@ export class TradingStrategy {
             const p2 = pivots[pivots.length - 1]; 
             return {
                 points: [
-                    { price: p1.price, time: p1.time, label: 'A' },
-                    { price: p2.price, time: p2.time, label: 'B' },
-                    { price: lastCandle.close, time: lastCandle.time, label: 'C' }
+                    { price: p1.price, time: p1.time, index: p1.index, label: 'A' },
+                    { price: p2.price, time: p2.time, index: p2.index, label: 'B' },
+                    { price: lastCandle.close, time: lastCandle.time, index: candles.length - 1, label: 'C' }
                 ],
                 type: p1.type === 'low' ? 'BUY' : 'SELL',
                 isConfirmed: false,
@@ -437,7 +445,7 @@ export class TradingStrategy {
 
         if (!isLockedB && pullbackPct >= 0.30 && pullbackPct <= 0.70 && isReversing) {
             this.activeStructure.isLockedB = true;
-            this.activeStructure.C = { price: lastPrice, time: lastCandle.time };
+            this.activeStructure.C = { price: lastPrice, time: lastCandle.time, index: candles.length - 1 };
             this.activeStructure.status = 'SIGNALLED';
             
             // محاسبه تارگت D (صد درصد پراجکشن)
