@@ -42,6 +42,41 @@ export class TradingStrategy {
 
     constructor() {}
 
+    private analyzeHybrid(candles: Candle[], timeframe: string) {
+        // ۱. ابتدا الگوی N را بررسی کن
+        const nResult = this.detectNPattern(candles);
+        if (!nResult || !this.activeStructure) return null;
+
+        // ۲. تاییدیه اسکلپ را بگیر
+        const rsi = this.calculateRSI(candles, 14);
+        const ema9 = this.calculateEMA(candles, 9);
+        const ema21 = this.calculateEMA(candles, 21);
+        
+        const lastRSI = rsi[rsi.length - 1];
+        const lastE9 = ema9[ema9.length - 1];
+        const lastE21 = ema21[ema21.length - 1];
+
+        const isNConfirmed = this.activeStructure.status === 'SIGNALLED';
+        if (!isNConfirmed) return null;
+
+        let hybridConfirmed = false;
+        if (this.activeStructure.A.type === 'low') { // خرید
+            const isEmaBullish = lastE9 >= lastE21;
+            const isRsiBullish = lastRSI > 40;
+            if (isEmaBullish && isRsiBullish) hybridConfirmed = true;
+        } else { // فروش
+            const isEmaBearish = lastE9 <= lastE21;
+            const isRsiBearish = lastRSI < 60;
+            if (isEmaBearish && isRsiBearish) hybridConfirmed = true;
+        }
+
+        if (hybridConfirmed) {
+            return this.createSignalFromPattern(nResult, timeframe);
+        }
+
+        return null;
+    }
+
     /**
      * تابع اصلی تحلیل
      */
@@ -51,6 +86,8 @@ export class TradingStrategy {
         let result: any = null;
 
         switch (strategyType) {
+            case 'HYBRID':
+                return this.analyzeHybrid(candles, timeframe);
             case 'SCALP-ADV':
                 result = this.analyzeScalp(candles);
                 break;
@@ -598,12 +635,31 @@ export class TradingStrategy {
         let tp1, tp2, tp3, sl;
 
         if (isN) {
-            // مقادیر درخواستی کاربر برای الگوی N (کالیبره شده برای تایم پایین):
-            // تارگت ۱: ۰.۲٪ | تارگت ۲: ۰.۳۲٪ | تارگت ۳: ۰.۳۸٪
-            tp1 = isBuy ? entry * 1.002 : entry * 0.998;
-            tp2 = isBuy ? entry * 1.0032 : entry * 0.9968;
-            tp3 = isBuy ? entry * 1.0038 : entry * 0.9962;
-            sl = isBuy ? entry * 0.998 : entry * 1.002; // استاپ لاس ۰.۲٪
+            const structure = this.activeStructure!;
+            const A = structure.A;
+            const B = structure.B;
+            const C = structure.C!;
+            const abDist = Math.abs(A.price - B.price);
+
+            if (isBuy) {
+                // استاپ لاس: زیر حمایتِ نقطه A (با کمی فاصه برای جلوگیری از شکارِ استاپ)
+                sl = A.price - (atr * 0.5); 
+                // تارگت ۱: سقفِ قبلی (نقطه B) - جای که احتمال نوسان هست
+                tp1 = B.price;
+                // تارگت ۲: ۱۰۰٪ پراجکشن (هدف کلاسیک N)
+                tp2 = C.price + abDist;
+                // تارگت ۳: ۱۲۷٪ پراجکشن (امتداد روند)
+                tp3 = C.price + (abDist * 1.27);
+            } else {
+                // استاپ لاس: بالای مقاومتِ نقطه A
+                sl = A.price + (atr * 0.5);
+                // تارگت ۱: کفِ قبلی (نقطه B)
+                tp1 = B.price;
+                // تارگت ۲: ۱۰۰٪ پراجکشن
+                tp2 = C.price - abDist;
+                // تارگت ۳: ۱۲۷٪ پراجکشن
+                tp3 = C.price - (abDist * 1.27);
+            }
         } else {
             const slDist = atr * 1.5;
             const tpDist = atr * 2.1;

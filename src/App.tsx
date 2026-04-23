@@ -584,7 +584,7 @@ export default function App() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-start' }}>
               <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>استراتژی فعال:</span>
               <select 
-                value={data?.liveStrategy || 'SCALP-ADV'} 
+                value={data?.liveStrategy || 'HYBRID'} 
                 onChange={(e) => setLiveStrategy(e.target.value)}
                 style={{ 
                   background: '#020617', 
@@ -597,6 +597,7 @@ export default function App() {
                   cursor: 'pointer'
                 }}
               >
+                <option value="HYBRID">ترکیبی (Smart N)</option>
                 <option value="SCALP-ADV">اسکلپ</option>
                 <option value="PINBAR">پین‌بار</option>
                 <option value="N-PATTERN">الگوی N</option>
