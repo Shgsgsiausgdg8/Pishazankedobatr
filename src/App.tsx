@@ -581,6 +581,21 @@ export default function App() {
               >
                 آلفا گلد (انس)
               </button>
+              <button 
+                onClick={() => switchBroker('btc')}
+                style={{
+                  padding: '6px 16px',
+                  borderRadius: '10px',
+                  fontSize: '0.8rem',
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: activeBroker === 'btc' ? '#10b981' : 'transparent',
+                  color: activeBroker === 'btc' ? 'white' : '#94a3b8',
+                  transition: '0.2s'
+                }}
+              >
+                بیتکوین (BTC)
+              </button>
             </div>
           </div>
 
@@ -603,9 +618,11 @@ export default function App() {
               ⚙️ تنظیمات بله
             </button>
             <div className="ltr" style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>قیمت لحظه‌ای {activeBroker === 'faraz' ? '(مظنه)' : '(انس)'}</div>
+              <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
+                قیمت لحظه‌ای {activeBroker === 'faraz' ? '(مظنه)' : (activeBroker === 'alpha' ? '(انس)' : '(BTC)')}
+              </div>
               <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#10b981', fontFamily: 'var(--font-mono)' }}>
-                {activeBroker === 'alpha' 
+                {activeBroker === 'alpha' || activeBroker === 'btc'
                   ? data?.price?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'
                   : data?.price?.toLocaleString() || '0'
                 }
@@ -716,7 +733,7 @@ export default function App() {
           <div className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <div style={{ fontWeight: 'bold', color: '#94a3b8' }}>
-                {activeBroker === 'faraz' ? 'مظنه طلا' : 'انس جهانی (XAUUSD)'} ({data?.timeframe}m)
+                {activeBroker === 'faraz' ? 'مظنه طلا' : (activeBroker === 'alpha' ? 'انس جهانی (XAUUSD)' : 'بیتکوین (BTCUSDT)')} ({data?.timeframe}m)
               </div>
               <div style={{ display: 'flex', gap: '4px', background: '#020617', padding: '4px', borderRadius: '8px' }} className="ltr">
                 {timeframes.map(tf => (

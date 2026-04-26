@@ -6,6 +6,7 @@ import { createServer as createViteServer } from "vite";
 // Bot Logic Imports
 import { FarazGoldEngine } from "./src/server/faraz_engine.js";
 import { AlphaGoldEngine } from "./src/server/alpha_engine.js";
+import { BtcEngine } from "./src/server/btc_engine.js";
 
 import { BacktestEngine } from "./src/server/backtest.js";
 
@@ -26,10 +27,14 @@ async function startServer() {
 
     const farazEngine = new FarazGoldEngine();
     const alphaEngine = new AlphaGoldEngine();
+    const btcEngine = new BtcEngine();
+    
+    btcEngine.start(); // Start history & websocket for BTC
     
     const engines: Record<string, any> = {
         faraz: farazEngine,
-        alpha: alphaEngine
+        alpha: alphaEngine,
+        btc: btcEngine
     };
 
     const wss = new WebSocketServer({ server });
@@ -124,7 +129,8 @@ async function startServer() {
                         const { token, chatId } = command;
                         farazEngine.updateBaleConfig(token, chatId);
                         alphaEngine.updateBaleConfig(token, chatId);
-                        console.log(`[Server] Bale config updated for both engines.`);
+                        btcEngine.updateBaleConfig(token, chatId);
+                        console.log(`[Server] Bale config updated for all engines.`);
                     }
                 }
             }
