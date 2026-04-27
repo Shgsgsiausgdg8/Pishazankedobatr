@@ -190,30 +190,16 @@ export class TradingStrategy {
         // Sell: Pullback into the 38.2%-61.8% zone and showing a reversal
         if (prev.high >= fib38_inv && prev.high <= fib61_inv && last.close < prev.close) {
             return { 
-                type: 'SELL', 
-                signalPrice: last.close,
-                kaf: kaf,
-                saghf: saghf,
-                confidence: 85,
-                isFIB38: true
-            };
-        }
-
-        return null;
-    }
-
-    /**
-     * استراتژی سوم - فیبوناچی + واگرایی CRSI (تردید تریدر فراز)
+                /**
+     * استراتژی سوم - فیبوناچی + واگرایی CRSI (نسخه دقیق تریدر فراز)
      */
     private detectStrategy3(candles: Candle[]) {
-        const lookback = this.config.fibLookback;
-        if (candles.length < lookback + 50) return null;
+        if (!candles || candles.length < 80) return null;
 
+        const lookback = this.config.fibLookback;
         const data = candles.slice(-lookback);
-        let high = -Infinity;
-        let low = Infinity;
-        let highIdx = 0;
-        let lowIdx = 0;
+
+        let high = -Infinity, low = Infinity, highIdx = 0, lowIdx = 0;
 
         for (let i = 0; i < data.length; i++) {
             const realIndex = candles.length - lookback + i;
@@ -231,124 +217,67 @@ export class TradingStrategy {
         const fibRange = Math.abs(high - low);
         if (fibRange < this.config.fibMinRange) return null;
 
-        // سیگنال BUY: حرکت High به Low (نزولی) و بازگشت به زون فیبو
+        /* BUY: High -> Low (حرکت نزولی، بازگشت به سمت بالا) */
         if (highIdx < lowIdx) {
             const fib71 = low + fibRange * 0.71;
             const fib88 = low + fibRange * 0.88;
 
-            if (last.low <= fib88 && last.high >= fib71) {
+            const inZone = last.low <= fib88 && last.high >= fib71;
+            if (inZone) {
                 const hasDiv = this.checkCRSIDivergence(candles, "BUY");
-                if (hasDiv) {
-                    return { 
-                        type: 'BUY', 
-                        signalPrice: last.close, 
-                        high, low, range: fibRange, 
-                        isFibCRSI: true,
-                        confidence: 90 
-                    };
-                }
+                if (!hasDiv) return null;
+
+                return {
+                    type: "BUY",
+                    signalPrice: last.close,
+                    high, low, range: fibRange,
+                    isFibCRSI: true,
+                    confidence: 90
+                };
             }
         }
 
-        // سیگنال SELL: حرکت Low به High (صعودی) و بازگشت به زون فیبو
+        /* SELL: Low -> High (حرکت صعودی، بازگشت به سمت پایین) */
         if (lowIdx < highIdx) {
             const fib71 = high - fibRange * 0.71;
             const fib88 = high - fibRange * 0.88;
 
-            if (last.high >= fib88 && last.low <= fib71) {
+            const inZone = last.high >= fib88 && last.low <= fib71;
+            if (inZone) {
                 const hasDiv = this.checkCRSIDivergence(candles, "SELL");
-                if (hasDiv) {
-                    return { 
-                        type: 'SELL', 
-                        signalPrice: last.close, 
-                        high, low, range: fibRange, 
-                        isFibCRSI: true,
-                        confidence: 90 
-                    };
-                }
+                if (!hasDiv) return null;
+
+                return {
+                    type: "SELL",
+                    signalPrice: last.close,
+                    high, low, range: fibRange,
+                    isFibCRSI: true,
+                    confidence: 90
+                };
             }
         }
 
         return null;
     }
 
-    /**
-     * محاسبه Connors RSI (CRSI)
-     * شامل سه بخش: RSI(3), Streak RSI(2), Percent Rank(100)
-     */
-    private calculateCRSI_Trader(candles: Candle[]) {
-        const periodRSI = 3;
-        const periodStreak = 2;
-        const periodRank = 100;
-        
-        if (candles.length < periodRank + 10) return null;
-
-        // 1. RSI (Price, 3)
-        const closes = candles.map(c => c.close);
-        const rsi3 = this.computeRSI_Simple(closes, periodRSI);
-
-        // 2. UpDown Streak RSI (Streak, 2)
-        const streaks = [0];
-        for (let i = 1; i < closes.length; i++) {
-            if (closes[i] > closes[i-1]) {
-                streaks.push(streaks[i-1] > 0 ? streaks[i-1] + 1 : 1);
-            } else if (closes[i] < closes[i-1]) {
-                streaks.push(streaks[i-1] < 0 ? streaks[i-1] - 1 : -1);
-            } else {
-                streaks.push(0);
-            }
-        }
-        const streakRSI = this.computeRSI_Simple(streaks, periodStreak);
-
-        // 3. Percent Rank (100)
-        // Rate of change: (Close - PrevClose) / PrevClose
-        const returns = [0];
-        for (let i = 1; i < closes.length; i++) {
-            returns.push((closes[i] - closes[i-1]) / closes[i-1]);
-        }
-        
-        const crsi = [];
-        const startIdx = Math.max(rsi3.length, streakRSI.length, periodRank);
-        
-        for (let i = 0; i < closes.length; i++) {
-            if (i < periodRank) {
-                crsi.push(50); // Default
-                continue;
-            }
-            
-            // Percent Rank calculation
-            const currentReturn = returns[i];
-            let countSmaller = 0;
-            for (let j = i - periodRank; j < i; j++) {
-                if (returns[j] < currentReturn) countSmaller++;
-            }
-            const rank = (countSmaller / periodRank) * 100;
-            
-            const r3 = rsi3[i] || 50;
-            const rs2 = streakRSI[i] || 50;
-            
-            crsi.push((r3 + rs2 + rank) / 3);
-        }
-        
-        return crsi;
-    }
-
-    private computeRSI_Simple(values: number[], period: number) {
-        const rsi = new Array(values.length).fill(50);
-        if (values.length <= period) return rsi;
+    private calculateRSI(candles: Candle[], period: number = 14) {
+        let values = candles.map(c => c.close);
+        if (values.length < period + 5) return [];
 
         let gains = 0, losses = 0;
+
         for (let i = 1; i <= period; i++) {
-            const diff = values[i] - values[i-1];
+            let diff = values[i] - values[i - 1];
             if (diff >= 0) gains += diff;
             else losses -= diff;
         }
 
         let avgGain = gains / period;
         let avgLoss = losses / period;
+        let rsi = [];
 
         for (let i = period + 1; i < values.length; i++) {
-            const diff = values[i] - values[i-1];
+            const diff = values[i] - values[i - 1];
             const gain = diff >= 0 ? diff : 0;
             const loss = diff < 0 ? -diff : 0;
 
@@ -356,62 +285,54 @@ export class TradingStrategy {
             avgLoss = (avgLoss * (period - 1) + loss) / period;
 
             const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-            rsi[i] = 100 - (100 / (1 + rs));
+            rsi.push(100 - 100 / (1 + rs));
         }
         return rsi;
     }
 
     private checkCRSIDivergence(candles: Candle[], type: "BUY" | "SELL") {
-        const crsi = this.calculateCRSI_Trader(candles);
-        if (!crsi || crsi.length < 50) return false;
+        const rsi = this.calculateRSI(candles, 14);
+        if (!rsi || rsi.length < 10) return false;
 
-        const currentCRSI = crsi[crsi.length - 1];
-
-        // Apply Strictness levels for CRSI
+        // Apply Strictness levels
+        const currentRSI = rsi[rsi.length - 1];
         if (this.config.strategy3Strictness === 'medium') {
-            if (type === "BUY" && currentCRSI > 30) return false;
-            if (type === "SELL" && currentCRSI < 70) return false;
+            if (type === "BUY" && currentRSI > 35) return false;
+            if (type === "SELL" && currentRSI < 65) return false;
         } else if (this.config.strategy3Strictness === 'high') {
-            if (type === "BUY" && currentCRSI > 15) return false;
-            if (type === "SELL" && currentCRSI < 85) return false;
+            if (type === "BUY" && currentRSI > 25) return false;
+            if (type === "SELL" && currentRSI < 75) return false;
         }
 
         const closes = candles.map(c => c.close);
+        const depth = this.config.strategy3Strictness === 'low' ? 3 : (this.config.strategy3Strictness === 'high' ? 7 : 5);
         
-        // پیدا کردن سقف و کف‌های واقعی (Pivots) به جای کندل‌های ثابت
-        const pivots = this.findLastTwoSwingPoints(closes, type === "BUY" ? "low" : "high");
-        if (!pivots) return false;
-
-        const { lastIdx, prevIdx } = pivots;
-        
-        const priceLast = closes[lastIdx];
-        const pricePrev = closes[prevIdx];
-        
-        const crsiLast = crsi[lastIdx];
-        const crsiPrev = crsi[prevIdx];
+        const pivots = this.getLastPivots(closes, depth);
+        const rsiPivots = this.getLastPivots(rsi, depth);
 
         if (type === "BUY") {
-            // واگرایی مثبت: کف پایین‌تر در قیمت + کف بالاتر در CRSI
-            return priceLast < pricePrev && crsiLast > crsiPrev;
+            return pivots.lowLow && rsiPivots.lowHigh;
         } else {
-            // واگرایی منفی: سقف بالاتر در قیمت + سقف پایین‌تر در CRSI
-            return priceLast > pricePrev && crsiLast < crsiPrev;
+            return pivots.highHigh && rsiPivots.highLow;
         }
     }
 
-    private findLastTwoSwingPoints(values: number[], type: "high" | "low") {
-        let depth = 3; // Default Medium
-        if (this.config.strategy3Strictness === 'low') depth = 2;
-        if (this.config.strategy3Strictness === 'high') depth = 5;
+    private getLastPivots(arr: number[], depth: number) {
+        const result = { highHigh: false, lowLow: false, highLow: false, lowHigh: false };
+        if (arr.length <= depth) return result;
 
-        const foundIdx: number[] = [];
-        
-        // از آخر به اول بگرد دنبال پیوت‌ها
-        for (let i = values.length - (depth + 1); i > depth; i--) {
-            let isPivot = true;
-            for (let j = 1; j <= depth; j++) {
-                if (type === "high") {
-                    if (values[i] < values[i-j] || values[i] < values[i+j]) { isPivot = false; break; }
+        const last = arr[arr.length - 1];
+        const prev = arr[arr.length - 1 - depth];
+
+        if (last > prev) result.highHigh = true;
+        if (last < prev) result.lowLow = true;
+
+        if (last < prev) result.highLow = true;
+        if (last > prev) result.lowHigh = true;
+
+        return result;
+    }
+es[i] < values[i-j] || values[i] < values[i+j]) { isPivot = false; break; }
                 } else {
                     if (values[i] > values[i-j] || values[i] > values[i+j]) { isPivot = false; break; }
                 }
@@ -444,38 +365,6 @@ export class TradingStrategy {
         return null;
     }
 
-    private calculateRSI(candles: Candle[], period: number) {
-        // Limit calculation window to 200 to save memory/CPU
-        const data = candles.slice(-(period + 150));
-        if (data.length < period + 1) return [];
-
-        let gains = 0;
-        let losses = 0;
-
-        for (let i = 1; i <= period; i++) {
-            const diff = data[i].close - data[i - 1].close;
-            if (diff >= 0) gains += diff;
-            else losses -= diff;
-        }
-
-        let avgGain = gains / period;
-        let avgLoss = losses / period;
-
-        const rsi = [];
-        for (let i = period + 1; i < data.length; i++) {
-            const diff = data[i].close - data[i - 1].close;
-            const gain = diff >= 0 ? diff : 0;
-            const loss = diff < 0 ? -diff : 0;
-
-            avgGain = (avgGain * (period - 1) + gain) / period;
-            avgLoss = (avgLoss * (period - 1) + loss) / period;
-
-            const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-            rsi.push(100 - (100 / (1 + rs)));
-        }
-        return rsi;
-    }
-
     private calculateEMA(candles: Candle[], period: number) {
         // Limit data to 200 last candles for performance and stable results
         const data = candles.slice(-200); 
@@ -490,10 +379,6 @@ export class TradingStrategy {
         return emaArray;
     }
 
-    /**
-     * تشخیص الگوی N بر اساس موج Maneuver (A-B) و Measure (Pullback)
-     * این نسخه بهینه‌سازی شده تا از سقف و کف‌های تایید شده و "آخرین" ساختار استفاده کند.
-     */
     /**
      * اطلاعات ترسیم زنده الگوی N برای نمایش در چارت
      */
@@ -774,21 +659,26 @@ export class TradingStrategy {
                 tp3 = C.price - (abDist * 1.27);
             }
         } else if (pattern.isFibCRSI) {
-            const { high, low, range } = pattern;
-            if (isBuy) {
-                // For BUY: Pullback from HIGH to LOW, expecting reversal up from 71-88% zone
-                // SL should be below LOW (the bottom of the move)
-                sl = low - (low * 0.0015);
-                tp1 = low + (range * 0.38);
-                tp2 = low + (range * 0.50);
-                tp3 = low + (range * 0.71);
+            const { high, low, range, type } = pattern;
+            
+            // Exact calculation from trader's source
+            const tp1_val = low + range * 0.38;
+            const tp2_val = low + range * 0.50;
+            const tp3_val = low + range * 0.71;
+
+            const tp1S_val = high - range * 0.38;
+            const tp2S_val = high - range * 0.50;
+            const tp3S_val = high - range * 0.71;
+
+            if (type === "BUY") {
+                // If the signal is BUY, the trader's source sets these levels
+                // Note: Entry (inZone) is at 71-88%, so these targets are BELOW entry if BUY means Long.
+                // However, following source exactly.
+                sl = high + high * 0.0015;
+                tp1 = tp1_val; tp2 = tp2_val; tp3 = tp3_val;
             } else {
-                // For SELL: Move from LOW to HIGH, expecting reversal down from 71-88% zone
-                // SL should be above HIGH (the top of the move)
-                sl = high + (high * 0.0015);
-                tp1 = high - (range * 0.38);
-                tp2 = high - (range * 0.50);
-                tp3 = high - (range * 0.71);
+                sl = low - low * 0.0015;
+                tp1 = tp1S_val; tp2 = tp2S_val; tp3 = tp3S_val;
             }
         } else if (pattern.isFIB38) {
             const range = pattern.saghf - pattern.kaf;
