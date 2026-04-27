@@ -247,48 +247,50 @@ const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount }: { da
       ctx.shadowBlur = 0;
       ctx.setLineDash([]);
       
-      // Draw labels A, B, C, D with high visibility
-      nPattern.points.forEach((p: any) => {
-          let x = 0;
-          if (p.index !== undefined) {
-              x = getX(p.index - sliceStart);
-          } else {
-              const cIdx = data.findIndex(c => c.time === p.time);
-              if (cIdx !== -1) {
-                  x = getX(cIdx);
-              } else {
-                  let offset = (p.time - data[lastCandleIdx].time) / candleInterval;
-                  x = getX(lastCandleIdx + Math.min(Math.max(offset, -50), 50));
-              }
-          }
-          const y = getY(p.price);
-          if (Number.isNaN(x) || Number.isNaN(y)) return;
-          
-          ctx.fillStyle = nPattern.type === 'BUY' ? '#10b981' : '#ef4444';
-          ctx.beginPath();
-          ctx.arc(x, y, 4, 0, Math.PI * 2); // Reduced from 6
-          ctx.fill();
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 1;
-          ctx.stroke();
-          
-          const label = p.label || '';
-          const isConfirmed = nPattern.isConfirmed;
-          const isUpper = label === 'B' || label === 'D';
-          const labelY = isUpper ? y - 24 : y + 24; // Reduced offset
-          
-          ctx.fillStyle = isConfirmed ? (nPattern.type === 'BUY' ? '#10b981' : '#ef4444') : 'rgba(15, 23, 42, 0.9)';
-          ctx.fillRect(x - 9, labelY - 8, 18, 16);
-          ctx.strokeStyle = nPattern.type === 'BUY' ? '#10b981' : '#ef4444';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(x - 9, labelY - 8, 18, 16);
-          
-          ctx.fillStyle = isConfirmed ? '#fff' : '#ffffff';
-          ctx.textAlign = 'center';
-          ctx.font = 'bold 10px Inter'; // Reduced from 12px
-          ctx.textBaseline = 'middle';
-          ctx.fillText(label, x, labelY);
-      });
+      // Draw labels A, B, C, D with high visibility (Only if N-Pattern strategy is active)
+      if (nPattern && data && data.length > 0 && nPattern.points && (viewState.activeStrategy === 'N-PATTERN' || !viewState.activeStrategy || viewState.activeStrategy === 'الگوی N کلاسیک (N-Pattern)')) {
+        nPattern.points.forEach((p: any) => {
+            let x = 0;
+            if (p.index !== undefined) {
+                x = getX(p.index - sliceStart);
+            } else {
+                const cIdx = data.findIndex(c => c.time === p.time);
+                if (cIdx !== -1) {
+                    x = getX(cIdx);
+                } else {
+                    let offset = (p.time - data[lastCandleIdx].time) / candleInterval;
+                    x = getX(lastCandleIdx + Math.min(Math.max(offset, -50), 50));
+                }
+            }
+            const y = getY(p.price);
+            if (Number.isNaN(x) || Number.isNaN(y)) return;
+            
+            ctx.fillStyle = nPattern.type === 'BUY' ? '#10b981' : '#ef4444';
+            ctx.beginPath();
+            ctx.arc(x, y, 3, 0, Math.PI * 2); 
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            
+            const label = p.label || '';
+            const isConfirmed = nPattern.isConfirmed;
+            const isUpper = label === 'B' || label === 'D';
+            const labelY = isUpper ? y - 18 : y + 18; // Smaller offset
+            
+            ctx.fillStyle = isConfirmed ? (nPattern.type === 'BUY' ? '#10b981' : '#ef4444') : 'rgba(15, 23, 42, 0.95)';
+            ctx.fillRect(x - 7, labelY - 7, 14, 14); // Smaller boxes
+            ctx.strokeStyle = nPattern.type === 'BUY' ? '#10b981' : '#ef4444';
+            ctx.lineWidth = 0.5;
+            ctx.strokeRect(x - 7, labelY - 7, 14, 14);
+            
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.font = 'bold 9px Inter';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, x, labelY);
+        });
+      }
     }
 
   }, [data, levels, nPattern, viewState, mousePos, dimensions]);

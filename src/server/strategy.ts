@@ -308,108 +308,90 @@ export class TradingStrategy {
     }
 
     private detectNPattern(candles: Candle[]) {
-        const minRequired = Math.max(100, this.config.smaPeriod);
+        const minRequired = 100;
         if (candles.length < minRequired) return null;
 
         const lastCandle = candles[candles.length - 1];
         const lastPrice = lastCandle.close;
-        const smaValue = this.calculateSMA(candles, this.config.smaPeriod);
         const atr = this.calculateATR(candles, 14);
 
-        // ۱. مدیریت ساختار (باطل کردن سریع و تعقیب نقاط)
+        // ۱. مدیریت ساختار فعال
         if (this.activeStructure) {
             const { A, B, C, isLockedB, isLockedC, status } = this.activeStructure;
             const waveAB = Math.abs(B.price - A.price);
-            const lastCandle = candles[candles.length - 1];
-            const lastPrice = lastCandle.close;
 
-            // ابطال آنی در صورت شکست سطوح حیاتی
-            if (A.type === 'low') {
-                if (lastPrice < A.price) { this.activeStructure = null; return null; } // شکست کف A
-                if (lastPrice > B.price + (waveAB * 0.5) && !isLockedC) { // اگر از B خیلی دور شد بدون اصلاح
-                    this.activeStructure.B = { ...this.activeStructure.B, price: lastPrice, index: candles.length - 1 };
-                }
-            } else {
-                if (lastPrice > A.price) { this.activeStructure = null; return null; } // شکست سقف A
-                if (lastPrice < B.price - (waveAB * 0.5) && !isLockedC) {
-                    this.activeStructure.B = { ...this.activeStructure.B, price: lastPrice, index: candles.length - 1 };
-                }
-            }
+            // ابطال در صورت شکست کف/سقف اصلی (شکست ساختار)
+            if (A.type === 'low' && lastPrice < A.price) { this.activeStructure = null; return null; }
+            if (A.type === 'high' && lastPrice > A.price) { this.activeStructure = null; return null; }
 
-            // بررسی عمق اصلاح (C)
-            const currentPullback = Math.abs(B.price - lastPrice);
-            if (currentPullback > waveAB * this.config.nMaxPullback) {
-                this.activeStructure = null; // اصلاح خیلی عمیق شد (الگو باطل)
-                return null;
-            }
-
-            // الف) تثبیت نقطه B
+            // الف) تثبیت و تعقیب نقطه B
             if (!isLockedB) {
-                const isCorrectDirection = A.type === 'low' ? lastPrice < B.price : lastPrice > B.price;
-                if (isCorrectDirection && currentPullback >= waveAB * this.config.nMinPullback) {
+                const isNewExtremum = A.type === 'low' ? lastPrice > B.price : lastPrice < B.price;
+                if (isNewExtremum) {
+                    this.activeStructure.B = { ...this.activeStructure.B, price: lastPrice, index: candles.length - 1, time: lastCandle.time };
+                    this.activeStructure.C = { ...B }; // ریست C
+                    return null;
+                }
+
+                // تثبیت B: قیمت باید حداقل ۳۸٪ موج AB را اصلاح کند
+                const pullback = Math.abs(B.price - lastPrice);
+                if (pullback >= waveAB * this.config.nMinPullback) {
                     this.activeStructure.isLockedB = true;
                 }
             }
 
-            // ب) تثبیت نقطه C و تایید بازگشت
+            // ب) تثبیت نقطه C (باید فاصله زمانی معقول از B داشته باشد)
             if (isLockedB && !isLockedC) {
-                // آپدیت نقطه حد کثر اصلاح
                 const isNewExtremumC = A.type === 'low' ? lastCandle.low < C.price : lastCandle.high > C.price;
                 if (isNewExtremumC) {
                     this.activeStructure.C = { price: A.type === 'low' ? lastCandle.low : lastCandle.high, index: candles.length - 1, time: lastCandle.time };
                 }
 
-                // تاییدیه بازگشت (Momentum)
-                const confirmThreshold = Math.max(waveAB * 0.15, (atr || 0) * 1.5);
-                const isConfirmedC = A.type === 'low' 
-                    ? lastPrice > this.activeStructure.C.price + confirmThreshold
-                    : lastPrice < this.activeStructure.C.price - confirmThreshold;
+                // تایید C: بازگشت قدرتمند و حداقل ۴ کندل فاصله از B
+                const timeDistBC = candles.length - 1 - B.index;
+                const confirmThreshold = Math.max(waveAB * 0.2, (atr || 0) * 1.5);
+                const isReversing = A.type === 'low' ? lastPrice > C.price + confirmThreshold : lastPrice < C.price - confirmThreshold;
 
-                if (isConfirmedC) {
+                if (isReversing && timeDistBC >= 4) {
                     this.activeStructure.isLockedC = true;
-                    this.activeStructure.targetD = A.type === 'low' 
-                        ? this.activeStructure.C.price + waveAB 
-                        : this.activeStructure.C.price - waveAB;
+                    this.activeStructure.targetD = A.type === 'low' ? C.price + waveAB : C.price - waveAB;
+                }
+
+                // ابطال اگر اصلاح خیلی عمیق شد (بیشتر از ۷۵٪ موج اول)
+                if (Math.abs(B.price - lastPrice) > waveAB * 0.75) {
+                    this.activeStructure = null;
+                    return null;
                 }
             }
 
-            // ج) سیگنال نهایی (ورود پس از تایید C)
+            // ج) خروجی برای رندرینگ یا سیگنال
             if (isLockedC && status !== 'SIGNALLED') {
                 this.activeStructure.status = 'SIGNALLED';
                 this.totalPatternsCount++;
-                
                 return {
                     type: A.type === 'low' ? 'BUY' : 'SELL',
                     signalPrice: lastPrice,
-                    atr,
                     range: waveAB,
-                    kaf: A.type === 'low' ? A.price : B.price,
-                    saghf: A.type === 'low' ? B.price : A.price,
                     isNPattern: true,
                     confidence: 90
                 };
             }
         }
 
-        // ۲. شناسایی موج شروع (A-B)
+        // ۲. شناسایی موج شروع با استفاده از Swing Pivots (Window بزرگ برای فیلتر نویز)
         if (!this.activeStructure) {
-            const pivots = this.getSwingPivots(candles, 8, 3);
+            const pivots = this.getSwingPivots(candles, 12, 4);
             if (pivots.length >= 2) {
                 const p1 = pivots[pivots.length - 2];
                 const p2 = pivots[pivots.length - 1];
                 const wave = Math.abs(p2.price - p1.price);
-                
-                const minWave = lastCandle.close * 0.0006; // فیلتر امواج ضعیف (Ranging)
+                const timeDist = p2.index - p1.index;
 
-                if (p1.type !== p2.type && wave >= minWave) {
+                if (p1.type !== p2.type && wave >= lastPrice * 0.001 && timeDist >= 5) {
                     this.activeStructure = {
-                        A: p1, 
-                        B: p2, 
-                        C: { ...p2 }, 
-                        isLockedB: false, 
-                        isLockedC: false,
-                        targetD: 0, 
-                        status: 'MONITORING'
+                        A: p1, B: p2, C: { ...p2 },
+                        isLockedB: false, isLockedC: false,
+                        targetD: 0, status: 'MONITORING'
                     };
                 }
             }
