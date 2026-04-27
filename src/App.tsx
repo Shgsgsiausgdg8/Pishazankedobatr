@@ -690,7 +690,7 @@ export default function App() {
                 >
                   <option value="N-PATTERN">الگوی N (N-Pattern)</option>
                   <option value="FIB-38">فیبوناچی ۳۸٪ (FIB-38)</option>
-                  <option value="STRATEGY_3">استراتژی سوم (ساده)</option>
+                  <option value="STRATEGY_3">استراتژی فراز (Fib+CRSI)</option>
                   <option value="STRATEGY_4">استراتژی چهارم (ساده)</option>
                 </select>
                 <button 

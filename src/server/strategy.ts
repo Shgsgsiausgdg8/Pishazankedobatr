@@ -201,21 +201,214 @@ export class TradingStrategy {
     }
 
     /**
-     * استراتژی سوم - ساده (RSI)
-     * معامله‌گر می‌تواند به راحتی این بخش را تغییر دهد
+     * استراتژی سوم - فیبوناچی + واگرایی CRSI (تردید تریدر فراز)
      */
     private detectStrategy3(candles: Candle[]) {
-        const rsiValues = this.calculateRSI(candles, 14);
-        if (rsiValues.length === 0) return null;
-        const currentRSI = rsiValues[rsiValues.length - 1];
-        const lastPrice = candles[candles.length - 1].close;
+        const lookback = this.config.fibLookback;
+        if (candles.length < lookback + 50) return null;
 
-        if (currentRSI < 30) {
-            return { type: 'BUY', signalPrice: lastPrice, confidence: 70, label: 'RSI-BUY' };
-        } else if (currentRSI > 70) {
-            return { type: 'SELL', signalPrice: lastPrice, confidence: 70, label: 'RSI-SELL' };
+        const data = candles.slice(-lookback);
+        let high = -Infinity;
+        let low = Infinity;
+        let highIdx = 0;
+        let lowIdx = 0;
+
+        for (let i = 0; i < data.length; i++) {
+            const realIndex = candles.length - lookback + i;
+            if (data[i].high > high) {
+                high = data[i].high;
+                highIdx = realIndex;
+            }
+            if (data[i].low < low) {
+                low = data[i].low;
+                lowIdx = realIndex;
+            }
         }
+
+        const last = candles[candles.length - 1];
+        const fibRange = Math.abs(high - low);
+        if (fibRange < this.config.fibMinRange) return null;
+
+        // سیگنال BUY: حرکت High به Low (نزولی) و بازگشت به زون فیبو
+        if (highIdx < lowIdx) {
+            const fib71 = low + fibRange * 0.71;
+            const fib88 = low + fibRange * 0.88;
+
+            if (last.low <= fib88 && last.high >= fib71) {
+                const hasDiv = this.checkCRSIDivergence(candles, "BUY");
+                if (hasDiv) {
+                    return { 
+                        type: 'BUY', 
+                        signalPrice: last.close, 
+                        high, low, range: fibRange, 
+                        isFibCRSI: true,
+                        confidence: 90 
+                    };
+                }
+            }
+        }
+
+        // سیگنال SELL: حرکت Low به High (صعودی) و بازگشت به زون فیبو
+        if (lowIdx < highIdx) {
+            const fib71 = high - fibRange * 0.71;
+            const fib88 = high - fibRange * 0.88;
+
+            if (last.high >= fib88 && last.low <= fib71) {
+                const hasDiv = this.checkCRSIDivergence(candles, "SELL");
+                if (hasDiv) {
+                    return { 
+                        type: 'SELL', 
+                        signalPrice: last.close, 
+                        high, low, range: fibRange, 
+                        isFibCRSI: true,
+                        confidence: 90 
+                    };
+                }
+            }
+        }
+
         return null;
+    }
+
+    /**
+     * محاسبه Connors RSI (CRSI)
+     * شامل سه بخش: RSI(3), Streak RSI(2), Percent Rank(100)
+     */
+    private calculateCRSI_Trader(candles: Candle[]) {
+        const periodRSI = 3;
+        const periodStreak = 2;
+        const periodRank = 100;
+        
+        if (candles.length < periodRank + 10) return null;
+
+        // 1. RSI (Price, 3)
+        const closes = candles.map(c => c.close);
+        const rsi3 = this.computeRSI_Simple(closes, periodRSI);
+
+        // 2. UpDown Streak RSI (Streak, 2)
+        const streaks = [0];
+        for (let i = 1; i < closes.length; i++) {
+            if (closes[i] > closes[i-1]) {
+                streaks.push(streaks[i-1] > 0 ? streaks[i-1] + 1 : 1);
+            } else if (closes[i] < closes[i-1]) {
+                streaks.push(streaks[i-1] < 0 ? streaks[i-1] - 1 : -1);
+            } else {
+                streaks.push(0);
+            }
+        }
+        const streakRSI = this.computeRSI_Simple(streaks, periodStreak);
+
+        // 3. Percent Rank (100)
+        // Rate of change: (Close - PrevClose) / PrevClose
+        const returns = [0];
+        for (let i = 1; i < closes.length; i++) {
+            returns.push((closes[i] - closes[i-1]) / closes[i-1]);
+        }
+        
+        const crsi = [];
+        const startIdx = Math.max(rsi3.length, streakRSI.length, periodRank);
+        
+        for (let i = 0; i < closes.length; i++) {
+            if (i < periodRank) {
+                crsi.push(50); // Default
+                continue;
+            }
+            
+            // Percent Rank calculation
+            const currentReturn = returns[i];
+            let countSmaller = 0;
+            for (let j = i - periodRank; j < i; j++) {
+                if (returns[j] < currentReturn) countSmaller++;
+            }
+            const rank = (countSmaller / periodRank) * 100;
+            
+            const r3 = rsi3[i] || 50;
+            const rs2 = streakRSI[i] || 50;
+            
+            crsi.push((r3 + rs2 + rank) / 3);
+        }
+        
+        return crsi;
+    }
+
+    private computeRSI_Simple(values: number[], period: number) {
+        const rsi = new Array(values.length).fill(50);
+        if (values.length <= period) return rsi;
+
+        let gains = 0, losses = 0;
+        for (let i = 1; i <= period; i++) {
+            const diff = values[i] - values[i-1];
+            if (diff >= 0) gains += diff;
+            else losses -= diff;
+        }
+
+        let avgGain = gains / period;
+        let avgLoss = losses / period;
+
+        for (let i = period + 1; i < values.length; i++) {
+            const diff = values[i] - values[i-1];
+            const gain = diff >= 0 ? diff : 0;
+            const loss = diff < 0 ? -diff : 0;
+
+            avgGain = (avgGain * (period - 1) + gain) / period;
+            avgLoss = (avgLoss * (period - 1) + loss) / period;
+
+            const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+            rsi[i] = 100 - (100 / (1 + rs));
+        }
+        return rsi;
+    }
+
+    private checkCRSIDivergence(candles: Candle[], type: "BUY" | "SELL") {
+        const crsi = this.calculateCRSI_Trader(candles);
+        if (!crsi || crsi.length < 50) return false;
+
+        const closes = candles.map(c => c.close);
+        
+        // پیدا کردن سقف و کف‌های واقعی (Pivots) به جای کندل‌های ثابت
+        const pivots = this.findLastTwoSwingPoints(closes, type === "BUY" ? "low" : "high");
+        if (!pivots) return false;
+
+        const { lastIdx, prevIdx } = pivots;
+        
+        const priceLast = closes[lastIdx];
+        const pricePrev = closes[prevIdx];
+        
+        const crsiLast = crsi[lastIdx];
+        const crsiPrev = crsi[prevIdx];
+
+        if (type === "BUY") {
+            // واگرایی مثبت: کف پایین‌تر در قیمت + کف بالاتر در CRSI
+            return priceLast < pricePrev && crsiLast > crsiPrev;
+        } else {
+            // واگرایی منفی: سقف بالاتر در قیمت + سقف پایین‌تر در CRSI
+            return priceLast > pricePrev && crsiLast < crsiPrev;
+        }
+    }
+
+    private findLastTwoSwingPoints(values: number[], type: "high" | "low") {
+        const depth = 3; // حداقل فاصله برای تایید پیوت
+        const foundIdx: number[] = [];
+        
+        // از آخر به اول بگرد دنبال پیوت‌ها
+        for (let i = values.length - (depth + 1); i > depth; i--) {
+            let isPivot = true;
+            for (let j = 1; j <= depth; j++) {
+                if (type === "high") {
+                    if (values[i] < values[i-j] || values[i] < values[i+j]) { isPivot = false; break; }
+                } else {
+                    if (values[i] > values[i-j] || values[i] > values[i+j]) { isPivot = false; break; }
+                }
+            }
+            
+            if (isPivot) {
+                foundIdx.push(i);
+                if (foundIdx.length === 2) break;
+            }
+        }
+
+        if (foundIdx.length < 2) return null;
+        return { lastIdx: foundIdx[0], prevIdx: foundIdx[1] };
     }
 
     /**
@@ -563,6 +756,19 @@ export class TradingStrategy {
                 tp2 = C.price - abDist;
                 // تارگت ۳: ۱۲۷٪ پراجکشن
                 tp3 = C.price - (abDist * 1.27);
+            }
+        } else if (pattern.isFibCRSI) {
+            const { high, low, range } = pattern;
+            if (isBuy) {
+                sl = high + (high * 0.0015);
+                tp1 = low + (range * 0.38);
+                tp2 = low + (range * 0.50);
+                tp3 = low + (range * 0.71);
+            } else {
+                sl = low - (low * 0.0015);
+                tp1 = high - (range * 0.38);
+                tp2 = high - (range * 0.50);
+                tp3 = high - (range * 0.71);
             }
         } else if (pattern.isFIB38) {
             const range = pattern.saghf - pattern.kaf;
