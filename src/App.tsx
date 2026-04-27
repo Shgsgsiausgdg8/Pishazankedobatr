@@ -13,6 +13,9 @@ const SquareIcon = () => (
 const SettingsIcon = ({ size = 16 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
 );
+const CheckIcon = ({ size = 14 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+);
 
 // --- Custom Canvas Chart Component ---
 const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount }: { data: any[], levels: any[], nPattern?: any, originalCandlesCount: number }) => {
@@ -387,6 +390,13 @@ export default function App() {
   const [baleChatId, setBaleChatId] = useState('');
   const [farazToken, setFarazToken] = useState('');
   const [farazSession, setFarazSession] = useState('');
+  const [candleConfirmations, setCandleConfirmations] = useState({
+    legacy: true,
+    salvation: true,
+    nameless: true,
+    engulfing: true,
+    darkCloud: true
+  });
   const [refreshToken, setRefreshToken] = useState('');
   const [accountType, setAccountType] = useState('demo');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -429,6 +439,7 @@ export default function App() {
               if (msg.data.baleChatId) setBaleChatId(msg.data.baleChatId);
               if (msg.data.currentToken) setFarazToken(msg.data.currentToken);
               if (msg.data.farazSession) setFarazSession(msg.data.farazSession);
+              if (msg.data.candleConfirmations) setCandleConfirmations(msg.data.candleConfirmations);
             }
           } else if (msg.type === 'BACKTEST_RESULTS') {
             setBacktestResults(msg.data);
@@ -500,7 +511,8 @@ export default function App() {
         baleToken: baleToken,
         baleChatId: baleChatId,
         farazToken: farazToken,
-        farazSession: farazSession
+        farazSession: farazSession,
+        candleConfirmations: candleConfirmations
       }));
       setShowBaleSettings(false);
     }
@@ -665,6 +677,7 @@ export default function App() {
                 }}
               >
                 <option value="HYBRID">Smart N</option>
+                <option value="FIB-38">FIB-38 (جدید)</option>
                 <option value="SCALP-ADV">اسکلپ</option>
                 <option value="PINBAR">پین‌بار</option>
                 <option value="N-PATTERN">الگوی N</option>
@@ -682,6 +695,93 @@ export default function App() {
             </button>
           </div>
         </div>
+
+        {data?.liveStrategy === 'FIB-38' && (
+          <div style={{ 
+            background: 'linear-gradient(90deg, #0f172a 0%, #1e293b 100%)', 
+            padding: '10px 1.2rem', 
+            borderBottom: '1px solid #334155',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '16px',
+            overflowX: 'auto',
+            whiteSpace: 'nowrap',
+            boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.05)'
+          }}>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '6px', 
+              color: '#3b82f6', 
+              fontSize: '0.75rem', 
+              fontWeight: 'bold',
+              background: 'rgba(59, 130, 246, 0.1)',
+              padding: '4px 10px',
+              borderRadius: '20px',
+              border: '1px solid rgba(59, 130, 246, 0.2)'
+            }}>
+              <CheckIcon size={12} />
+              تاییدیه کندلی
+            </div>
+            
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {[
+                { id: 'legacy', label: 'یادگاری' },
+                { id: 'salvation', label: 'رستگاری' },
+                { id: 'nameless', label: 'بی‌نام' },
+                { id: 'engulfing', label: 'پوششی' },
+                { id: 'darkCloud', label: 'ابر سیاه' }
+              ].map(conf => {
+                const isActive = (candleConfirmations as any)[conf.id];
+                return (
+                  <button
+                    key={conf.id}
+                    onClick={() => {
+                      const newConfs = { ...candleConfirmations, [conf.id]: !isActive };
+                      setCandleConfirmations(newConfs);
+                      wsRef.current?.send(JSON.stringify({
+                        type: 'UPDATE_SETTINGS',
+                        baleToken,
+                        baleChatId,
+                        farazToken,
+                        farazSession,
+                        candleConfirmations: newConfs
+                      }));
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '4px 12px',
+                      borderRadius: '8px',
+                      fontSize: '0.7rem',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      background: isActive ? 'rgba(16, 185, 129, 0.15)' : 'rgba(30, 41, 59, 0.5)',
+                      color: isActive ? '#10b981' : '#94a3b8',
+                      border: `1px solid ${isActive ? 'rgba(16, 185, 129, 0.3)' : 'rgba(51, 65, 85, 0.5)'}`,
+                      fontWeight: isActive ? '600' : 'normal'
+                    }}
+                  >
+                    <div style={{ 
+                      width: '12px', 
+                      height: '12px', 
+                      borderRadius: '3px', 
+                      background: isActive ? '#10b981' : '#334155',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s'
+                    }}>
+                      {isActive && <CheckIcon size={10} color="white" />}
+                    </div>
+                    {conf.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </header>
 
       <main className="container" style={{ position: 'relative', minHeight: '400px' }}>

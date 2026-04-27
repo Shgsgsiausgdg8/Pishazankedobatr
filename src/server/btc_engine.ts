@@ -20,6 +20,13 @@ export class BtcEngine {
     farazSession = "s%3AIOMPjESaRChioBmpMfZZHUbDdGaKuEQA.NuYpPcEPXmu9AFqHcx2U6RUCUfpZ%2Fd%2BmCvrmGDBuUrQ";
     baleToken = "1892918835:dxRdPwhkUUgmFogKzLD7B8xmygvnRKq_DOA";
     baleChatId = "6211548865";
+    candleConfirmations = {
+        legacy: true,
+        salvation: true,
+        nameless: true,
+        engulfing: true,
+        darkCloud: true
+    };
     
     settingsFile = path.join(process.cwd(), 'btc_settings.json');
 
@@ -35,6 +42,7 @@ export class BtcEngine {
                 if (s.baleChatId) this.baleChatId = s.baleChatId;
                 if (s.currentToken) this.currentToken = s.currentToken;
                 if (s.farazSession) this.farazSession = s.farazSession;
+                if (s.candleConfirmations) this.candleConfirmations = s.candleConfirmations;
             }
         } catch (e) {}
     }
@@ -45,7 +53,8 @@ export class BtcEngine {
                 baleToken: this.baleToken,
                 baleChatId: this.baleChatId,
                 currentToken: this.currentToken,
-                farazSession: this.farazSession
+                farazSession: this.farazSession,
+                candleConfirmations: this.candleConfirmations
             };
             fs.writeFileSync(this.settingsFile, JSON.stringify(s, null, 2));
         } catch (e) {}
@@ -183,7 +192,7 @@ export class BtcEngine {
     }
 
     runStrategy() {
-        const sig = this.strategy.analyze(this.candles, this.timeframe, this.liveStrategyType);
+        const sig = this.strategy.analyze(this.candles, this.timeframe, this.liveStrategyType, this.candleConfirmations);
         if (!sig) return;
         const last = this.signals[0];
         if (!last || Math.abs(last.time - sig.time) > 60000) {
@@ -254,7 +263,8 @@ export class BtcEngine {
             baleToken: this.baleToken,
             baleChatId: this.baleChatId,
             currentToken: this.currentToken,
-            farazSession: this.farazSession
+            farazSession: this.farazSession,
+            candleConfirmations: this.candleConfirmations
         };
     }
 }

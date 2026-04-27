@@ -26,6 +26,13 @@ export class AlphaGoldEngine {
     // Bale Config
     baleToken: string = '1892918835:dxRdPwhkUUgmFogKzLD7B8xmygvnRKq_DOA';
     baleChatId: string = '6211548865';
+    candleConfirmations = {
+        legacy: true,
+        salvation: true,
+        nameless: true,
+        engulfing: true,
+        darkCloud: true
+    };
 
     constructor() {
         console.log("\n[AlphaGoldEngine] Syncing with chrt.alphagoldx.com logic...");
@@ -38,6 +45,7 @@ export class AlphaGoldEngine {
                 const settings = JSON.parse(fs.readFileSync(this.settingsFile, 'utf8'));
                 if (settings.baleToken) this.baleToken = settings.baleToken;
                 if (settings.baleChatId) this.baleChatId = settings.baleChatId;
+                if (settings.candleConfirmations) this.candleConfirmations = settings.candleConfirmations;
             }
         } catch (e) {
             console.error("Error loading Alpha settings:", e);
@@ -48,7 +56,8 @@ export class AlphaGoldEngine {
         try {
             const settings = {
                 baleToken: this.baleToken,
-                baleChatId: this.baleChatId
+                baleChatId: this.baleChatId,
+                candleConfirmations: this.candleConfirmations
             };
             fs.writeFileSync(this.settingsFile, JSON.stringify(settings, null, 2));
         } catch (e) {
@@ -323,7 +332,7 @@ export class AlphaGoldEngine {
     }
 
     runStrategy() {
-        const sig = this.strategy.analyze(this.candles, this.timeframe, this.liveStrategyType);
+        const sig = this.strategy.analyze(this.candles, this.timeframe, this.liveStrategyType, this.candleConfirmations);
         if (!sig) return;
         const last = this.signals[0];
         if (!last || Math.abs(last.time - sig.time) > 60000) {
@@ -366,7 +375,8 @@ export class AlphaGoldEngine {
             totalCandles: this.candles.length,
             nPattern: nPattern,
             baleToken: this.baleToken,
-            baleChatId: this.baleChatId
+            baleChatId: this.baleChatId,
+            candleConfirmations: this.candleConfirmations
         };
     }
 

@@ -125,15 +125,21 @@ async function startServer() {
                         (engine as any).liveStrategyType = command.strategy;
                         console.log(`[Server] ${currentBroker} live strategy set to ${command.strategy}`);
                     }
-                    else if (command.type === 'UPDATE_SETTINGS') {
-                        const { baleToken, baleChatId, farazToken, farazSession } = command;
-                        farazEngine.updateBaleConfig(baleToken, baleChatId);
-                        alphaEngine.updateBaleConfig(baleToken, baleChatId);
+                    if (command.type === 'UPDATE_SETTINGS') {
+                        const { baleToken, baleChatId, farazToken, farazSession, candleConfirmations } = command;
                         
-                        // BTC Engine needs more fields
+                        farazEngine.updateBaleConfig(baleToken, baleChatId);
+                        if (candleConfirmations) (farazEngine as any).candleConfirmations = candleConfirmations;
+                        farazEngine.saveSettings();
+
+                        alphaEngine.updateBaleConfig(baleToken, baleChatId);
+                        if (candleConfirmations) (alphaEngine as any).candleConfirmations = candleConfirmations;
+                        alphaEngine.saveSettings();
+                        
                         btcEngine.updateBaleConfig(baleToken, baleChatId);
                         if (farazToken) btcEngine.currentToken = farazToken;
                         if (farazSession) btcEngine.farazSession = farazSession;
+                        if (candleConfirmations) (btcEngine as any).candleConfirmations = candleConfirmations;
                         btcEngine.saveSettings();
                         btcEngine.fetchHistory(); // Retry history with new token
 

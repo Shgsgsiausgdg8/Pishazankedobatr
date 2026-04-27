@@ -80,7 +80,7 @@ export class TradingStrategy {
     /**
      * تابع اصلی تحلیل
      */
-    analyze(candles: Candle[], timeframe: string, strategyType: string = 'N-PATTERN'): Signal | null {
+    analyze(candles: Candle[], timeframe: string, strategyType: string = 'N-PATTERN', confirmations?: any): Signal | null {
         if (!candles || candles.length < 50) return null;
 
         let result: any = null;
@@ -109,6 +109,9 @@ export class TradingStrategy {
             case 'EMA-CROSS':
                 result = this.analyzeEMACross(candles);
                 break;
+            case 'FIB-38':
+                result = this.analyzeFIB38(candles);
+                break;
             case 'N-PATTERN':
             default:
                 result = this.detectNPattern(candles);
@@ -117,6 +120,15 @@ export class TradingStrategy {
 
         if (!result) return null;
 
+        // تاییدیه کندلی مخصوص FIB-38
+        if (strategyType === 'FIB-38' && confirmations) {
+            const hasConfirmationsRequested = Object.values(confirmations).some(v => v === true);
+            if (hasConfirmationsRequested) {
+                const candleConfirmed = this.checkCandleConfirmations(candles, confirmations);
+                if (!candleConfirmed) return null;
+            }
+        }
+
         // جلوگیری از سیگنال‌های تکراری بر اساس زمان بازار
         const candleTime = candles[candles.length - 1].time;
         if (this.lastSignalTime && (candleTime - this.lastSignalTime) < 60000 && strategyType === 'N-PATTERN') return null;
@@ -124,6 +136,93 @@ export class TradingStrategy {
         const signal = this.createSignalFromPattern(result, timeframe);
         this.lastSignalTime = candleTime;
         return signal;
+    }
+
+    private checkCandleConfirmations(candles: Candle[], confs: any): boolean {
+        const last = candles[candles.length - 1];
+        const prev = candles.length > 1 ? candles[candles.length - 2] : null;
+
+        const body = Math.abs(last.close - last.open);
+        const upperWick = last.high - Math.max(last.open, last.close);
+        const lowerWick = Math.min(last.open, last.close) - last.low;
+        const totalRange = last.high - last.low;
+
+        // 1. Hammer (Legacy/Salvation) - Bullish
+        if (confs.legacy || confs.salvation) {
+            const isHammer = lowerWick > (body * 2) && upperWick < (body * 0.5) && totalRange > 0;
+            if (isHammer) return true;
+        }
+
+        // 2. Nameless (بی‌نام) - Long lower wick even if body is red
+        if (confs.nameless) {
+            const isNameless = lowerWick > (body * 2.5) && totalRange > 0;
+            if (isNameless) return true;
+        }
+
+        // 3. Engulfing (پوششی) - Bullish Engulfing
+        if (confs.engulfing && prev) {
+            const isPrevRed = prev.close < prev.open;
+            const isCurrGreen = last.close > last.open;
+            const isEngulfing = isCurrGreen && isPrevRed && last.close > prev.open && last.open < prev.close;
+            if (isEngulfing) return true;
+        }
+
+        // 4. Dark Cloud / Gap variant (ابر سیاه)
+        if (confs.darkCloud && prev) {
+            const gap = last.open - prev.close;
+            if (Math.abs(gap) > (totalRange * 0.1)) return true; // Significant gap
+        }
+
+        return false;
+    }
+
+    private analyzeFIB38(candles: Candle[]) {
+        const lookback = 150;
+        const recentCandles = candles.slice(-lookback);
+        if (recentCandles.length < 50) return null;
+
+        let saghf = -Infinity;
+        let kaf = Infinity;
+
+        recentCandles.forEach(c => {
+            if (c.high > saghf) saghf = c.high;
+            if (c.low < kaf) kaf = c.low;
+        });
+
+        const range = saghf - kaf;
+        if (range <= 0) return null;
+
+        const lastClose = candles[candles.length - 1].close;
+        const prevClose = candles[candles.length - 2].close;
+
+        const fib38_up = saghf - (range * 0.38);
+        const fib38_down = kaf + (range * 0.38);
+
+        // سیگنال خرید: عبور قیمت از بالا به پایین به میانه زون (اصلاح ۳۸ درصدی از سقف)
+        if (prevClose > fib38_up && lastClose <= fib38_up && lastClose >= fib38_down) {
+            return { 
+                type: 'BUY', 
+                signalPrice: lastClose,
+                kaf: kaf,
+                saghf: saghf,
+                confidence: 90,
+                isFIB38: true
+            };
+        }
+
+        // سیگنال فروش: عبور قیمت از پایین به بالا به میانه زون (اصلاح ۳۸ درصدی از کف)
+        if (prevClose < fib38_down && lastClose >= fib38_down && lastClose <= fib38_up) {
+            return { 
+                type: 'SELL', 
+                signalPrice: lastClose,
+                kaf: kaf,
+                saghf: saghf,
+                confidence: 90,
+                isFIB38: true
+            };
+        }
+
+        return null;
     }
 
     private analyzeRSI(candles: Candle[]) {
@@ -659,6 +758,19 @@ export class TradingStrategy {
                 tp2 = C.price - abDist;
                 // تارگت ۳: ۱۲۷٪ پراجکشن
                 tp3 = C.price - (abDist * 1.27);
+            }
+        } else if (pattern.isFIB38) {
+            const range = pattern.saghf - pattern.kaf;
+            if (isBuy) {
+                sl = pattern.kaf - (range * 0.1);
+                tp1 = pattern.saghf;
+                tp2 = pattern.saghf + (range * 0.38);
+                tp3 = pattern.saghf + (range * 0.61);
+            } else {
+                sl = pattern.saghf + (range * 0.1);
+                tp1 = pattern.kaf;
+                tp2 = pattern.kaf - (range * 0.38);
+                tp3 = pattern.kaf - (range * 0.61);
             }
         } else {
             const slDist = atr * 1.5;

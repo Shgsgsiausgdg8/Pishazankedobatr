@@ -18,6 +18,13 @@ export class FarazGoldEngine {
     // Bale Config
     baleToken: string = '1892918835:dxRdPwhkUUgmFogKzLD7B8xmygvnRKq_DOA';
     baleChatId: string = '6211548865';
+    candleConfirmations = {
+        legacy: true,
+        salvation: true,
+        nameless: true,
+        engulfing: true,
+        darkCloud: true
+    };
 
     // Auth State
     accessToken: string | null = null;
@@ -151,6 +158,7 @@ export class FarazGoldEngine {
                 this.csrfToken = settings.csrfToken || null;
                 if (settings.baleToken) this.baleToken = settings.baleToken;
                 if (settings.baleChatId) this.baleChatId = settings.baleChatId;
+                if (settings.candleConfirmations) this.candleConfirmations = settings.candleConfirmations;
             }
         } catch (e) {
             console.error("Error loading settings:", e);
@@ -165,7 +173,8 @@ export class FarazGoldEngine {
                 sessionId: this.sessionId,
                 csrfToken: this.csrfToken,
                 baleToken: this.baleToken,
-                baleChatId: this.baleChatId
+                baleChatId: this.baleChatId,
+                candleConfirmations: this.candleConfirmations
             };
             fs.writeFileSync(this.settingsFile, JSON.stringify(settings, null, 2));
         } catch (e) {
@@ -407,7 +416,7 @@ export class FarazGoldEngine {
     }
 
     runStrategy() {
-        const signal = this.strategy.analyze(this.candles, this.timeframe, this.liveStrategyType);
+        const signal = this.strategy.analyze(this.candles, this.timeframe, this.liveStrategyType, this.candleConfirmations);
         if (signal) {
             const lastSignal = this.signals[0];
             if (!lastSignal || lastSignal.timeframe !== signal.timeframe || Math.abs(lastSignal.time - signal.time) > 60000) {
@@ -502,7 +511,8 @@ export class FarazGoldEngine {
             totalCandles: this.candles.length,
             nPattern: nPattern, 
             baleToken: this.baleToken,
-            baleChatId: this.baleChatId
+            baleChatId: this.baleChatId,
+            candleConfirmations: this.candleConfirmations
         };
     }
 
