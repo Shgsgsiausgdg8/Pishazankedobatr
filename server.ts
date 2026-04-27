@@ -91,7 +91,7 @@ async function startServer() {
                             data: { totalTrades: 0, winRate: 0, totalProfit: 0, maxDrawdown: 0, bestHour: -1, bestDay: 'N/A', trades: [], error: 'Not enough data (min 60 candles)' } 
                         }));
                     } else {
-                        const results = backtestEngine.run(fullCandles, state.timeframe, command.strategyType);
+                        const results = backtestEngine.run(fullCandles, state.timeframe, command.strategyType, state.strategyConfig);
                         ws.send(JSON.stringify({
                             type: 'BACKTEST_RESULTS',
                             broker: currentBroker,
@@ -112,7 +112,7 @@ async function startServer() {
                             error: 'Not enough data (min 60 candles)'
                         }));
                     } else {
-                        const results = backtestEngine.runGlobalComparison(fullCandles, state.timeframe);
+                        const results = backtestEngine.runGlobalComparison(fullCandles, state.timeframe, state.strategyConfig);
                         ws.send(JSON.stringify({
                             type: 'GLOBAL_BACKTEST_RESULTS',
                             broker: currentBroker,

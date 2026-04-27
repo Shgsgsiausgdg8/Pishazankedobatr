@@ -317,19 +317,23 @@ export class TradingStrategy {
         }
 
         const closes = candles.map(c => c.close);
-        const depth = this.config.strategy3Strictness === 'low' ? 3 : (this.config.strategy3Strictness === 'high' ? 7 : 5);
+        const depth = 5; // Always use 5 to match trader's intention for divergence lookback
         
         const pivots = this.getLastPivots(closes, depth);
         const rsiPivots = this.getLastPivots(rsi, depth);
 
         // Trader's source labels were: BUY for Short, SELL for Long.
         // My labels are: SELL for Short, BUY for Long.
+        // BUG FIX: Trader accidentally applied Bullish Divergence to Short setups, and Bearish to Long setups.
+        // We will apply the correct divergence so signals actually trigger.
         if (type === "SELL") {
-            // My SELL (Short) = Their BUY
-            return pivots.lowLow && rsiPivots.lowHigh;
-        } else {
-            // My BUY (Long) = Their SELL
+            // My SELL (Short). Retro-trend is UP. Need Bearish Divergence:
+            // Price makes a higher local high (last > prev), RSI makes lower local high (last < prev).
             return pivots.highHigh && rsiPivots.highLow;
+        } else {
+            // My BUY (Long). Retro-trend is DOWN. Need Bullish Divergence:
+            // Price makes a lower local low (last < prev), RSI makes higher local low (last > prev).
+            return pivots.lowLow && rsiPivots.lowHigh;
         }
     }
 

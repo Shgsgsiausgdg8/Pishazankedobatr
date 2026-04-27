@@ -26,8 +26,11 @@ export class BacktestEngine {
     /**
      * Executes a simulation on historical candles
      */
-    run(candles: Candle[], timeframe: string, strategyType: string): BacktestResult {
+    run(candles: Candle[], timeframe: string, strategyType: string, config?: any): BacktestResult {
         const strategy = new TradingStrategy(); // Create fresh instance for each run
+        if (config) {
+            strategy.updateConfig(config);
+        }
         const trades = [];
         let buyTradesCount = 0;
         let sellTradesCount = 0;
@@ -124,7 +127,7 @@ export class BacktestEngine {
     /**
      * Runs all available strategies and compares them
      */
-    runGlobalComparison(candles: Candle[], timeframe: string): { strategy: string, results: BacktestResult }[] {
+    runGlobalComparison(candles: Candle[], timeframe: string, config?: any): { strategy: string, results: BacktestResult }[] {
         const types = [
             { id: 'N-PATTERN', name: 'الگوی N' },
             { id: 'FIB-38', name: 'فیبوناتچی ۳۸٪' },
@@ -134,7 +137,7 @@ export class BacktestEngine {
         const comparison = types.map(type => {
             return {
                 strategy: type.name,
-                results: this.run(candles, timeframe, type.id)
+                results: this.run(candles, timeframe, type.id, config)
             };
         });
         
