@@ -919,6 +919,7 @@ export default function App() {
                 >
                   <option value="N-PATTERN">الگوی N کلاسیک (N-Pattern)</option>
                   <option value="FIB-38">فیبوناچی ۳۸٪ (Fibonacci)</option>
+                  <option value="STRATEGY_3">استراتژی فراز (Fib+CRSI)</option>
                 </select>
               </div>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', width: '100%', sm: 'auto' } as any}>

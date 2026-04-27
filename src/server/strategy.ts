@@ -765,7 +765,7 @@ export class TradingStrategy {
                 tp2 = low + (range * 0.50);
                 tp3 = low + (range * 0.71);
             } else {
-                sl = low - (low * 0.0015);
+                sl = low - (low * 0.0015); // Fixed logic for sell SL
                 tp1 = high - (range * 0.38);
                 tp2 = high - (range * 0.50);
                 tp3 = high - (range * 0.71);
