@@ -287,7 +287,9 @@ export class AlphaGoldEngine {
         
         const strategyNames: Record<string, string> = {
             'N-PATTERN': 'الگوی N',
-            'FIB-38': 'فیبوناتچی ۳۸٪'
+            'FIB-38': 'فیبوناتچی ۳۸٪',
+            'STRATEGY_3': 'استراتژی فراز',
+            'STRATEGY_4': 'استراتژی چهارم'
         };
 
         const message = `

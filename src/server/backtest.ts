@@ -125,11 +125,16 @@ export class BacktestEngine {
      * Runs all available strategies and compares them
      */
     runGlobalComparison(candles: Candle[], timeframe: string): { strategy: string, results: BacktestResult }[] {
-        const types = ['N-PATTERN', 'FIB-38', 'STRATEGY_3', 'STRATEGY_4'];
+        const types = [
+            { id: 'N-PATTERN', name: 'الگوی N' },
+            { id: 'FIB-38', name: 'فیبوناتچی ۳۸٪' },
+            { id: 'STRATEGY_3', name: 'استراتژی فراز (Fib+CRSI)' },
+            { id: 'STRATEGY_4', name: 'استراتژی چهارم (ساده)' }
+        ];
         const comparison = types.map(type => {
             return {
-                strategy: type,
-                results: this.run(candles, timeframe, type)
+                strategy: type.name,
+                results: this.run(candles, timeframe, type.id)
             };
         });
         

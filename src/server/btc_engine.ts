@@ -214,11 +214,18 @@ export class BtcEngine {
         const date = new Date(sig.time).toLocaleDateString('fa-IR');
         const time = new Date(sig.time).toLocaleTimeString('fa-IR');
         
+        const strategyNames: Record<string, string> = {
+            'N-PATTERN': 'الگوی N',
+            'FIB-38': 'فیبوناتچی ۳۸٪',
+            'STRATEGY_3': 'استراتژی فراز',
+            'STRATEGY_4': 'استراتژی چهارم'
+        };
+
         const message = `
 🌟 **سیگنال جدید ربات فراز گلد** 🌟
 
 📊 **بازار:** ${this.brokerName}
-📌 **استراتژی:** ${this.liveStrategyType}
+📌 **استراتژی:** ${strategyNames[this.liveStrategyType] || this.liveStrategyType}
 🕒 **زمان:** ${time}
 📅 **تاریخ:** ${date}
 ⏳ **تایم‌فریم:** ${sig.timeframe}m

@@ -760,12 +760,16 @@ export class TradingStrategy {
         } else if (pattern.isFibCRSI) {
             const { high, low, range } = pattern;
             if (isBuy) {
-                sl = high + (high * 0.0015);
+                // For BUY: Pullback from HIGH to LOW, expecting reversal up from 71-88% zone
+                // SL should be below LOW (the bottom of the move)
+                sl = low - (low * 0.0015);
                 tp1 = low + (range * 0.38);
                 tp2 = low + (range * 0.50);
                 tp3 = low + (range * 0.71);
             } else {
-                sl = low - (low * 0.0015); // Fixed logic for sell SL
+                // For SELL: Move from LOW to HIGH, expecting reversal down from 71-88% zone
+                // SL should be above HIGH (the top of the move)
+                sl = high + (high * 0.0015);
                 tp1 = high - (range * 0.38);
                 tp2 = high - (range * 0.50);
                 tp3 = high - (range * 0.71);
