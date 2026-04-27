@@ -77,6 +77,12 @@ export class TradingStrategy {
             case 'FIB-38':
                 result = this.analyzeFIB38(candles);
                 break;
+            case 'STRATEGY_3':
+                result = this.detectStrategy3(candles);
+                break;
+            case 'STRATEGY_4':
+                result = this.detectStrategy4(candles);
+                break;
             case 'N-PATTERN':
             default:
                 result = this.detectNPattern(candles);
@@ -191,6 +197,41 @@ export class TradingStrategy {
             };
         }
 
+        return null;
+    }
+
+    /**
+     * استراتژی سوم - ساده (RSI)
+     * معامله‌گر می‌تواند به راحتی این بخش را تغییر دهد
+     */
+    private detectStrategy3(candles: Candle[]) {
+        const rsiValues = this.calculateRSI(candles, 14);
+        if (rsiValues.length === 0) return null;
+        const currentRSI = rsiValues[rsiValues.length - 1];
+        const lastPrice = candles[candles.length - 1].close;
+
+        if (currentRSI < 30) {
+            return { type: 'BUY', signalPrice: lastPrice, confidence: 70, label: 'RSI-BUY' };
+        } else if (currentRSI > 70) {
+            return { type: 'SELL', signalPrice: lastPrice, confidence: 70, label: 'RSI-SELL' };
+        }
+        return null;
+    }
+
+    /**
+     * استراتژی چهارم - ساده (MA Cross)
+     * معامله‌گر می‌تواند به راحتی این بخش را تغییر دهد
+     */
+    private detectStrategy4(candles: Candle[]) {
+        const ma20 = this.calculateSMA(candles, 20);
+        const lastPrice = candles[candles.length - 1].close;
+        if (!ma20) return null;
+
+        if (lastPrice > ma20) {
+            return { type: 'BUY', signalPrice: lastPrice, confidence: 60, label: 'MA-UP' };
+        } else if (lastPrice < ma20) {
+            return { type: 'SELL', signalPrice: lastPrice, confidence: 60, label: 'MA-DOWN' };
+        }
         return null;
     }
 

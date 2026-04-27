@@ -125,7 +125,7 @@ export class BacktestEngine {
      * Runs all available strategies and compares them
      */
     runGlobalComparison(candles: Candle[], timeframe: string): { strategy: string, results: BacktestResult }[] {
-        const types = ['N-PATTERN', 'FIB-38'];
+        const types = ['N-PATTERN', 'FIB-38', 'STRATEGY_3', 'STRATEGY_4'];
         const comparison = types.map(type => {
             return {
                 strategy: type,

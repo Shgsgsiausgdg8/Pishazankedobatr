@@ -10,7 +10,7 @@ const SettingsIcon = ({ size = 16 }: { size?: number }) => (
 const CheckIcon = ({ size = 14, stroke = "currentColor" }: { size?: number, stroke?: string }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
 );
-const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount }: { data: any[], levels: any[], nPattern?: any, originalCandlesCount: number }) => {
+const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount, activeStrategy }: { data: any[], levels: any[], nPattern?: any, originalCandlesCount: number, activeStrategy?: string }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [viewState, setViewState] = useState({ offset: 0, zoom: 1, followLatest: true });
@@ -248,7 +248,7 @@ const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount }: { da
       ctx.setLineDash([]);
       
       // Draw labels A, B, C, D with high visibility (Only if N-Pattern strategy is active)
-      if (nPattern && data && data.length > 0 && nPattern.points && (viewState.activeStrategy === 'N-PATTERN' || !viewState.activeStrategy || viewState.activeStrategy === 'الگوی N کلاسیک (N-Pattern)')) {
+      if (nPattern && data && data.length > 0 && nPattern.points && (activeStrategy === 'N-PATTERN' || !activeStrategy)) {
         nPattern.points.forEach((p: any) => {
             let x = 0;
             if (p.index !== undefined) {
@@ -690,6 +690,8 @@ export default function App() {
                 >
                   <option value="N-PATTERN">الگوی N (N-Pattern)</option>
                   <option value="FIB-38">فیبوناچی ۳۸٪ (FIB-38)</option>
+                  <option value="STRATEGY_3">استراتژی سوم (ساده)</option>
+                  <option value="STRATEGY_4">استراتژی چهارم (ساده)</option>
                 </select>
                 <button 
                   onClick={() => setShowStrategySettings(true)}
@@ -897,6 +899,7 @@ export default function App() {
               levels={data?.levels || []} 
               nPattern={data?.nPattern}
               originalCandlesCount={data?.totalCandles || 0}
+              activeStrategy={data?.liveStrategy}
             />
           </div>
 
