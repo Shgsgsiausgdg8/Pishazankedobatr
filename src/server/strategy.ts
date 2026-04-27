@@ -34,6 +34,7 @@ export interface StrategyConfig {
     nReversalThreshold: number;
     fibLookback: number;
     fibMinRange: number;
+    strategy3Strictness: 'low' | 'medium' | 'high';
 }
 
 export class TradingStrategy {
@@ -46,7 +47,8 @@ export class TradingStrategy {
         nMaxPullback: 0.70,  // Lowered from 0.85 to avoid "dead" patterns
         nReversalThreshold: 0.02,
         fibLookback: 60,
-        fibMinRange: 0.5
+        fibMinRange: 0.5,
+        strategy3Strictness: 'medium'
     };
 
     private activeStructure: { 
@@ -363,6 +365,17 @@ export class TradingStrategy {
         const crsi = this.calculateCRSI_Trader(candles);
         if (!crsi || crsi.length < 50) return false;
 
+        const currentCRSI = crsi[crsi.length - 1];
+
+        // Apply Strictness levels for CRSI
+        if (this.config.strategy3Strictness === 'medium') {
+            if (type === "BUY" && currentCRSI > 30) return false;
+            if (type === "SELL" && currentCRSI < 70) return false;
+        } else if (this.config.strategy3Strictness === 'high') {
+            if (type === "BUY" && currentCRSI > 15) return false;
+            if (type === "SELL" && currentCRSI < 85) return false;
+        }
+
         const closes = candles.map(c => c.close);
         
         // پیدا کردن سقف و کف‌های واقعی (Pivots) به جای کندل‌های ثابت
@@ -387,7 +400,10 @@ export class TradingStrategy {
     }
 
     private findLastTwoSwingPoints(values: number[], type: "high" | "low") {
-        const depth = 3; // حداقل فاصله برای تایید پیوت
+        let depth = 3; // Default Medium
+        if (this.config.strategy3Strictness === 'low') depth = 2;
+        if (this.config.strategy3Strictness === 'high') depth = 5;
+
         const foundIdx: number[] = [];
         
         // از آخر به اول بگرد دنبال پیوت‌ها

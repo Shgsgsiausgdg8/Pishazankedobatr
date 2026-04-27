@@ -44,7 +44,7 @@ export class BacktestEngine {
         // Iterate through candles to find signals
         for (let i = 50; i < candles.length - 10; i++) {
             // Optimization: avoid slicing large datasets repeatedly where possible
-            const window = candles.slice(Math.max(0, i - 300), i + 1);
+            const window = candles.slice(Math.max(0, i - 1000), i + 1);
             const signal = strategy.analyze(window, timeframe, strategyType);
 
             if (signal) {

@@ -46,7 +46,7 @@ export class FarazGoldEngine {
             const baseUrl = process.env.FARAZGOLD_BASEURL || 'https://demo.farazgold.com';
             const resolution = this.timeframe;
             const now = Math.floor(Date.now() / 1000);
-            const barsCount = 300;
+            const barsCount = 1000;
             const timeframeSeconds = (parseInt(resolution) || 1) * 60;
             const from = now - (barsCount * timeframeSeconds);
             const to = now;

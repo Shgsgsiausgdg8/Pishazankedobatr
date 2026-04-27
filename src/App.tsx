@@ -905,23 +905,42 @@ export default function App() {
 
           {/* Backtest Terminal - Moved up for better visibility */}
           <div className="card" style={{ border: '1px solid rgba(16, 185, 129, 0.3)', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
-            <div style={{ fontWeight: 'bold', color: '#10b981', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <ActivityIcon size={16} />
-              ترمینال بک‌تست (شنیه‌سازی استراتژی)
+            <div style={{ fontWeight: 'bold', color: '#10b981', marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <ActivityIcon size={16} />
+                ترمینال بک‌تست (شنیه‌سازی روی ۱۰۰۰ کندل اخیر)
+              </div>
+              <div style={{ fontSize: '0.7rem', color: '#475569', fontWeight: 'normal' }}>
+                دقت آنالیز: ۱۰/۱۰
+              </div>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem', background: '#020617', padding: '1.2rem', borderRadius: '16px', border: '1px solid #1e293b' }}>
               <div style={{ flex: 1, minWidth: '240px' }}>
                 <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '6px' }}>انتخاب استراتژی معاملاتی:</label>
-                <select 
-                  value={selectedStrategy} 
-                  onChange={e => setSelectedStrategy(e.target.value)}
-                  style={{ width: '100%', padding: '12px', borderRadius: '10px', background: '#1e293b', color: 'white', border: '1px solid #334155', cursor: 'pointer', fontSize: '0.9rem' }}
-                >
-                  <option value="N-PATTERN">الگوی N کلاسیک (N-Pattern)</option>
-                  <option value="FIB-38">فیبوناچی ۳۸٪ (Fibonacci)</option>
-                  <option value="STRATEGY_3">استراتژی فراز (Fib+CRSI)</option>
-                  <option value="STRATEGY_4">استراتژی چهارم (ساید)</option>
-                </select>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <select 
+                    value={selectedStrategy} 
+                    onChange={e => setSelectedStrategy(e.target.value)}
+                    style={{ flex: 2, padding: '12px', borderRadius: '10px', background: '#1e293b', color: 'white', border: '1px solid #334155', cursor: 'pointer', fontSize: '0.9rem' }}
+                  >
+                    <option value="N-PATTERN">الگوی N کلاسیک (N-Pattern)</option>
+                    <option value="FIB-38">فیبوناچی ۳۸٪ (Fibonacci)</option>
+                    <option value="STRATEGY_3">استراتژی فراز (Fib+CRSI)</option>
+                    <option value="STRATEGY_4">استراتژی چهارم (ساید)</option>
+                  </select>
+                  
+                  {selectedStrategy === 'STRATEGY_3' && (
+                    <select 
+                      value={data?.strategyConfig?.strategy3Strictness || 'medium'} 
+                      onChange={(e) => updateStrategyConfig({ strategy3Strictness: e.target.value })}
+                      style={{ flex: 1, padding: '12px', borderRadius: '10px', background: '#0f172a', border: '1px solid #f59e0b', color: '#f59e0b', fontSize: '0.8rem', fontWeight: 'bold' }}
+                    >
+                      <option value="low">سخت‌گیری کم</option>
+                      <option value="medium">متوسط</option>
+                      <option value="high">سخت‌گیرانه</option>
+                    </select>
+                  )}
+                </div>
               </div>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', width: '100%', sm: 'auto' } as any}>
                 <button 
@@ -1244,10 +1263,22 @@ export default function App() {
               </div>
 
               <div style={{ pb: '12px', mb: '4px' } as any}>
-                <h3 style={{ fontSize: '0.85rem', color: '#f59e0b', marginBottom: '10px' }}>پارامترهای فیبو ۳۸٪</h3>
+                <h3 style={{ fontSize: '0.85rem', color: '#f59e0b', marginBottom: '10px' }}>پارامترهای استراتژی فراز (Fib + CRSI)</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span style={{ fontSize: '0.8rem', color: '#94a3b8', width: '80px' }}>Lookback:</span>
+                    <span style={{ fontSize: '0.8rem', color: '#94a3b8', width: '120px' }}>سخت‌گیری (Strictness):</span>
+                    <select 
+                      value={data?.strategyConfig?.strategy3Strictness || 'medium'} 
+                      onChange={(e) => updateStrategyConfig({ strategy3Strictness: e.target.value })}
+                      style={{ flex: 1, padding: '4px 8px', borderRadius: '6px', background: '#1e293b', border: '1px solid #10b981', color: 'white', fontSize: '0.8rem' }}
+                    >
+                      <option value="low">کم (بدون فیلتر شداید)</option>
+                      <option value="medium">متوسط (استاندارد)</option>
+                      <option value="high">زیاد (نقاط فوق‌اشباع)</option>
+                    </select>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{ fontSize: '0.8rem', color: '#94a3b8', width: '100px' }}>Lookback:</span>
                     <input 
                       type="range" min="30" max="150" step="10"
                       value={data?.strategyConfig?.fibLookback || 60}

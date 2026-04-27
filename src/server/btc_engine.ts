@@ -75,7 +75,7 @@ export class BtcEngine {
         try {
             const now = Math.floor(Date.now() / 1000);
             const from = now - (1000 * 60); 
-            const url = `https://ir3.faraz.io/api/customer/trading-view/history?symbolName=BTCUSDT_FUTURES&resolution=${this.timeframe}&from=${from}&to=${now}&countback=500&firstDataRequest=true&latest=true&adjustType=2&json=true`;
+            const url = `https://ir3.faraz.io/api/customer/trading-view/history?symbolName=BTCUSDT_FUTURES&resolution=${this.timeframe}&from=${from}&to=${now}&countback=1000&firstDataRequest=true&latest=true&adjustType=2&json=true`;
             
             console.log(`[BTC-Engine] Fetching history from: ${url}`);
 
