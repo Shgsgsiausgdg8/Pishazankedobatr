@@ -16,7 +16,7 @@ export class BtcEngine {
     brokerName = 'بیتکوین (BTCUSDT)';
     
     // Auth & Settings
-    currentToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2OGYwMDk2YzIxZjM0N2RhOTMyMzIzZTgiLCJjcmVkaXQiOjE3Nzc1MjczNjU2NTIsImFjdGl2ZSI6dHJ1ZSwicm9sZSI6ImN1c3RvbWVyIiwibGFzdFVwZGF0ZVRpbWUiOjE3NzcyMzQzNjMyMTksImlhdCI6MTc3NzIzNDM2MywiZXhwIjoxNzc3MjQxNTYzfQ.tNmUrUMYLVoPT1JhBluYtTBqg1nK8Q9T90kvozedBbk";
+    currentToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2OGYwMDk2YzIxZjM0N2RhOTMyMzIzZTgiLCJjcmVkaXQiOjE3Nzc1MjczNjU2NTIsImFjdGl2ZSI6dHJ1ZSwicm9sZSI6ImN1c3RvbWVyIiwibGFzdFVwZGF0ZVRpbWUiOjE3Nzc1MzMxMDIzNTIsImlhdCI6MTc3NzUzMzEwMiwiZXhwIjoxNzc3NTQwMzAyfQ.2P-2g2_R15Tz30XFqD_4lYn58OitL0G9Yp1NshqI1v4";
     farazSession = "s%3AIOMPjESaRChioBmpMfZZHUbDdGaKuEQA.NuYpPcEPXmu9AFqHcx2U6RUCUfpZ%2Fd%2BmCvrmGDBuUrQ";
     baleToken = "1892918835:dxRdPwhkUUgmFogKzLD7B8xmygvnRKq_DOA";
     baleChatId = "6211548865";
@@ -59,32 +59,49 @@ export class BtcEngine {
     async fetchHistory() {
         try {
             const now = Math.floor(Date.now() / 1000);
-            const from = now - (500 * 60); // 500 minutes back
+            const from = now - (1000 * 60); 
             const url = `https://ir3.faraz.io/api/customer/trading-view/history?symbolName=BTCUSDT_FUTURES&resolution=${this.timeframe}&from=${from}&to=${now}&countback=500&firstDataRequest=true&latest=true&adjustType=2&json=true`;
             
+            console.log(`[BTC-Engine] Fetching history from: ${url}`);
+
             const res = await fetch(url, {
                 headers: {
-                    'Cookie': `x-access-token=${this.currentToken}; farazSession=${this.farazSession}`,
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    'accept': 'application/json, text/plain, */*',
+                    'accept-language': 'fa-IR,fa;q=0.9,en-US;q=0.8,en;q=0.7',
+                    'cookie': `x-access-token=${this.currentToken}; farazSession=${this.farazSession}`,
+                    'origin': 'https://faraz.io',
+                    'referer': 'https://faraz.io/',
+                    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
                 }
             });
+
+            if (!res.ok) {
+                console.error(`[BTC-Engine] History HTTP error: ${res.status}`);
+                return;
+            }
+
             const data: any = await res.json();
             
-            if (data.result && data.result.t) {
+            if (data.result && data.result.t && Array.isArray(data.result.t)) {
                 const r = data.result;
                 this.candles = r.t.map((t: number, i: number) => ({
                     time: t,
-                    open: r.o[i],
-                    high: r.h[i],
-                    low: r.l[i],
-                    close: r.c[i]
-                }));
-                this.price = this.candles[this.candles.length - 1].close;
-                this.detectLevels();
-                console.log(`[BTC-Engine] Loaded ${this.candles.length} history bars.`);
+                    open: parseFloat(r.o[i]),
+                    high: parseFloat(r.h[i]),
+                    low: parseFloat(r.l[i]),
+                    close: parseFloat(r.c[i])
+                })).filter((c: any) => !isNaN(c.close));
+
+                if (this.candles.length > 0) {
+                    this.price = this.candles[this.candles.length - 1].close;
+                    this.detectLevels();
+                }
+                console.log(`[BTC-Engine] Successfully loaded ${this.candles.length} history bars.`);
+            } else {
+                console.warn("[BTC-Engine] History response format unknown or empty:", JSON.stringify(data).substring(0, 200));
             }
-        } catch (e) {
-            console.error("[BTC-Engine] History fetch failed", e);
+        } catch (e: any) {
+            console.error("[BTC-Engine] History fetch failed:", e.message);
         }
     }
 
