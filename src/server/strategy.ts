@@ -190,7 +190,19 @@ export class TradingStrategy {
         // Sell: Pullback into the 38.2%-61.8% zone and showing a reversal
         if (prev.high >= fib38_inv && prev.high <= fib61_inv && last.close < prev.close) {
             return { 
-                /**
+                type: 'SELL', 
+                signalPrice: last.close,
+                kaf: kaf,
+                saghf: saghf,
+                confidence: 85,
+                isFIB38: true
+            };
+        }
+
+        return null;
+    }
+
+    /**
      * استراتژی سوم - فیبوناچی + واگرایی CRSI (نسخه دقیق تریدر فراز)
      */
     private detectStrategy3(candles: Candle[]) {
@@ -217,18 +229,18 @@ export class TradingStrategy {
         const fibRange = Math.abs(high - low);
         if (fibRange < this.config.fibMinRange) return null;
 
-        /* BUY: High -> Low (حرکت نزولی، بازگشت به سمت بالا) */
+        /* SELL: High -> Low (حرکت نزولی، بازگشت به سمت بالا - سیگنال فروش در سقف اصلاحی) */
         if (highIdx < lowIdx) {
             const fib71 = low + fibRange * 0.71;
             const fib88 = low + fibRange * 0.88;
 
             const inZone = last.low <= fib88 && last.high >= fib71;
             if (inZone) {
-                const hasDiv = this.checkCRSIDivergence(candles, "BUY");
+                const hasDiv = this.checkCRSIDivergence(candles, "SELL");
                 if (!hasDiv) return null;
 
                 return {
-                    type: "BUY",
+                    type: "SELL",
                     signalPrice: last.close,
                     high, low, range: fibRange,
                     isFibCRSI: true,
@@ -237,18 +249,18 @@ export class TradingStrategy {
             }
         }
 
-        /* SELL: Low -> High (حرکت صعودی، بازگشت به سمت پایین) */
+        /* BUY: Low -> High (حرکت صعودی، بازگشت به سمت پایین - سیگنال خرید در کف اصلاحی) */
         if (lowIdx < highIdx) {
             const fib71 = high - fibRange * 0.71;
             const fib88 = high - fibRange * 0.88;
 
             const inZone = last.high >= fib88 && last.low <= fib71;
             if (inZone) {
-                const hasDiv = this.checkCRSIDivergence(candles, "SELL");
+                const hasDiv = this.checkCRSIDivergence(candles, "BUY");
                 if (!hasDiv) return null;
 
                 return {
-                    type: "SELL",
+                    type: "BUY",
                     signalPrice: last.close,
                     high, low, range: fibRange,
                     isFibCRSI: true,
@@ -310,9 +322,13 @@ export class TradingStrategy {
         const pivots = this.getLastPivots(closes, depth);
         const rsiPivots = this.getLastPivots(rsi, depth);
 
-        if (type === "BUY") {
+        // Trader's source labels were: BUY for Short, SELL for Long.
+        // My labels are: SELL for Short, BUY for Long.
+        if (type === "SELL") {
+            // My SELL (Short) = Their BUY
             return pivots.lowLow && rsiPivots.lowHigh;
         } else {
+            // My BUY (Long) = Their SELL
             return pivots.highHigh && rsiPivots.highLow;
         }
     }
@@ -331,21 +347,6 @@ export class TradingStrategy {
         if (last > prev) result.lowHigh = true;
 
         return result;
-    }
-es[i] < values[i-j] || values[i] < values[i+j]) { isPivot = false; break; }
-                } else {
-                    if (values[i] > values[i-j] || values[i] > values[i+j]) { isPivot = false; break; }
-                }
-            }
-            
-            if (isPivot) {
-                foundIdx.push(i);
-                if (foundIdx.length === 2) break;
-            }
-        }
-
-        if (foundIdx.length < 2) return null;
-        return { lastIdx: foundIdx[0], prevIdx: foundIdx[1] };
     }
 
     /**
@@ -661,24 +662,19 @@ es[i] < values[i-j] || values[i] < values[i+j]) { isPivot = false; break; }
         } else if (pattern.isFibCRSI) {
             const { high, low, range, type } = pattern;
             
-            // Exact calculation from trader's source
-            const tp1_val = low + range * 0.38;
-            const tp2_val = low + range * 0.50;
-            const tp3_val = low + range * 0.71;
-
-            const tp1S_val = high - range * 0.38;
-            const tp2S_val = high - range * 0.50;
-            const tp3S_val = high - range * 0.71;
-
+            // Standardizing based on Trader's math but corrected for Long/Short logic
             if (type === "BUY") {
-                // If the signal is BUY, the trader's source sets these levels
-                // Note: Entry (inZone) is at 71-88%, so these targets are BELOW entry if BUY means Long.
-                // However, following source exactly.
-                sl = high + high * 0.0015;
-                tp1 = tp1_val; tp2 = tp2_val; tp3 = tp3_val;
-            } else {
+                // BUY (Long) signal from a "Low -> High" move that retraced down to 71-88%
                 sl = low - low * 0.0015;
-                tp1 = tp1S_val; tp2 = tp2S_val; tp3 = tp3S_val;
+                tp1 = high - range * 0.38;
+                tp2 = high - range * 0.50;
+                tp3 = high - range * 0.71;
+            } else {
+                // SELL (Short) signal from a "High -> Low" move that bounced up to 71-88%
+                sl = high + high * 0.0015;
+                tp1 = low + range * 0.38;
+                tp2 = low + range * 0.50;
+                tp3 = low + range * 0.71;
             }
         } else if (pattern.isFIB38) {
             const range = pattern.saghf - pattern.kaf;
