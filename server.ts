@@ -121,12 +121,13 @@ async function startServer() {
                     const engine = engines[currentBroker];
                     if (!engine) return;
                     
-                    if (command.type === 'START_RECORDING')
-                        engine.startRecording();
-                    else if (command.type === 'STOP_RECORDING')
-                        engine.stopRecording();
                     else if (command.type === 'SET_TIMEFRAME')
                         engine.setTimeframe(command.timeframe);
+                    else if (command.type === 'SET_STRATEGY_CONFIG') {
+                        if (typeof engine.setStrategyConfig === 'function') {
+                            engine.setStrategyConfig(command.config);
+                        }
+                    }
                     else if (command.type === 'SET_LIVE_STRATEGY') {
                         const engine = engines[currentBroker];
                         if (engine) {

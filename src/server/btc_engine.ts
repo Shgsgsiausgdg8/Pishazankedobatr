@@ -12,7 +12,7 @@ export class BtcEngine {
     
     ws: WebSocket | null = null;
     strategy = new TradingStrategy();
-    liveStrategyType = 'HYBRID';
+    liveStrategyType = 'N-PATTERN';
     brokerName = 'بیتکوین (BTCUSDT)';
     isEnabled = true;
     
@@ -45,6 +45,7 @@ export class BtcEngine {
                 if (s.farazSession) this.farazSession = s.farazSession;
                 if (s.candleConfirmations) this.candleConfirmations = s.candleConfirmations;
                 if (s.isEnabled !== undefined) this.isEnabled = s.isEnabled;
+                if (s.liveStrategyType) this.liveStrategyType = s.liveStrategyType;
             }
         } catch (e) {}
     }
@@ -57,7 +58,8 @@ export class BtcEngine {
                 currentToken: this.currentToken,
                 farazSession: this.farazSession,
                 candleConfirmations: this.candleConfirmations,
-                isEnabled: this.isEnabled
+                isEnabled: this.isEnabled,
+                liveStrategyType: this.liveStrategyType
             };
             fs.writeFileSync(this.settingsFile, JSON.stringify(s, null, 2));
         } catch (e) {}
@@ -262,7 +264,6 @@ export class BtcEngine {
             candles: this.candles.slice(-400),
             levels: this.levels,
             signals: this.signals,
-            isRecording: false,
             totalCandles: this.candles.length,
             nPattern,
             baleToken: this.baleToken,
@@ -270,7 +271,12 @@ export class BtcEngine {
             currentToken: this.currentToken,
             farazSession: this.farazSession,
             candleConfirmations: this.candleConfirmations,
-            isEnabled: this.isEnabled
+            isEnabled: this.isEnabled,
+            strategyConfig: (this.strategy as any).config
         };
+    }
+
+    setStrategyConfig(config: any) {
+        this.strategy.updateConfig(config);
     }
 }

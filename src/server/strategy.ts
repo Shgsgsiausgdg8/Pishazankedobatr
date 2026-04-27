@@ -27,54 +27,42 @@ export interface Signal {
   confidence?: number; // درصد اطمینان سیگنال
 }
 
+export interface StrategyConfig {
+    smaPeriod: number;
+    nMinPullback: number;
+    nMaxPullback: number;
+    nReversalThreshold: number;
+    fibLookback: number;
+    fibMinRange: number;
+}
+
 export class TradingStrategy {
     private lastSignalTime: number = 0;       // جلوگیری از سیگنال‌های تکراری
     private lastPatternKey: string | null = null;    // کلید منحصربه‌فرد الگو
     private totalPatternsCount: number = 0;
+    private config: StrategyConfig = {
+        smaPeriod: 100,
+        nMinPullback: 0.382, // Standard Fib level
+        nMaxPullback: 0.70,  // Lowered from 0.85 to avoid "dead" patterns
+        nReversalThreshold: 0.02,
+        fibLookback: 60,
+        fibMinRange: 0.5
+    };
+
     private activeStructure: { 
         A: { type: 'high' | 'low', price: number, index: number, time: number }, 
         B: { type: 'high' | 'low', price: number, index: number, time: number },
-        C: { price: number, time: number, index: number } | null,
+        C: { price: number, time: number, index: number },
         isLockedB: boolean,
+        isLockedC: boolean,
         targetD: number,
         status: 'MONITORING' | 'SIGNALLED'
     } | null = null;
 
     constructor() {}
 
-    private analyzeHybrid(candles: Candle[], timeframe: string) {
-        // ۱. ابتدا الگوی N را بررسی کن
-        const nResult = this.detectNPattern(candles);
-        if (!nResult || !this.activeStructure) return null;
-
-        // ۲. تاییدیه اسکلپ را بگیر
-        const rsi = this.calculateRSI(candles, 14);
-        const ema9 = this.calculateEMA(candles, 9);
-        const ema21 = this.calculateEMA(candles, 21);
-        
-        const lastRSI = rsi[rsi.length - 1];
-        const lastE9 = ema9[ema9.length - 1];
-        const lastE21 = ema21[ema21.length - 1];
-
-        const isNConfirmed = this.activeStructure.status === 'SIGNALLED';
-        if (!isNConfirmed) return null;
-
-        let hybridConfirmed = false;
-        if (this.activeStructure.A.type === 'low') { // خرید
-            const isEmaBullish = lastE9 >= lastE21;
-            const isRsiBullish = lastRSI > 40;
-            if (isEmaBullish && isRsiBullish) hybridConfirmed = true;
-        } else { // فروش
-            const isEmaBearish = lastE9 <= lastE21;
-            const isRsiBearish = lastRSI < 60;
-            if (isEmaBearish && isRsiBearish) hybridConfirmed = true;
-        }
-
-        if (hybridConfirmed) {
-            return this.createSignalFromPattern(nResult, timeframe);
-        }
-
-        return null;
+    public updateConfig(newConfig: Partial<StrategyConfig>) {
+        this.config = { ...this.config, ...newConfig };
     }
 
     /**
@@ -86,29 +74,6 @@ export class TradingStrategy {
         let result: any = null;
 
         switch (strategyType) {
-            case 'HYBRID':
-                return this.analyzeHybrid(candles, timeframe);
-            case 'SCALP-ADV':
-                result = this.analyzeScalp(candles);
-                break;
-            case 'QUANT':
-                result = this.analyzeQuant(candles);
-                break;
-            case 'TREND-MT':
-                result = this.analyzeTrend(candles);
-                break;
-            case 'HST':
-                result = this.analyzeHST(candles);
-                break;
-            case 'PINBAR':
-                result = this.analyzePinBar(candles);
-                break;
-            case 'RSI':
-                result = this.analyzeRSI(candles);
-                break;
-            case 'EMA-CROSS':
-                result = this.analyzeEMACross(candles);
-                break;
             case 'FIB-38':
                 result = this.analyzeFIB38(candles);
                 break;
@@ -177,9 +142,9 @@ export class TradingStrategy {
     }
 
     private analyzeFIB38(candles: Candle[]) {
-        const lookback = 150;
+        const lookback = this.config.fibLookback;
         const recentCandles = candles.slice(-lookback);
-        if (recentCandles.length < 50) return null;
+        if (recentCandles.length < (lookback * 0.6)) return null; 
 
         let saghf = -Infinity;
         let kaf = Infinity;
@@ -190,206 +155,43 @@ export class TradingStrategy {
         });
 
         const range = saghf - kaf;
-        if (range <= 0) return null;
+        if (range <= this.config.fibMinRange) return null; 
 
-        const lastClose = candles[candles.length - 1].close;
-        const prevClose = candles[candles.length - 2].close;
+        const last = candles[candles.length - 1];
+        const prev = candles[candles.length - 2];
 
-        const fib38_up = saghf - (range * 0.38);
-        const fib38_down = kaf + (range * 0.38);
+        // FIB levels
+        const fib38 = saghf - (range * 0.382);
+        const fib61 = saghf - (range * 0.618);
+        
+        const fib38_inv = kaf + (range * 0.382);
+        const fib61_inv = kaf + (range * 0.618);
 
-        // سیگنال خرید: عبور قیمت از بالا به پایین به میانه زون (اصلاح ۳۸ درصدی از سقف)
-        if (prevClose > fib38_up && lastClose <= fib38_up && lastClose >= fib38_down) {
+        // Buy: Pullback into the 38.2%-61.8% zone and showing a reversal
+        if (prev.low <= fib38 && prev.low >= fib61 && last.close > prev.close) {
             return { 
                 type: 'BUY', 
-                signalPrice: lastClose,
+                signalPrice: last.close,
                 kaf: kaf,
                 saghf: saghf,
-                confidence: 90,
+                confidence: 85,
                 isFIB38: true
             };
         }
 
-        // سیگنال فروش: عبور قیمت از پایین به بالا به میانه زون (اصلاح ۳۸ درصدی از کف)
-        if (prevClose < fib38_down && lastClose >= fib38_down && lastClose <= fib38_up) {
+        // Sell: Pullback into the 38.2%-61.8% zone and showing a reversal
+        if (prev.high >= fib38_inv && prev.high <= fib61_inv && last.close < prev.close) {
             return { 
                 type: 'SELL', 
-                signalPrice: lastClose,
+                signalPrice: last.close,
                 kaf: kaf,
                 saghf: saghf,
-                confidence: 90,
+                confidence: 85,
                 isFIB38: true
             };
         }
 
         return null;
-    }
-
-    private analyzeRSI(candles: Candle[]) {
-        const period = 14;
-        if (candles.length < period + 1) return null;
-
-        const rsiValues = this.calculateRSI(candles, period);
-        const lastRSI = rsiValues[rsiValues.length - 1];
-        const prevRSI = rsiValues[rsiValues.length - 2];
-        const lastPrice = candles[candles.length - 1].close;
-
-        // Buy on Oversold cross up
-        if (prevRSI < 30 && lastRSI >= 30) {
-            return { type: 'BUY', signalPrice: lastPrice };
-        }
-        // Sell on Overbought cross down
-        if (prevRSI > 70 && lastRSI <= 70) {
-            return { type: 'SELL', signalPrice: lastPrice };
-        }
-
-        return null;
-    }
-
-    private analyzeEMACross(candles: Candle[]) {
-        if (candles.length < 22) return null;
-
-        const ema9 = this.calculateEMA(candles, 9);
-        const ema21 = this.calculateEMA(candles, 21);
-
-        const lastEma9 = ema9[ema9.length - 1];
-        const prevEma9 = ema9[ema9.length - 2];
-        const lastEma21 = ema21[ema21.length - 1];
-        const prevEma21 = ema21[ema21.length - 2];
-        const lastPrice = candles[candles.length - 1].close;
-
-        // Bullish Cross
-        if (prevEma9 < prevEma21 && lastEma9 >= lastEma21) {
-            return { type: 'BUY', signalPrice: lastPrice };
-        }
-        // Bearish Cross
-        if (prevEma9 > prevEma21 && lastEma9 <= lastEma21) {
-            return { type: 'SELL', signalPrice: lastPrice };
-        }
-
-        return null;
-    }
-
-    private analyzeScalp(candles: Candle[]) {
-        const periodRSI = 14;
-        const emaFastP = 9;
-        const emaSlowP = 21;
-        
-        const rsi = this.calculateRSI(candles, periodRSI);
-        const ema9 = this.calculateEMA(candles, emaFastP);
-        const ema21 = this.calculateEMA(candles, emaSlowP);
-        const atr = this.calculateATR(candles, 14);
-        
-        const lastRSI = rsi[rsi.length - 1];
-        const lastE9 = ema9[ema9.length - 1];
-        const lastE21 = ema21[ema21.length - 1];
-        const lastPrice = candles[candles.length - 1].close;
-        const prevPrice = candles[candles.length - 2].close;
-
-        // Buy: Strong trend (9 > 21) + RSI oversold recovery or pullback to EMA
-        if (lastE9 > lastE21) {
-            if (lastRSI < 40 && lastPrice > prevPrice) return { type: 'BUY', signalPrice: lastPrice, atr };
-            if (lastPrice > lastE21 && prevPrice <= lastE21) return { type: 'BUY', signalPrice: lastPrice, atr };
-        }
-        
-        // Sell: Strong down trend (9 < 21) + RSI overbought recovery
-        if (lastE9 < lastE21) {
-            if (lastRSI > 60 && lastPrice < prevPrice) return { type: 'SELL', signalPrice: lastPrice, atr };
-            if (lastPrice < lastE21 && prevPrice >= lastE21) return { type: 'SELL', signalPrice: lastPrice, atr };
-        }
-        
-        return null;
-    }
-
-    private analyzeQuant(candles: Candle[]) {
-        const lookback = 20;
-        const recent = candles.slice(-lookback);
-        const highs = recent.map(c => c.high);
-        const lows = recent.map(c => c.low);
-        
-        const maxH = Math.max(...highs);
-        const minL = Math.min(...lows);
-        const lastPrice = candles[candles.length - 1].close;
-        const atr = this.calculateATR(candles, 14);
-        
-        // Double Bottom / Breakout
-        if (lastPrice > maxH * 0.9995 && candles[candles.length - 2].close < maxH) {
-            return { type: 'BUY', signalPrice: lastPrice, atr };
-        }
-        // Double Top / Breakdown
-        if (lastPrice < minL * 1.0005 && candles[candles.length - 2].close > minL) {
-            return { type: 'SELL', signalPrice: lastPrice, atr };
-        }
-        
-        return null;
-    }
-
-    private analyzeTrend(candles: Candle[]) {
-        const maFast = this.calculateEMA(candles, 20);
-        const maSlow = this.calculateEMA(candles, 50);
-        const macd = this.calculateMACD(candles, 12, 26, 9);
-        const atr = this.calculateATR(candles, 14);
-        
-        if (!macd) return null;
-        
-        const lastFast = maFast[maFast.length - 1];
-        const lastSlow = maSlow[maSlow.length - 1];
-        const lastHist = macd.histogram;
-        const lastPrice = candles[candles.length - 1].close;
-
-        // Long only if fast > slow AND macd hist increasing
-        if (lastFast > lastSlow && lastHist > 0) return { type: 'BUY', signalPrice: lastPrice, atr };
-        if (lastFast < lastSlow && lastHist < 0) return { type: 'SELL', signalPrice: lastPrice, atr };
-        
-        return null;
-    }
-
-    private analyzeHST(candles: Candle[]) {
-        // Simple HMA + Trend implementation
-        const hma = this.calculateEMA(candles, 55); 
-        const atr = this.calculateATR(candles, 14);
-        const lastH = hma[hma.length - 1];
-        const prevH = hma[hma.length - 2];
-        const lastPrice = candles[candles.length - 1].close;
-
-        if (lastPrice > lastH && lastH > prevH) return { type: 'BUY', signalPrice: lastPrice, atr };
-        if (lastPrice < lastH && lastH < prevH) return { type: 'SELL', signalPrice: lastPrice, atr };
-        
-        return null;
-    }
-
-    private analyzePinBar(candles: Candle[]) {
-        const c = candles[candles.length - 1];
-        const range = c.high - c.low;
-        const atr = this.calculateATR(candles, 14);
-        if (range === 0) return null;
-        
-        const body = Math.abs(c.close - c.open);
-        const upperWick = c.high - Math.max(c.open, c.close);
-        const lowerWick = Math.min(c.open, c.close) - c.low;
-        
-        // Bullish Pin
-        if (lowerWick > body * 3 && upperWick < body) return { type: 'BUY', signalPrice: c.close, atr };
-        // Bearish Pin
-        if (upperWick > body * 3 && lowerWick < body) return { type: 'SELL', signalPrice: c.close, atr };
-        
-        return null;
-    }
-
-    private calculateMACD(candles: Candle[], fast: number, slow: number, signal: number) {
-        if (candles.length < slow + signal) return null;
-        const emaF = this.calculateEMA(candles, fast);
-        const emaS = this.calculateEMA(candles, slow);
-        
-        const macdLine = emaF.map((f, i) => f - emaS[i]);
-        // Simple signal line (SMA of macdLine)
-        const signalLine = macdLine.slice(-signal).reduce((a, b) => a + b, 0) / signal;
-        
-        return {
-            macd: macdLine[macdLine.length - 1],
-            signal: signalLine,
-            histogram: macdLine[macdLine.length - 1] - signalLine
-        };
     }
 
     private calculateRSI(candles: Candle[], period: number) {
@@ -465,12 +267,8 @@ export class TradingStrategy {
 
             if (C) {
                 points.push({ price: C.price, time: C.time, index: C.index, label: 'C' });
-                const idxDiff = Math.abs(B.index - A.index);
-                const estIdxD = C.index + Math.round(idxDiff * 0.8);
                 const timeDiff = Math.abs(B.time - A.time);
-                points.push({ price: targetD, time: C.time + (timeDiff * 0.8), index: estIdxD, label: 'D' });
-            } else {
-                points.push({ price: lastCandle.close, time: lastCandle.time, index: candles.length - 1, label: 'C' });
+                points.push({ price: targetD, time: C.time + (timeDiff * 0.8), index: C.index + 20, label: 'D' });
             }
 
             return {
@@ -510,127 +308,111 @@ export class TradingStrategy {
     }
 
     private detectNPattern(candles: Candle[]) {
-        if (candles.length < 200) return null;
+        const minRequired = Math.max(100, this.config.smaPeriod);
+        if (candles.length < minRequired) return null;
 
         const lastCandle = candles[candles.length - 1];
-        const prevCandle = candles[candles.length - 2];
         const lastPrice = lastCandle.close;
+        const smaValue = this.calculateSMA(candles, this.config.smaPeriod);
         const atr = this.calculateATR(candles, 14);
-        const sma200 = this.calculateSMA(candles, 200);
 
-        // ۱. مدیریت ساختار (باطل کردن سریع)
+        // ۱. مدیریت ساختار (باطل کردن سریع و تعقیب نقاط)
         if (this.activeStructure) {
-            const { A, B, targetD, status, isLockedB } = this.activeStructure;
-            
-            // باطل شدن: اگر قیمت از کف A (در بای) یا سقف A (در سل) عبور کند
-            if (A.type === 'low' && lastPrice < A.price) { this.activeStructure = null; return null; }
-            if (A.type === 'high' && lastPrice > A.price) { this.activeStructure = null; return null; }
+            const { A, B, C, isLockedB, isLockedC, status } = this.activeStructure;
+            const waveAB = Math.abs(B.price - A.price);
+            const lastCandle = candles[candles.length - 1];
+            const lastPrice = lastCandle.close;
 
-            const abRange = Math.abs(B.price - A.price);
-            const currentPullback = Math.abs(B.price - lastPrice);
-            const pullbackPct = currentPullback / abRange;
-
-            // اگر به هدف رسیدیم یا اصلاح خیلی عمیق شد (بیش از ۸۰٪ موج)
-            if (targetD > 0) {
-                const reached = A.type === 'low' ? lastPrice >= targetD : lastPrice <= targetD;
-                if (reached) { this.activeStructure = null; return null; }
-            }
-            if (pullbackPct > 0.85) { this.activeStructure = null; return null; }
-
-            // دنبال کردن نقطه B (تا قبل از تایید برگشت)
-            if (!isLockedB) {
-                if (A.type === 'low' && lastPrice > B.price) {
-                    this.activeStructure.B = { type: 'high', price: lastPrice, index: candles.length - 1, time: lastCandle.time };
-                } else if (A.type === 'high' && lastPrice < B.price) {
-                    this.activeStructure.B = { type: 'low', price: lastPrice, index: candles.length - 1, time: lastCandle.time };
+            // ابطال آنی در صورت شکست سطوح حیاتی
+            if (A.type === 'low') {
+                if (lastPrice < A.price) { this.activeStructure = null; return null; } // شکست کف A
+                if (lastPrice > B.price + (waveAB * 0.5) && !isLockedC) { // اگر از B خیلی دور شد بدون اصلاح
+                    this.activeStructure.B = { ...this.activeStructure.B, price: lastPrice, index: candles.length - 1 };
                 }
+            } else {
+                if (lastPrice > A.price) { this.activeStructure = null; return null; } // شکست سقف A
+                if (lastPrice < B.price - (waveAB * 0.5) && !isLockedC) {
+                    this.activeStructure.B = { ...this.activeStructure.B, price: lastPrice, index: candles.length - 1 };
+                }
+            }
+
+            // بررسی عمق اصلاح (C)
+            const currentPullback = Math.abs(B.price - lastPrice);
+            if (currentPullback > waveAB * this.config.nMaxPullback) {
+                this.activeStructure = null; // اصلاح خیلی عمیق شد (الگو باطل)
+                return null;
+            }
+
+            // الف) تثبیت نقطه B
+            if (!isLockedB) {
+                const isCorrectDirection = A.type === 'low' ? lastPrice < B.price : lastPrice > B.price;
+                if (isCorrectDirection && currentPullback >= waveAB * this.config.nMinPullback) {
+                    this.activeStructure.isLockedB = true;
+                }
+            }
+
+            // ب) تثبیت نقطه C و تایید بازگشت
+            if (isLockedB && !isLockedC) {
+                // آپدیت نقطه حد کثر اصلاح
+                const isNewExtremumC = A.type === 'low' ? lastCandle.low < C.price : lastCandle.high > C.price;
+                if (isNewExtremumC) {
+                    this.activeStructure.C = { price: A.type === 'low' ? lastCandle.low : lastCandle.high, index: candles.length - 1, time: lastCandle.time };
+                }
+
+                // تاییدیه بازگشت (Momentum)
+                const confirmThreshold = Math.max(waveAB * 0.15, (atr || 0) * 1.5);
+                const isConfirmedC = A.type === 'low' 
+                    ? lastPrice > this.activeStructure.C.price + confirmThreshold
+                    : lastPrice < this.activeStructure.C.price - confirmThreshold;
+
+                if (isConfirmedC) {
+                    this.activeStructure.isLockedC = true;
+                    this.activeStructure.targetD = A.type === 'low' 
+                        ? this.activeStructure.C.price + waveAB 
+                        : this.activeStructure.C.price - waveAB;
+                }
+            }
+
+            // ج) سیگنال نهایی (ورود پس از تایید C)
+            if (isLockedC && status !== 'SIGNALLED') {
+                this.activeStructure.status = 'SIGNALLED';
+                this.totalPatternsCount++;
+                
+                return {
+                    type: A.type === 'low' ? 'BUY' : 'SELL',
+                    signalPrice: lastPrice,
+                    atr,
+                    range: waveAB,
+                    kaf: A.type === 'low' ? A.price : B.price,
+                    saghf: A.type === 'low' ? B.price : A.price,
+                    isNPattern: true,
+                    confidence: 90
+                };
             }
         }
 
+        // ۲. شناسایی موج شروع (A-B)
         if (!this.activeStructure) {
-            const pivots = this.getSwingPivots(candles, 7, 3);
+            const pivots = this.getSwingPivots(candles, 8, 3);
             if (pivots.length >= 2) {
                 const p1 = pivots[pivots.length - 2];
                 const p2 = pivots[pivots.length - 1];
                 const wave = Math.abs(p2.price - p1.price);
-                const timeDist = Math.abs(p2.index - p1.index);
                 
-                // حساسیت هوشمند بر اساس قیمت: حداقل ۰.۰۵٪ نوسان برای شروع موج
-                const minWave = lastCandle.close * 0.0005;
+                const minWave = lastCandle.close * 0.0006; // فیلتر امواج ضعیف (Ranging)
 
-                if (p1.type !== p2.type && timeDist >= 4 && wave >= minWave) {
+                if (p1.type !== p2.type && wave >= minWave) {
                     this.activeStructure = {
-                        A: p1, B: p2, C: null, isLockedB: false, targetD: 0, status: 'MONITORING'
+                        A: p1, 
+                        B: p2, 
+                        C: { ...p2 }, 
+                        isLockedB: false, 
+                        isLockedC: false,
+                        targetD: 0, 
+                        status: 'MONITORING'
                     };
                 }
             }
-        }
-
-        if (!this.activeStructure) return null;
-
-        // ۳. سیگنال‌دهی با تاییدیه برگشت (C Confirmation)
-        const { A, B, isLockedB, status } = this.activeStructure;
-        if (status === 'SIGNALLED') return null;
-
-        // پیدا کردن سقف/کفِ واقعی موج اصلاحی (C)
-        let extremeC = B.price;
-        let cIdx = B.index;
-        let cTime = B.time;
-
-        for (let i = B.index + 1; i < candles.length; i++) {
-            if (A.type === 'low') { // N صعودی -> دنبال کمترین قیمت اصلاحی
-                if (candles[i].low <= extremeC) {
-                    extremeC = candles[i].low;
-                    cIdx = i;
-                    cTime = candles[i].time;
-                }
-            } else { // N نزولی -> دنبال بیشترین قیمت اصلاحی
-                if (candles[i].high >= extremeC) {
-                    extremeC = candles[i].high;
-                    cIdx = i;
-                    cTime = candles[i].time;
-                }
-            }
-        }
-
-        // آپدیت نقطه C و هدف D به صورت لحظه‌ای
-        // این کار باعث می‌شود چارت قبل از سیگنال هم دقیق باشد
-        this.activeStructure.C = { price: extremeC, time: cTime, index: cIdx };
-        const abRange = Math.abs(B.price - A.price);
-        const targetD = A.type === 'low' ? extremeC + (abRange * 1.0) : extremeC - (abRange * 1.0);
-        this.activeStructure.targetD = targetD;
-
-        const pullback = Math.abs(B.price - extremeC);
-        const pullbackPct = pullback / abRange;
-
-        // تاییدیه بازگشت: قیمت باید حداقل ۲٪ از کل موج از سقفِ C فاصله بگیرد
-        const reversalThreshold = abRange * 0.02; 
-        const isReversing = A.type === 'low' 
-            ? (lastPrice > extremeC + reversalThreshold) 
-            : (lastPrice < extremeC - reversalThreshold);
-
-        // فیلتر SMA-200: فقط در جهت روند اصلی وارد شو
-        const isTrendAligned = A.type === 'low' ? (lastPrice > sma200!) : (lastPrice < sma200!);
-
-        if (!isLockedB && pullbackPct >= 0.30 && pullbackPct <= 0.85 && isReversing && isTrendAligned) {
-            this.activeStructure.isLockedB = true;
-            this.activeStructure.status = 'SIGNALLED';
-            this.totalPatternsCount++;
-            
-            const patternKey = `N_V19_${A.time}_${B.time}`;
-            if (this.lastPatternKey === patternKey) return null;
-            this.lastPatternKey = patternKey;
-
-            return {
-                type: A.type === 'low' ? 'BUY' : 'SELL',
-                signalPrice: lastPrice, 
-                atr, 
-                range: abRange, 
-                kaf: A.type === 'low' ? A.price : B.price, 
-                saghf: A.type === 'low' ? B.price : A.price, 
-                isNPattern: true,
-                confidence: 99
-            };
         }
 
         return null;
@@ -762,13 +544,13 @@ export class TradingStrategy {
         } else if (pattern.isFIB38) {
             const range = pattern.saghf - pattern.kaf;
             if (isBuy) {
-                sl = pattern.kaf - (range * 0.1);
-                tp1 = pattern.saghf;
+                sl = pattern.kaf - (range * 0.05); // Tighter SL below the move low
+                tp1 = pattern.saghf; // Target the recent high
                 tp2 = pattern.saghf + (range * 0.38);
                 tp3 = pattern.saghf + (range * 0.61);
             } else {
-                sl = pattern.saghf + (range * 0.1);
-                tp1 = pattern.kaf;
+                sl = pattern.saghf + (range * 0.05); // Tighter SL above the move high
+                tp1 = pattern.kaf; // Target the recent low
                 tp2 = pattern.kaf - (range * 0.38);
                 tp3 = pattern.kaf - (range * 0.61);
             }

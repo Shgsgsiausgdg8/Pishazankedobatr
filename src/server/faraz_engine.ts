@@ -9,10 +9,8 @@ export class FarazGoldEngine {
     candles: Candle[] = [];
     levels: { type: 'SUPPORT' | 'RESISTANCE', price: number, time: number }[] = [];
     signals: Signal[] = [];
-    isRecording = false;
     strategy = new TradingStrategy();
-    liveStrategyType = 'SCALP-ADV';
-    recordingStartTime: number | null = null;
+    liveStrategyType = 'N-PATTERN';
     brokerName = 'فراز گلد (مظنه)';
     isEnabled = true;
 
@@ -32,10 +30,9 @@ export class FarazGoldEngine {
     refreshToken: string | null = null;
     sessionId: string | null = 'njmnqc7hfkeyayowprwheqc73lvp98as';
     csrfToken: string | null = 'GTiZlvd8jNoMuko3nkjjU0lhC8m6Yy3m';
-    ws: WebSocket | null = null;
     wsConnectionId: number | null = null;  // برای جلوگیری از رویدادهای اتصال قدیمی
+    ws: WebSocket | null = null;
 
-    dataFile = path.join(process.cwd(), 'recorded_data.jsonl');
     settingsFile = path.join(process.cwd(), 'settings.json');
     lastCandleTime = 0;
     lastLevelsUpdate = 0;
@@ -161,6 +158,7 @@ export class FarazGoldEngine {
                 if (settings.baleChatId) this.baleChatId = settings.baleChatId;
                 if (settings.candleConfirmations) this.candleConfirmations = settings.candleConfirmations;
                 if (settings.isEnabled !== undefined) this.isEnabled = settings.isEnabled;
+                if (settings.liveStrategyType) this.liveStrategyType = settings.liveStrategyType;
             }
         } catch (e) {
             console.error("Error loading settings:", e);
@@ -177,7 +175,8 @@ export class FarazGoldEngine {
                 baleToken: this.baleToken,
                 baleChatId: this.baleChatId,
                 candleConfirmations: this.candleConfirmations,
-                isEnabled: this.isEnabled
+                isEnabled: this.isEnabled,
+                liveStrategyType: this.liveStrategyType
             };
             fs.writeFileSync(this.settingsFile, JSON.stringify(settings, null, 2));
         } catch (e) {
@@ -345,7 +344,6 @@ export class FarazGoldEngine {
             this.candles.sort((a, b) => a.time - b.time);
             this.lastCandleTime = candleTime;
             if (this.candles.length > 1000) this.candles.shift();
-            this.recordData(newCandle);
         } else {
             const last = this.candles[this.candles.length - 1];
             if (last && last.time === candleTimeSec) {
@@ -372,10 +370,8 @@ export class FarazGoldEngine {
         const time = new Date(signal.time).toLocaleTimeString('fa-IR');
         
         const strategyNames: Record<string, string> = {
-            'HYBRID': 'Smart N (ترکیبی)',
             'N-PATTERN': 'الگوی N',
-            'SCALP-ADV': 'اسکلپ پیشرفته',
-            'EMA-CROSS': 'تقاطع طلایی EMA'
+            'FIB-38': 'فیبوناتچی ۳۸٪'
         };
 
         const message = `
@@ -453,7 +449,6 @@ export class FarazGoldEngine {
             if (this.candles.length > 1000) this.candles.shift();
             this.lastCandleTime = time * 1000;
             this.detectLevels();
-            this.recordData({ time, open, high, low, close });
         }
         this.runStrategy(); // اجرای استراتژی پس از بروزرسانی شمع
     }
@@ -477,14 +472,6 @@ export class FarazGoldEngine {
             this.levels.push({ type, price, time });
             if (this.levels.length > 50) this.levels.shift();
         }
-    }
-
-    startRecording() { this.isRecording = true; this.recordingStartTime = Date.now(); }
-    stopRecording() { this.isRecording = false; this.recordingStartTime = null; }
-
-    recordData(candle: any) {
-        if (!this.isRecording) return;
-        fs.appendFileSync(this.dataFile, JSON.stringify({ ...candle, recordedAt: Date.now() }) + '\n');
     }
 
     async setTimeframe(tf: string) {
@@ -512,14 +499,18 @@ export class FarazGoldEngine {
             candles: this.candles.slice(-400), // Cap at 400 candles for the UI
             levels: this.levels,
             signals: this.signals,
-            isRecording: this.isRecording,
             totalCandles: this.candles.length,
             nPattern: nPattern, 
             baleToken: this.baleToken,
             baleChatId: this.baleChatId,
             candleConfirmations: this.candleConfirmations,
-            isEnabled: this.isEnabled
+            isEnabled: this.isEnabled,
+            strategyConfig: (this.strategy as any).config
         };
+    }
+
+    setStrategyConfig(config: any) {
+        this.strategy.updateConfig(config);
     }
 
     updateBaleConfig(token: string, chatId: string) {

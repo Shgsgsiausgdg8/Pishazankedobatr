@@ -14,11 +14,8 @@ export class AlphaGoldEngine {
     reconnecting = false;
     lastCandleTime = 0;
 
-    isRecording = false;
-    dataFile = path.join(process.cwd(), "alpha_recorded.jsonl");
-
     strategy = new TradingStrategy();
-    liveStrategyType = 'SCALP-ADV'; 
+    liveStrategyType = 'N-PATTERN'; 
     lastLevelsUpdate = 0;
     brokerName = 'آلفا گلد (انس جهانی)';
     isEnabled = true;
@@ -48,6 +45,7 @@ export class AlphaGoldEngine {
                 if (settings.baleChatId) this.baleChatId = settings.baleChatId;
                 if (settings.candleConfirmations) this.candleConfirmations = settings.candleConfirmations;
                 if (settings.isEnabled !== undefined) this.isEnabled = settings.isEnabled;
+                if (settings.liveStrategyType) this.liveStrategyType = settings.liveStrategyType;
             }
         } catch (e) {
             console.error("Error loading Alpha settings:", e);
@@ -60,7 +58,8 @@ export class AlphaGoldEngine {
                 baleToken: this.baleToken,
                 baleChatId: this.baleChatId,
                 candleConfirmations: this.candleConfirmations,
-                isEnabled: this.isEnabled
+                isEnabled: this.isEnabled,
+                liveStrategyType: this.liveStrategyType
             };
             fs.writeFileSync(this.settingsFile, JSON.stringify(settings, null, 2));
         } catch (e) {
@@ -249,7 +248,6 @@ export class AlphaGoldEngine {
         this.lastCandleTime = time * 1000;
         this.detectLevels();
         this.runStrategy();
-        this.recordData(c);
     }
 
     detectLevels() {
@@ -288,10 +286,8 @@ export class AlphaGoldEngine {
         const time = new Date(signal.time).toLocaleTimeString('fa-IR');
         
         const strategyNames: Record<string, string> = {
-            'HYBRID': 'Smart N (ترکیبی)',
             'N-PATTERN': 'الگوی N',
-            'SCALP-ADV': 'اسکلپ پیشرفته',
-            'EMA-CROSS': 'تقاطع طلایی EMA'
+            'FIB-38': 'فیبوناتچی ۳۸٪'
         };
 
         const message = `
@@ -349,13 +345,6 @@ export class AlphaGoldEngine {
         }
     }
 
-    startRecording() { this.isRecording = true; }
-    stopRecording() { this.isRecording = false; }
-    recordData(c: any) {
-        if (!this.isRecording) return;
-        fs.appendFileSync(this.dataFile, JSON.stringify({ ...c, recordedAt: Date.now() }) + "\n");
-    }
-
     async setTimeframe(tf: string) {
         if (this.timeframe === tf) return;
         this.timeframe = tf;
@@ -376,14 +365,18 @@ export class AlphaGoldEngine {
             candles: this.candles.slice(-400), // Cap at 400 for UI performance
             levels: this.levels,
             signals: this.signals,
-            isRecording: this.isRecording,
             totalCandles: this.candles.length,
             nPattern: nPattern,
             baleToken: this.baleToken,
             baleChatId: this.baleChatId,
             candleConfirmations: this.candleConfirmations,
-            isEnabled: this.isEnabled
+            isEnabled: this.isEnabled,
+            strategyConfig: (this.strategy as any).config
         };
+    }
+
+    setStrategyConfig(config: any) {
+        this.strategy.updateConfig(config);
     }
 
     updateBaleConfig(token: string, chatId: string) {

@@ -4,20 +4,12 @@ import React, { useEffect, useRef, useState } from 'react';
 const ActivityIcon = ({ size = 24 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
 );
-const PlayIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-);
-const SquareIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
-);
 const SettingsIcon = ({ size = 16 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
 );
-const CheckIcon = ({ size = 14 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+const CheckIcon = ({ size = 14, stroke = "currentColor" }: { size?: number, stroke?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
 );
-
-// --- Custom Canvas Chart Component ---
 const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount }: { data: any[], levels: any[], nPattern?: any, originalCandlesCount: number }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -128,8 +120,9 @@ const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount }: { da
         ctx.lineTo(chartWidth, y);
         ctx.stroke();
         
-        ctx.fillStyle = level.type === 'RESISTANCE' ? '#ef4444' : '#10b981';
-        ctx.fillText(level.type === 'RESISTANCE' ? 'RES' : 'SUP', 5, y - 5);
+        ctx.fillStyle = level.type === 'RESISTANCE' ? 'rgba(239, 68, 68, 0.8)' : 'rgba(16, 185, 129, 0.8)';
+        ctx.font = '8px JetBrains Mono'; // Smaller font
+        ctx.fillText(level.type === 'RESISTANCE' ? 'RES' : 'SUP', 2, y - 2);
       }
     });
 
@@ -273,25 +266,26 @@ const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount }: { da
           
           ctx.fillStyle = nPattern.type === 'BUY' ? '#10b981' : '#ef4444';
           ctx.beginPath();
-          ctx.arc(x, y, 6, 0, Math.PI * 2); 
+          ctx.arc(x, y, 4, 0, Math.PI * 2); // Reduced from 6
           ctx.fill();
           ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 1.5;
+          ctx.lineWidth = 1;
           ctx.stroke();
           
           const label = p.label || '';
+          const isConfirmed = nPattern.isConfirmed;
           const isUpper = label === 'B' || label === 'D';
-          const labelY = isUpper ? y - 32 : y + 32;
+          const labelY = isUpper ? y - 24 : y + 24; // Reduced offset
           
-          ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
-          ctx.fillRect(x - 12, labelY - 10, 24, 20);
+          ctx.fillStyle = isConfirmed ? (nPattern.type === 'BUY' ? '#10b981' : '#ef4444') : 'rgba(15, 23, 42, 0.9)';
+          ctx.fillRect(x - 9, labelY - 8, 18, 16);
           ctx.strokeStyle = nPattern.type === 'BUY' ? '#10b981' : '#ef4444';
           ctx.lineWidth = 1;
-          ctx.strokeRect(x - 12, labelY - 10, 24, 20);
+          ctx.strokeRect(x - 9, labelY - 8, 18, 16);
           
-          ctx.fillStyle = '#ffffff';
+          ctx.fillStyle = isConfirmed ? '#fff' : '#ffffff';
           ctx.textAlign = 'center';
-          ctx.font = 'bold 12px Inter';
+          ctx.font = 'bold 10px Inter'; // Reduced from 12px
           ctx.textBaseline = 'middle';
           ctx.fillText(label, x, labelY);
       });
@@ -387,6 +381,7 @@ export default function App() {
   
   const [showAuth, setShowAuth] = useState(false);
   const [showBaleSettings, setShowBaleSettings] = useState(false);
+  const [showStrategySettings, setShowStrategySettings] = useState(false);
   const [baleToken, setBaleToken] = useState('');
   const [baleChatId, setBaleChatId] = useState('');
   const [farazToken, setFarazToken] = useState('');
@@ -487,7 +482,13 @@ export default function App() {
     }
   };
 
-  const switchBroker = (broker: 'faraz' | 'alpha') => {
+  const updateStrategyConfig = (config: any) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'SET_STRATEGY_CONFIG', config }));
+    }
+  };
+
+  const switchBroker = (broker: 'faraz' | 'alpha' | 'btc') => {
     if (broker === activeBroker) return;
     
     setActiveBroker(broker);
@@ -496,10 +497,6 @@ export default function App() {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'SET_BROKER', broker }));
     }
-  };
-
-  const toggleRecording = () => {
-    wsRef.current?.send(JSON.stringify({ type: data?.isRecording ? 'STOP_RECORDING' : 'START_RECORDING' }));
   };
 
   const setTimeframe = (tf: string) => {
@@ -629,7 +626,7 @@ export default function App() {
                         transition: '0.3s'
                       }}
                     >
-                      {isMarketEnabled ? <CheckIcon size={10} color="white" /> : <div style={{width: 6, height: 6, borderRadius: '50%', background: '#64748b'}} />}
+                      {isMarketEnabled ? <CheckIcon size={10} stroke="white" /> : <div style={{width: 6, height: 6, borderRadius: '50%', background: '#64748b'}} />}
                     </div>
                   </div>
                 );
@@ -674,37 +671,33 @@ export default function App() {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0', alignItems: 'flex-start' }}>
               <span style={{ fontSize: '0.5rem', color: '#94a3b8' }}>استراتژی:</span>
-              <select 
-                value={data?.liveStrategy || 'HYBRID'} 
-                onChange={(e) => setLiveStrategy(e.target.value)}
-                style={{ 
-                  background: '#020617', 
-                  color: '#10b981', 
-                  border: '1px solid #1e293b', 
-                  borderRadius: '6px', 
-                  padding: '1px 4px',
-                  fontSize: '0.7rem',
-                  outline: 'none',
-                  cursor: 'pointer'
-                }}
-              >
-                <option value="HYBRID">Smart N</option>
-                <option value="FIB-38">FIB-38 (جدید)</option>
-                <option value="SCALP-ADV">اسکلپ</option>
-                <option value="PINBAR">پین‌بار</option>
-                <option value="N-PATTERN">الگوی N</option>
-                <option value="TREND-MT">روندی</option>
-              </select>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <select 
+                  value={data?.liveStrategy || 'N-PATTERN'} 
+                  onChange={(e) => setLiveStrategy(e.target.value)}
+                  style={{ 
+                    background: '#020617', 
+                    color: '#10b981', 
+                    border: '1px solid #1e293b', 
+                    borderRadius: '6px', 
+                    padding: '1px 4px',
+                    fontSize: '0.7rem',
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="N-PATTERN">الگوی N (N-Pattern)</option>
+                  <option value="FIB-38">فیبوناچی ۳۸٪ (FIB-38)</option>
+                </select>
+                <button 
+                  onClick={() => setShowStrategySettings(true)}
+                  style={{ background: '#1e293b', border: 'none', color: '#94a3b8', padding: '2px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                  title="تنظیمات تخصصی"
+                >
+                  <SettingsIcon size={12} />
+                </button>
+              </div>
             </div>
-
-            <button 
-              onClick={toggleRecording} 
-              className={`btn ${data?.isRecording ? 'btn-secondary' : 'btn-primary'}`}
-              style={{ padding: '6px 12px', fontSize: '0.7rem', borderRadius: '8px' }}
-            >
-              {data?.isRecording ? <SquareIcon /> : <PlayIcon />}
-              <span>{data?.isRecording ? 'توقف' : 'ضبط'}</span>
-            </button>
           </div>
         </div>
 
@@ -785,7 +778,7 @@ export default function App() {
                       justifyContent: 'center',
                       transition: 'all 0.2s'
                     }}>
-                      {isActive && <CheckIcon size={10} color="white" />}
+                      {isActive && <CheckIcon size={10} stroke="white" />}
                     </div>
                     {conf.label}
                   </button>
@@ -837,35 +830,35 @@ export default function App() {
           </div>
         )}
 
-        <div className="stats-grid">
-          <div className="stat-card" style={{ borderLeft: '4px solid #ef4444' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <div style={{ color: '#94a3b8', fontSize: '0.8rem' }}>مقاومت (سقف آخر)</div>
-              <span style={{ fontSize: '0.6rem', color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', padding: '2px 6px', borderRadius: '4px' }}>Major/Minor</span>
+        <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px', marginBottom: '8px' }}>
+          <div className="stat-card" style={{ borderLeft: '2px solid #ef4444', background: 'rgba(239,68,68,0.02)', padding: '0.4rem 0.6rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1px' }}>
+              <div style={{ color: '#94a3b8', fontSize: '0.6rem' }}>مقاومت ماژور</div>
+              <div style={{ width: '3px', height: '3px', borderRadius: '50%', background: '#ef4444' }}></div>
             </div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 'bold', fontFamily: 'var(--font-mono)', color: '#ef4444' }}>
+            <div style={{ fontSize: '1rem', fontWeight: 'bold', fontFamily: 'var(--font-mono)', color: '#ef4444' }}>
               {data?.levels?.filter((l: any) => l.type === 'RESISTANCE').slice(-1)[0]?.price.toLocaleString() || '---'}
             </div>
           </div>
-          <div className="stat-card" style={{ borderLeft: '4px solid #10b981' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <div style={{ color: '#94a3b8', fontSize: '0.8rem' }}>حمایت (کف آخر)</div>
-              <span style={{ fontSize: '0.6rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.1)', padding: '2px 6px', borderRadius: '4px' }}>Major/Minor</span>
+          <div className="stat-card" style={{ borderLeft: '2px solid #10b981', background: 'rgba(16,185,129,0.02)', padding: '0.4rem 0.6rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1px' }}>
+              <div style={{ color: '#94a3b8', fontSize: '0.6rem' }}>حمایت ماژور</div>
+              <div style={{ width: '3px', height: '3px', borderRadius: '50%', background: '#10b981' }}></div>
             </div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 'bold', fontFamily: 'var(--font-mono)', color: '#10b981' }}>
+            <div style={{ fontSize: '1rem', fontWeight: 'bold', fontFamily: 'var(--font-mono)', color: '#10b981' }}>
               {data?.levels?.filter((l: any) => l.type === 'SUPPORT').slice(-1)[0]?.price.toLocaleString() || '---'}
             </div>
           </div>
-          <div className="stat-card" style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)' }}>
-            <div style={{ color: '#94a3b8', fontSize: '0.8rem', marginBottom: '8px' }}>وضعیت ساختار بازار</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold', color: '#3b82f6' }}>
-               <div className="pulse" />
+          <div className="stat-card" style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', padding: '0.4rem 0.6rem' }}>
+            <div style={{ color: '#94a3b8', fontSize: '0.6rem', marginBottom: '1px' }}>وضعیت</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold', color: '#3b82f6', fontSize: '0.75rem' }}>
+               <div className="pulse" style={{ width: '4px', height: '4px' }} />
                {data?.liveStrategy === 'N-PATTERN' 
-                 ? `پایش ${data?.nPattern?.type === 'BUY' ? 'خرید' : 'فروش'} (الگوها: ${data?.nPattern?.totalCount || 0})` 
-                 : 'اسکلپ لحظه‌ای'}
+                 ? `${data?.nPattern?.type || 'Searching'}` 
+                 : 'Momentum'}
             </div>
-            <div style={{ fontSize: '0.65rem', color: '#475569', marginTop: '4px' }}>
-               آپدیت خودکار (مانور و میژور)
+            <div style={{ fontSize: '0.5rem', color: '#44516d', marginTop: '1px' }}>
+               Live Sync ({data?.nPattern?.totalCount || 0})
             </div>
           </div>
         </div>
@@ -919,15 +912,8 @@ export default function App() {
                   onChange={e => setSelectedStrategy(e.target.value)}
                   style={{ width: '100%', padding: '12px', borderRadius: '10px', background: '#1e293b', color: 'white', border: '1px solid #334155', cursor: 'pointer', fontSize: '0.9rem' }}
                 >
-                  <option value="N-PATTERN">الگوی N (N-Pattern)</option>
+                  <option value="N-PATTERN">الگوی N کلاسیک (N-Pattern)</option>
                   <option value="FIB-38">فیبوناچی ۳۸٪ (Fibonacci)</option>
-                  <option value="RSI">شاخص RSI (Oversold/Overbought)</option>
-                  <option value="EMA-CROSS">کراس میانگین متحرک (EMA 9/21)</option>
-                  <option value="SCALP-ADV">اسکلپ پیشرفته (Adv Scalp)</option>
-                  <option value="QUANT">استراتژی کوانت (Patterns)</option>
-                  <option value="TREND-MT">روند میان‌مدت (Trend MT)</option>
-                  <option value="HST">استراتژی HST (SuperTrend)</option>
-                  <option value="PINBAR">پین بار (PinBar Reversal)</option>
                 </select>
               </div>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', width: '100%', sm: 'auto' } as any}>
@@ -1201,15 +1187,88 @@ export default function App() {
         </div>
       </main>
 
+      {showStrategySettings && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)', padding: '20px' }}>
+          <div className="card" style={{ maxWidth: '450px', width: '100%', border: '1px solid #1e293b', animation: 'scaleUp 0.3s ease-out' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>تنظیمات تخصصی استراتژی ⚙️</h2>
+              <button onClick={() => setShowStrategySettings(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.5rem', cursor: 'pointer' }}>&times;</button>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ borderBottom: '1px solid #1e293b', pb: '12px', mb: '4px' } as any}>
+                <h3 style={{ fontSize: '0.85rem', color: '#10b981', marginBottom: '10px' }}>میانگین روند (Trend SMA)</h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{ fontSize: '0.8rem', color: '#94a3b8', width: '80px' }}>دوره SMA:</span>
+                  <input 
+                    type="range" min="20" max="300" step="10"
+                    value={data?.strategyConfig?.smaPeriod || 100}
+                    onChange={(e) => updateStrategyConfig({ smaPeriod: parseInt(e.target.value) })}
+                    style={{ flex: 1 }}
+                  />
+                  <span style={{ fontSize: '0.8rem', width: '30px' }}>{data?.strategyConfig?.smaPeriod || 100}</span>
+                </div>
+              </div>
+
+              <div style={{ borderBottom: '1px solid #1e293b', pb: '12px', mb: '4px' } as any}>
+                <h3 style={{ fontSize: '0.85rem', color: '#3b82f6', marginBottom: '10px' }}>پارامترهای الگوی N</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{ fontSize: '0.8rem', color: '#94a3b8', width: '80px' }}>اصلاح (C):</span>
+                    <input 
+                      type="range" min="0.1" max="0.6" step="0.05"
+                      value={data?.strategyConfig?.nMinPullback || 0.30}
+                      onChange={(e) => updateStrategyConfig({ nMinPullback: parseFloat(e.target.value) })}
+                      style={{ flex: 1 }}
+                    />
+                    <span style={{ fontSize: '0.8rem', width: '40px' }}>{(data?.strategyConfig?.nMinPullback * 100).toFixed(0)}%</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{ fontSize: '0.8rem', color: '#94a3b8', width: '80px' }}>تایید برگشت:</span>
+                    <input 
+                      type="range" min="0.005" max="0.05" step="0.005"
+                      value={data?.strategyConfig?.nReversalThreshold || 0.02}
+                      onChange={(e) => updateStrategyConfig({ nReversalThreshold: parseFloat(e.target.value) })}
+                      style={{ flex: 1 }}
+                    />
+                    <span style={{ fontSize: '0.8rem', width: '40px' }}>{(data?.strategyConfig?.nReversalThreshold * 100).toFixed(1)}%</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ pb: '12px', mb: '4px' } as any}>
+                <h3 style={{ fontSize: '0.85rem', color: '#f59e0b', marginBottom: '10px' }}>پارامترهای فیبو ۳۸٪</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{ fontSize: '0.8rem', color: '#94a3b8', width: '80px' }}>Lookback:</span>
+                    <input 
+                      type="range" min="30" max="150" step="10"
+                      value={data?.strategyConfig?.fibLookback || 60}
+                      onChange={(e) => updateStrategyConfig({ fibLookback: parseInt(e.target.value) })}
+                      style={{ flex: 1 }}
+                    />
+                    <span style={{ fontSize: '0.8rem', width: '30px' }}>{data?.strategyConfig?.fibLookback || 60}</span>
+                  </div>
+                </div>
+              </div>
+
+              <button className="btn btn-primary" onClick={() => setShowStrategySettings(false)} style={{ marginTop: '10px' }}>
+                ذخیره و بستن
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showBaleSettings && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
           <div className="card" style={{ width: '100%', maxWidth: '450px', maxHeight: '90vh', overflowY: 'auto' }}>
             <h2 style={{ marginBottom: '1.5rem', textAlign: 'center' }}>⚙️ تنظیمات ربات</h2>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ borderBottom: '1px solid #334155', pb: '10px', mb: '5px' }}>
-                <h3 style={{ fontSize: '0.9rem', color: '#10b981', mb: '10px' }}>🔔 تنظیمات بله</h3>
-                <div style={{ mb: '10px' }}>
+              <div style={{ borderBottom: '1px solid #334155', paddingBottom: '10px', marginBottom: '5px' }}>
+                <h3 style={{ fontSize: '0.9rem', color: '#10b981', marginBottom: '10px' }}>🔔 تنظیمات بله</h3>
+                <div style={{ marginBottom: '10px' }}>
                   <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '6px' }}>توکن ربات بله:</label>
                   <input 
                     type="text" 
@@ -1234,8 +1293,8 @@ export default function App() {
               </div>
 
               <div>
-                <h3 style={{ fontSize: '0.85rem', color: '#3b82f6', mb: '8px' }}>📡 تنظیمات API بیت‌کوین (BTC)</h3>
-                <div style={{ mb: '8px' }}>
+                <h3 style={{ fontSize: '0.85rem', color: '#3b82f6', marginBottom: '8px' }}>📡 تنظیمات API بیت‌کوین (BTC)</h3>
+                <div style={{ marginBottom: '8px' }}>
                   <label style={{ display: 'block', fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>x-access-token:</label>
                   <input 
                     type="text" 
