@@ -370,12 +370,13 @@ const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount }: { da
 
 export default function App() {
   // Persistent broker selection
-  const [activeBroker, setActiveBroker] = useState<'faraz' | 'alpha'>(() => {
+  const [activeBroker, setActiveBroker] = useState<'faraz' | 'alpha' | 'btc'>(() => {
     const saved = localStorage.getItem('activeBroker');
-    return (saved === 'faraz' || saved === 'alpha') ? saved : 'faraz';
+    return (saved === 'faraz' || saved === 'alpha' || saved === 'btc') ? saved as any : 'faraz';
   });
   
   const activeBrokerRef = useRef(activeBroker);
+  const [engineStatuses, setEngineStatuses] = useState<Record<string, boolean>>({ faraz: true, alpha: true, btc: true });
   const [data, setData] = useState<any>(null);
   const [wsConnected, setWsConnected] = useState(false);
   
@@ -431,6 +432,7 @@ export default function App() {
         try {
           const msg = JSON.parse(e.data);
           if (msg.type === 'STATE' || msg.type === 'INIT' || msg.type === 'UPDATE') {
+            if (msg.engineStatuses) setEngineStatuses(msg.engineStatuses);
             // CRITICAL FIX: Ensure broker name is part of the data so the loading check passes
             if (msg.broker === activeBrokerRef.current) {
               setData({ ...msg.data, broker: msg.broker });
@@ -504,6 +506,10 @@ export default function App() {
     wsRef.current?.send(JSON.stringify({ type: 'SET_TIMEFRAME', timeframe: tf }));
   };
 
+  const toggleEngine = (broker: string, enabled: boolean) => {
+    wsRef.current?.send(JSON.stringify({ type: 'TOGGLE_ENGINE', broker, enabled }));
+  };
+
   const updateSettings = () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
@@ -573,55 +579,61 @@ export default function App() {
             </div>
             
             {/* Broker Selector */}
-            <div style={{ display: 'flex', gap: '2px', background: '#020617', padding: '2px', borderRadius: '8px', marginLeft: '0.5rem' }}>
-              <button 
-                onClick={() => switchBroker('faraz')}
-                style={{
-                  padding: '4px 8px',
-                  borderRadius: '6px',
-                  fontSize: '0.7rem',
-                  border: 'none',
-                  cursor: 'pointer',
-                  background: activeBroker === 'faraz' ? '#10b981' : 'transparent',
-                  color: activeBroker === 'faraz' ? 'white' : '#94a3b8',
-                  whiteSpace: 'nowrap',
-                  transition: '0.2s'
-                }}
-              >
-                فراز گلد
-              </button>
-              <button 
-                onClick={() => switchBroker('alpha')}
-                style={{
-                  padding: '4px 8px',
-                  borderRadius: '6px',
-                  fontSize: '0.7rem',
-                  border: 'none',
-                  cursor: 'pointer',
-                  background: activeBroker === 'alpha' ? '#10b981' : 'transparent',
-                  color: activeBroker === 'alpha' ? 'white' : '#94a3b8',
-                  whiteSpace: 'nowrap',
-                  transition: '0.2s'
-                }}
-              >
-                آلفا گلد
-              </button>
-              <button 
-                onClick={() => switchBroker('btc')}
-                style={{
-                  padding: '4px 8px',
-                  borderRadius: '6px',
-                  fontSize: '0.7rem',
-                  border: 'none',
-                  cursor: 'pointer',
-                  background: activeBroker === 'btc' ? '#10b981' : 'transparent',
-                  color: activeBroker === 'btc' ? 'white' : '#94a3b8',
-                  whiteSpace: 'nowrap',
-                  transition: '0.2s'
-                }}
-              >
-                بیت‌کوین
-              </button>
+            <div style={{ display: 'flex', gap: '8px', padding: '4px', background: '#020617', borderRadius: '12px', border: '1px solid #1e293b' }}>
+              {[
+                { id: 'faraz', label: 'فراز گلد' },
+                { id: 'alpha', label: 'آلفا گلد' },
+                { id: 'btc', label: 'بیت‌کوین' }
+              ].map(b => {
+                const isActiveMarket = activeBroker === b.id;
+                const isMarketEnabled = engineStatuses[b.id];
+                return (
+                  <div key={b.id} style={{ display: 'flex', alignItems: 'center', background: isActiveMarket ? 'rgba(16, 185, 129, 0.1)' : 'transparent', borderRadius: '8px', padding: '2px 4px' }}>
+                    <button 
+                      onClick={() => switchBroker(b.id as any)}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        fontSize: '0.75rem',
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: isActiveMarket ? '#10b981' : 'transparent',
+                        color: isActiveMarket ? 'white' : (isMarketEnabled ? '#e2e8f0' : '#475569'),
+                        fontWeight: isActiveMarket ? '600' : 'normal',
+                        whiteSpace: 'nowrap',
+                        transition: '0.2s',
+                        opacity: isMarketEnabled ? 1 : 0.6
+                      }}
+                    >
+                      {b.label}
+                    </button>
+                    <div 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleEngine(b.id, !isMarketEnabled);
+                      }}
+                      title={isMarketEnabled ? 'خاموش کردن بازار' : 'روشن کردن بازار'}
+                      style={{
+                        width: '18px',
+                        height: '18px',
+                        borderRadius: '50%',
+                        marginLeft: '4px',
+                        background: isMarketEnabled ? '#10b981' : '#334155',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        fontSize: '10px',
+                        color: 'white',
+                        boxShadow: isMarketEnabled ? '0 0 10px rgba(16, 185, 129, 0.4)' : 'none',
+                        transition: '0.3s'
+                      }}
+                    >
+                      {isMarketEnabled ? <CheckIcon size={10} color="white" /> : <div style={{width: 6, height: 6, borderRadius: '50%', background: '#64748b'}} />}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -798,15 +810,30 @@ export default function App() {
             backdropFilter: 'blur(8px)',
             borderRadius: '16px'
           }}>
-            <div className="animate-spin" style={{ 
-              width: '40px', 
-              height: '40px', 
-              border: '4px solid #10b981', 
-              borderTopColor: 'transparent', 
-              borderRadius: '50%',
-              marginBottom: '1rem'
-            }}></div>
-            <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>درحال فراخوانی دیتای {activeBroker === 'faraz' ? 'فراز گلد' : 'آلفا گلد'}...</div>
+            {!engineStatuses[activeBroker] ? (
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ color: '#ef4444', fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '8px' }}>این بازار غیرفعال است</div>
+                <button 
+                  onClick={() => toggleEngine(activeBroker, true)}
+                  className="btn-primary" 
+                  style={{ padding: '8px 20px', borderRadius: '8px' }}
+                >
+                  فعال‌سازی بازار
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="animate-spin" style={{ 
+                  width: '40px', 
+                  height: '40px', 
+                  border: '4px solid #10b981', 
+                  borderTopColor: 'transparent', 
+                  borderRadius: '50%',
+                  marginBottom: '1rem'
+                }}></div>
+                <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>درحال فراخوانی دیتای {activeBroker === 'faraz' ? 'فراز گلد' : (activeBroker === 'alpha' ? 'آلفا گلد' : 'بیت‌کوین')}...</div>
+              </>
+            )}
           </div>
         )}
 
@@ -893,6 +920,7 @@ export default function App() {
                   style={{ width: '100%', padding: '12px', borderRadius: '10px', background: '#1e293b', color: 'white', border: '1px solid #334155', cursor: 'pointer', fontSize: '0.9rem' }}
                 >
                   <option value="N-PATTERN">الگوی N (N-Pattern)</option>
+                  <option value="FIB-38">فیبوناچی ۳۸٪ (Fibonacci)</option>
                   <option value="RSI">شاخص RSI (Oversold/Overbought)</option>
                   <option value="EMA-CROSS">کراس میانگین متحرک (EMA 9/21)</option>
                   <option value="SCALP-ADV">اسکلپ پیشرفته (Adv Scalp)</option>

@@ -46,10 +46,16 @@ async function startServer() {
 
         const sendState = (type: string) => {
             const engine = engines[currentBroker];
+            const engineStatuses = Object.keys(engines).reduce((acc: any, key) => {
+                acc[key] = engines[key].isEnabled;
+                return acc;
+            }, {});
+
             if (engine && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ 
                     type, 
                     broker: currentBroker, 
+                    engineStatuses, // Include all statuses
                     data: engine.getState() 
                 }));
             }
@@ -122,8 +128,33 @@ async function startServer() {
                     else if (command.type === 'SET_TIMEFRAME')
                         engine.setTimeframe(command.timeframe);
                     else if (command.type === 'SET_LIVE_STRATEGY') {
-                        (engine as any).liveStrategyType = command.strategy;
-                        console.log(`[Server] ${currentBroker} live strategy set to ${command.strategy}`);
+                        const engine = engines[currentBroker];
+                        if (engine) {
+                            (engine as any).liveStrategyType = command.strategy;
+                            if (typeof (engine as any).saveSettings === 'function') {
+                                (engine as any).saveSettings();
+                            }
+                            console.log(`[Server] ${currentBroker} live strategy changed to ${command.strategy}`);
+                            sendState('UPDATE');
+                        }
+                    }
+                    else if (command.type === 'TOGGLE_ENGINE') {
+                        const targetEngine = engines[command.broker];
+                        if (targetEngine) {
+                            targetEngine.isEnabled = command.enabled;
+                            targetEngine.saveSettings();
+                            if (command.enabled) {
+                                console.log(`[Server] Enabling engine: ${command.broker}`);
+                                targetEngine.start();
+                            } else {
+                                console.log(`[Server] Disabling engine: ${command.broker}`);
+                                if (targetEngine.ws) {
+                                    targetEngine.ws.close();
+                                    targetEngine.ws = null;
+                                }
+                            }
+                            sendState('UPDATE');
+                        }
                     }
                     if (command.type === 'UPDATE_SETTINGS') {
                         const { baleToken, baleChatId, farazToken, farazSession, candleConfirmations } = command;

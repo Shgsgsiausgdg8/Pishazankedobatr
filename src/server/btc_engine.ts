@@ -14,6 +14,7 @@ export class BtcEngine {
     strategy = new TradingStrategy();
     liveStrategyType = 'HYBRID';
     brokerName = 'بیتکوین (BTCUSDT)';
+    isEnabled = true;
     
     // Auth & Settings
     currentToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2OGYwMDk2YzIxZjM0N2RhOTMyMzIzZTgiLCJjcmVkaXQiOjE3Nzc1MjczNjU2NTIsImFjdGl2ZSI6dHJ1ZSwicm9sZSI6ImN1c3RvbWVyIiwibGFzdFVwZGF0ZVRpbWUiOjE3Nzc1MzMxMDIzNTIsImlhdCI6MTc3NzUzMzEwMiwiZXhwIjoxNzc3NTQwMzAyfQ.2P-2g2_R15Tz30XFqD_4lYn58OitL0G9Yp1NshqI1v4";
@@ -43,6 +44,7 @@ export class BtcEngine {
                 if (s.currentToken) this.currentToken = s.currentToken;
                 if (s.farazSession) this.farazSession = s.farazSession;
                 if (s.candleConfirmations) this.candleConfirmations = s.candleConfirmations;
+                if (s.isEnabled !== undefined) this.isEnabled = s.isEnabled;
             }
         } catch (e) {}
     }
@@ -54,13 +56,15 @@ export class BtcEngine {
                 baleChatId: this.baleChatId,
                 currentToken: this.currentToken,
                 farazSession: this.farazSession,
-                candleConfirmations: this.candleConfirmations
+                candleConfirmations: this.candleConfirmations,
+                isEnabled: this.isEnabled
             };
             fs.writeFileSync(this.settingsFile, JSON.stringify(s, null, 2));
         } catch (e) {}
     }
 
     async start() {
+        if (!this.isEnabled) return;
         await this.fetchHistory();
         this.connectWS();
     }
@@ -115,6 +119,7 @@ export class BtcEngine {
     }
 
     connectWS() {
+        if (!this.isEnabled) return;
         const url = "wss://ir3.faraz.io/srv09/realtime/?EIO=4&transport=websocket";
         this.ws = new WebSocket(url, {
             origin: "https://faraz.io",
@@ -264,7 +269,8 @@ export class BtcEngine {
             baleChatId: this.baleChatId,
             currentToken: this.currentToken,
             farazSession: this.farazSession,
-            candleConfirmations: this.candleConfirmations
+            candleConfirmations: this.candleConfirmations,
+            isEnabled: this.isEnabled
         };
     }
 }

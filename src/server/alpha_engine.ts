@@ -21,6 +21,7 @@ export class AlphaGoldEngine {
     liveStrategyType = 'SCALP-ADV'; 
     lastLevelsUpdate = 0;
     brokerName = 'آلفا گلد (انس جهانی)';
+    isEnabled = true;
     settingsFile = path.join(process.cwd(), 'alpha_settings.json');
 
     // Bale Config
@@ -46,6 +47,7 @@ export class AlphaGoldEngine {
                 if (settings.baleToken) this.baleToken = settings.baleToken;
                 if (settings.baleChatId) this.baleChatId = settings.baleChatId;
                 if (settings.candleConfirmations) this.candleConfirmations = settings.candleConfirmations;
+                if (settings.isEnabled !== undefined) this.isEnabled = settings.isEnabled;
             }
         } catch (e) {
             console.error("Error loading Alpha settings:", e);
@@ -57,7 +59,8 @@ export class AlphaGoldEngine {
             const settings = {
                 baleToken: this.baleToken,
                 baleChatId: this.baleChatId,
-                candleConfirmations: this.candleConfirmations
+                candleConfirmations: this.candleConfirmations,
+                isEnabled: this.isEnabled
             };
             fs.writeFileSync(this.settingsFile, JSON.stringify(settings, null, 2));
         } catch (e) {
@@ -66,6 +69,7 @@ export class AlphaGoldEngine {
     }
 
     async start() {
+        if (!this.isEnabled) return;
         console.log("[AlphaGoldEngine] Starting engine...");
         await this.fetchHistoricalCandles();
         this.connectWS();
@@ -143,6 +147,7 @@ export class AlphaGoldEngine {
     }
 
     connectWS() {
+        if (!this.isEnabled) return;
         // EXACT URL from your provided file
         const url = "wss://chrt.alphagoldx.com/ohlc/";
 
@@ -376,7 +381,8 @@ export class AlphaGoldEngine {
             nPattern: nPattern,
             baleToken: this.baleToken,
             baleChatId: this.baleChatId,
-            candleConfirmations: this.candleConfirmations
+            candleConfirmations: this.candleConfirmations,
+            isEnabled: this.isEnabled
         };
     }
 

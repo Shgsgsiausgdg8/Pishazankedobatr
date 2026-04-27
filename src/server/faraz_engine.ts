@@ -14,6 +14,7 @@ export class FarazGoldEngine {
     liveStrategyType = 'SCALP-ADV';
     recordingStartTime: number | null = null;
     brokerName = 'فراز گلد (مظنه)';
+    isEnabled = true;
 
     // Bale Config
     baleToken: string = '1892918835:dxRdPwhkUUgmFogKzLD7B8xmygvnRKq_DOA';
@@ -159,6 +160,7 @@ export class FarazGoldEngine {
                 if (settings.baleToken) this.baleToken = settings.baleToken;
                 if (settings.baleChatId) this.baleChatId = settings.baleChatId;
                 if (settings.candleConfirmations) this.candleConfirmations = settings.candleConfirmations;
+                if (settings.isEnabled !== undefined) this.isEnabled = settings.isEnabled;
             }
         } catch (e) {
             console.error("Error loading settings:", e);
@@ -174,7 +176,8 @@ export class FarazGoldEngine {
                 csrfToken: this.csrfToken,
                 baleToken: this.baleToken,
                 baleChatId: this.baleChatId,
-                candleConfirmations: this.candleConfirmations
+                candleConfirmations: this.candleConfirmations,
+                isEnabled: this.isEnabled
             };
             fs.writeFileSync(this.settingsFile, JSON.stringify(settings, null, 2));
         } catch (e) {
@@ -208,6 +211,7 @@ export class FarazGoldEngine {
     }
 
     start() {
+        if (!this.isEnabled) return;
         this.connectWS();
         setInterval(() => this.refreshAuthToken(), 12 * 60 * 60 * 1000);
         setTimeout(() => this.fetchHistory(), 2000);
@@ -219,6 +223,7 @@ export class FarazGoldEngine {
     }
 
     async connectWS() {
+        if (!this.isEnabled) return;
         // جلوگیری از چند اتصال همزمان
         if (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)) {
             console.log("[Engine] WebSocket already connecting or open, skipping...");
@@ -512,7 +517,8 @@ export class FarazGoldEngine {
             nPattern: nPattern, 
             baleToken: this.baleToken,
             baleChatId: this.baleChatId,
-            candleConfirmations: this.candleConfirmations
+            candleConfirmations: this.candleConfirmations,
+            isEnabled: this.isEnabled
         };
     }
 
