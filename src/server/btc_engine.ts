@@ -252,7 +252,9 @@ export class BtcEngine {
             totalCandles: this.candles.length,
             nPattern,
             baleToken: this.baleToken,
-            baleChatId: this.baleChatId
+            baleChatId: this.baleChatId,
+            currentToken: this.currentToken,
+            farazSession: this.farazSession
         };
     }
 }

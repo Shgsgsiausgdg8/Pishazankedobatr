@@ -10,6 +10,9 @@ const PlayIcon = () => (
 const SquareIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
 );
+const SettingsIcon = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+);
 
 // --- Custom Canvas Chart Component ---
 const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount }: { data: any[], levels: any[], nPattern?: any, originalCandlesCount: number }) => {
@@ -382,6 +385,8 @@ export default function App() {
   const [showBaleSettings, setShowBaleSettings] = useState(false);
   const [baleToken, setBaleToken] = useState('');
   const [baleChatId, setBaleChatId] = useState('');
+  const [farazToken, setFarazToken] = useState('');
+  const [farazSession, setFarazSession] = useState('');
   const [refreshToken, setRefreshToken] = useState('');
   const [accountType, setAccountType] = useState('demo');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -422,6 +427,8 @@ export default function App() {
               // Sync Bale settings from engine
               if (msg.data.baleToken) setBaleToken(msg.data.baleToken);
               if (msg.data.baleChatId) setBaleChatId(msg.data.baleChatId);
+              if (msg.data.currentToken) setFarazToken(msg.data.currentToken);
+              if (msg.data.farazSession) setFarazSession(msg.data.farazSession);
             }
           } else if (msg.type === 'BACKTEST_RESULTS') {
             setBacktestResults(msg.data);
@@ -486,12 +493,14 @@ export default function App() {
     wsRef.current?.send(JSON.stringify({ type: 'SET_TIMEFRAME', timeframe: tf }));
   };
 
-  const updateBaleConfig = () => {
+  const updateSettings = () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
-        type: 'UPDATE_BALE_CONFIG',
-        token: baleToken,
-        chatId: baleChatId
+        type: 'UPDATE_SETTINGS',
+        baleToken: baleToken,
+        baleChatId: baleChatId,
+        farazToken: farazToken,
+        farazSession: farazSession
       }));
       setShowBaleSettings(false);
     }
@@ -536,70 +545,75 @@ export default function App() {
         </div>
       )}
       <header className="header">
-        <div className="header-content">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{ background: '#10b981', padding: '8px', borderRadius: '12px' }}>
-              <ActivityIcon />
-            </div>
-            <div>
-              <h1 style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>فرازگلد لایو</h1>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: '#94a3b8' }}>
-                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: wsConnected ? '#10b981' : '#ef4444' }} />
-                {wsConnected ? 'متصل' : 'قطع شده'}
+        <div className="header-content" style={{ flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ background: '#10b981', padding: '6px', borderRadius: '10px' }}>
+                <ActivityIcon />
+              </div>
+              <div>
+                <h1 style={{ fontSize: '1rem', fontWeight: 'bold' }}>فرازگلد لایو</h1>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem', color: '#94a3b8' }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: wsConnected ? '#10b981' : '#ef4444' }} />
+                  {wsConnected ? 'متصل' : 'قطع شده'}
+                </div>
               </div>
             </div>
             
             {/* Broker Selector */}
-            <div style={{ display: 'flex', gap: '4px', background: '#020617', padding: '4px', borderRadius: '12px', marginRight: '1rem' }}>
+            <div style={{ display: 'flex', gap: '2px', background: '#020617', padding: '2px', borderRadius: '8px', marginLeft: '0.5rem' }}>
               <button 
                 onClick={() => switchBroker('faraz')}
                 style={{
-                  padding: '6px 16px',
-                  borderRadius: '10px',
-                  fontSize: '0.8rem',
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  fontSize: '0.7rem',
                   border: 'none',
                   cursor: 'pointer',
                   background: activeBroker === 'faraz' ? '#10b981' : 'transparent',
                   color: activeBroker === 'faraz' ? 'white' : '#94a3b8',
+                  whiteSpace: 'nowrap',
                   transition: '0.2s'
                 }}
               >
-                فراز گلد (آبشده)
+                فراز گلد
               </button>
               <button 
                 onClick={() => switchBroker('alpha')}
                 style={{
-                  padding: '6px 16px',
-                  borderRadius: '10px',
-                  fontSize: '0.8rem',
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  fontSize: '0.7rem',
                   border: 'none',
                   cursor: 'pointer',
                   background: activeBroker === 'alpha' ? '#10b981' : 'transparent',
                   color: activeBroker === 'alpha' ? 'white' : '#94a3b8',
+                  whiteSpace: 'nowrap',
                   transition: '0.2s'
                 }}
               >
-                آلفا گلد (انس)
+                آلفا گلد
               </button>
               <button 
                 onClick={() => switchBroker('btc')}
                 style={{
-                  padding: '6px 16px',
-                  borderRadius: '10px',
-                  fontSize: '0.8rem',
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  fontSize: '0.7rem',
                   border: 'none',
                   cursor: 'pointer',
                   background: activeBroker === 'btc' ? '#10b981' : 'transparent',
                   color: activeBroker === 'btc' ? 'white' : '#94a3b8',
+                  whiteSpace: 'nowrap',
                   transition: '0.2s'
                 }}
               >
-                بیتکوین (BTC)
+                بیت‌کوین
               </button>
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', flex: 1 }}>
             <button 
               onClick={() => setShowBaleSettings(true)}
               style={{
@@ -607,21 +621,23 @@ export default function App() {
                 color: '#94a3b8',
                 border: '1px solid #334155',
                 borderRadius: '8px',
-                padding: '4px 10px',
-                fontSize: '0.7rem',
+                padding: '6px 8px',
+                fontSize: '0.65rem',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '4px'
+                gap: '2px',
+                whiteSpace: 'nowrap'
               }}
             >
-              ⚙️ تنظیمات بله
+              <SettingsIcon size={14} />
+              <span style={{ display: 'none' }} className="md:inline">تنظیمات</span>
             </button>
-            <div className="ltr" style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
-                قیمت لحظه‌ای {activeBroker === 'faraz' ? '(مظنه)' : (activeBroker === 'alpha' ? '(انس)' : '(BTC)')}
+            <div className="ltr" style={{ textAlign: 'right', minWidth: '70px' }}>
+              <div style={{ fontSize: '0.55rem', color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                قیمت {activeBroker === 'faraz' ? '(مظنه)' : (activeBroker === 'alpha' ? '(انس)' : '(BTC)')}
               </div>
-              <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#10b981', fontFamily: 'var(--font-mono)' }}>
+              <div style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#10b981', fontFamily: 'var(--font-mono)' }}>
                 {activeBroker === 'alpha' || activeBroker === 'btc'
                   ? data?.price?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'
                   : data?.price?.toLocaleString() || '0'
@@ -629,11 +645,11 @@ export default function App() {
               </div>
             </div>
             {activeBroker === 'faraz' && (
-              <button onClick={() => setShowAuth(true)} className="btn btn-secondary">احراز هویت</button>
+              <button onClick={() => setShowAuth(true)} className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: '0.7rem' }}>احراز هویت</button>
             )}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-start' }}>
-              <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>استراتژی فعال:</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0', alignItems: 'flex-start' }}>
+              <span style={{ fontSize: '0.5rem', color: '#94a3b8' }}>استراتژی:</span>
               <select 
                 value={data?.liveStrategy || 'HYBRID'} 
                 onChange={(e) => setLiveStrategy(e.target.value)}
@@ -642,30 +658,28 @@ export default function App() {
                   color: '#10b981', 
                   border: '1px solid #1e293b', 
                   borderRadius: '6px', 
-                  padding: '2px 8px',
-                  fontSize: '0.75rem',
+                  padding: '1px 4px',
+                  fontSize: '0.7rem',
                   outline: 'none',
                   cursor: 'pointer'
                 }}
               >
-                <option value="HYBRID">ترکیبی (Smart N)</option>
+                <option value="HYBRID">Smart N</option>
                 <option value="SCALP-ADV">اسکلپ</option>
                 <option value="PINBAR">پین‌بار</option>
                 <option value="N-PATTERN">الگوی N</option>
                 <option value="TREND-MT">روندی</option>
-                <option value="QUANT">کوانت</option>
-                <option value="RSI">RSI</option>
-                <option value="EMA-CROSS">کراس</option>
-                <option value="HST">HST</option>
               </select>
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-              <button onClick={toggleRecording} className={`btn ${data?.isRecording ? 'btn-secondary' : 'btn-primary'}`}>
-                {data?.isRecording ? <SquareIcon /> : <PlayIcon />}
-                {data?.isRecording ? 'توقف' : 'ضبط'}
-              </button>
-            </div>
+            <button 
+              onClick={toggleRecording} 
+              className={`btn ${data?.isRecording ? 'btn-secondary' : 'btn-primary'}`}
+              style={{ padding: '6px 12px', fontSize: '0.7rem', borderRadius: '8px' }}
+            >
+              {data?.isRecording ? <SquareIcon /> : <PlayIcon />}
+              <span>{data?.isRecording ? 'توقف' : 'ضبط'}</span>
+            </button>
           </div>
         </div>
       </header>
@@ -1061,35 +1075,66 @@ export default function App() {
 
       {showBaleSettings && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
-          <div className="card" style={{ width: '100%', maxWidth: '400px' }}>
-            <h2 style={{ marginBottom: '1.5rem' }}>⚙️ تنظیمات اعلان بله</h2>
+          <div className="card" style={{ width: '100%', maxWidth: '450px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h2 style={{ marginBottom: '1.5rem', textAlign: 'center' }}>⚙️ تنظیمات ربات</h2>
+            
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '6px' }}>توکن ربات بله:</label>
-                <input 
-                  type="text" 
-                  value={baleToken} 
-                  onChange={e => setBaleToken(e.target.value)}
-                  placeholder="1892918835:dxRd..."
-                  style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#1e293b', border: 'none', color: 'white' }}
-                />
+              <div style={{ borderBottom: '1px solid #334155', pb: '10px', mb: '5px' }}>
+                <h3 style={{ fontSize: '0.9rem', color: '#10b981', mb: '10px' }}>🔔 تنظیمات بله</h3>
+                <div style={{ mb: '10px' }}>
+                  <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '6px' }}>توکن ربات بله:</label>
+                  <input 
+                    type="text" 
+                    value={baleToken} 
+                    onChange={e => setBaleToken(e.target.value)}
+                    placeholder="1892918835:dxRd..."
+                    className="ltr"
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', background: '#1e293b', border: 'none', color: 'white', fontSize: '0.8rem' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>آیدی چت:</label>
+                  <input 
+                    type="text" 
+                    value={baleChatId} 
+                    onChange={e => setBaleChatId(e.target.value)}
+                    placeholder="6211548865"
+                    className="ltr"
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', background: '#1e293b', border: 'none', color: 'white', fontSize: '0.8rem' }}
+                  />
+                </div>
               </div>
+
               <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '6px' }}>آیدی عددی چت:</label>
-                <input 
-                  type="text" 
-                  value={baleChatId} 
-                  onChange={e => setBaleChatId(e.target.value)}
-                  placeholder="6211548865"
-                  style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#1e293b', border: 'none', color: 'white' }}
-                />
+                <h3 style={{ fontSize: '0.85rem', color: '#3b82f6', mb: '8px' }}>📡 تنظیمات API بیت‌کوین (BTC)</h3>
+                <div style={{ mb: '8px' }}>
+                  <label style={{ display: 'block', fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>x-access-token:</label>
+                  <input 
+                    type="text" 
+                    value={farazToken} 
+                    onChange={e => setFarazToken(e.target.value)}
+                    className="ltr"
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', background: '#1e293b', border: 'none', color: 'white', fontSize: '0.7rem' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>farazSession:</label>
+                  <input 
+                    type="text" 
+                    value={farazSession} 
+                    onChange={e => setFarazSession(e.target.value)}
+                    className="ltr"
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', background: '#1e293b', border: 'none', color: 'white', fontSize: '0.7rem' }}
+                  />
+                </div>
               </div>
+
               <button 
-                onClick={updateBaleConfig}
+                onClick={updateSettings}
                 className="btn btn-primary" 
                 style={{ width: '100%', marginTop: '0.5rem', justifyContent: 'center' }}
               >
-                ذخیره تنظیمات
+                ذخیره و اعمال تنظیمات
               </button>
               <button onClick={() => setShowBaleSettings(false)} className="btn btn-secondary" style={{ justifyContent: 'center' }}>انصراف</button>
             </div>

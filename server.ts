@@ -125,12 +125,19 @@ async function startServer() {
                         (engine as any).liveStrategyType = command.strategy;
                         console.log(`[Server] ${currentBroker} live strategy set to ${command.strategy}`);
                     }
-                    else if (command.type === 'UPDATE_BALE_CONFIG') {
-                        const { token, chatId } = command;
-                        farazEngine.updateBaleConfig(token, chatId);
-                        alphaEngine.updateBaleConfig(token, chatId);
-                        btcEngine.updateBaleConfig(token, chatId);
-                        console.log(`[Server] Bale config updated for all engines.`);
+                    else if (command.type === 'UPDATE_SETTINGS') {
+                        const { baleToken, baleChatId, farazToken, farazSession } = command;
+                        farazEngine.updateBaleConfig(baleToken, baleChatId);
+                        alphaEngine.updateBaleConfig(baleToken, baleChatId);
+                        
+                        // BTC Engine needs more fields
+                        btcEngine.updateBaleConfig(baleToken, baleChatId);
+                        if (farazToken) btcEngine.currentToken = farazToken;
+                        if (farazSession) btcEngine.farazSession = farazSession;
+                        btcEngine.saveSettings();
+                        btcEngine.fetchHistory(); // Retry history with new token
+
+                        console.log(`[Server] All settings updated.`);
                     }
                 }
             }
