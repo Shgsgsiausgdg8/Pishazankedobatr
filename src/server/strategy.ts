@@ -72,6 +72,7 @@ export class TradingStrategy {
      */
     analyze(candles: Candle[], timeframe: string, strategyType: string = 'N-PATTERN', confirmations?: any): Signal | null {
         if (!candles || candles.length < 50) return null;
+        if (strategyType === 'STRATEGY_3' && candles.length < 110) return null;
 
         let result: any = null;
 
@@ -206,7 +207,7 @@ export class TradingStrategy {
      * استراتژی سوم - فیبوناچی + واگرایی CRSI (نسخه دقیق تریدر فراز)
      */
     private detectStrategy3(candles: Candle[]) {
-        if (!candles || candles.length < 80) return null;
+        if (!candles || candles.length < 110) return null;
 
         const lookback = this.config.fibLookback;
         const data = candles.slice(-lookback);
@@ -272,9 +273,61 @@ export class TradingStrategy {
         return null;
     }
 
-    private calculateRSI(candles: Candle[], period: number = 14) {
+    private calculateCRSI(candles: Candle[], rsiPeriod = 3, streakPeriod = 2, rocPeriod = 100) {
         let values = candles.map(c => c.close);
-        if (values.length < period + 5) return [];
+        let crsi = new Array(values.length).fill(50); // Pad start
+
+        if (values.length < rocPeriod + 5) return crsi;
+
+        // 1. Calculate price RSI
+        const priceRSI = this.calculateRSICustom(values, rsiPeriod);
+
+        // 2. Calculate Streak RSI
+        const streaks = new Array(values.length).fill(0);
+        let currentStreak = 0;
+        for (let i = 1; i < values.length; i++) {
+            if (values[i] > values[i-1]) {
+                if (currentStreak < 0) currentStreak = 0;
+                currentStreak++;
+            } else if (values[i] < values[i-1]) {
+                if (currentStreak > 0) currentStreak = 0;
+                currentStreak--;
+            } else {
+                currentStreak = 0;
+            }
+            streaks[i] = currentStreak;
+        }
+        const streakRSI = this.calculateRSICustom(streaks, streakPeriod);
+
+        // 3. Calculate ROC Percentage Rank
+        const rocValues = new Array(values.length).fill(0);
+        for(let i = 1; i < values.length; i++) {
+            rocValues[i] = (values[i] - values[i-1]) / values[i-1];
+        }
+
+        const percentRanks = new Array(values.length).fill(50);
+        for (let i = rocPeriod; i < values.length; i++) {
+            let count = 0;
+            const currentRoc = rocValues[i];
+            for (let j = 1; j <= rocPeriod; j++) {
+                if (rocValues[i - j] < currentRoc) {
+                    count++;
+                }
+            }
+            percentRanks[i] = (count / rocPeriod) * 100;
+        }
+
+        // Calculate final CRSI
+        for (let i = 0; i < values.length; i++) {
+            crsi[i] = (priceRSI[i] + streakRSI[i] + percentRanks[i]) / 3;
+        }
+
+        return crsi;
+    }
+
+    private calculateRSICustom(values: number[], period: number) {
+        let rsi = new Array(values.length).fill(50);
+        if (values.length <= period) return rsi;
 
         let gains = 0, losses = 0;
 
@@ -286,7 +339,6 @@ export class TradingStrategy {
 
         let avgGain = gains / period;
         let avgLoss = losses / period;
-        let rsi = [];
 
         for (let i = period + 1; i < values.length; i++) {
             const diff = values[i] - values[i - 1];
@@ -297,60 +349,51 @@ export class TradingStrategy {
             avgLoss = (avgLoss * (period - 1) + loss) / period;
 
             const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-            rsi.push(100 - 100 / (1 + rs));
+            rsi[i] = 100 - (100 / (1 + rs));
         }
+
         return rsi;
     }
 
+    private calculateRSI(candles: Candle[], period: number = 14) {
+        let values = candles.map(c => c.close);
+        return this.calculateRSICustom(values, period);
+    }
+
     private checkCRSIDivergence(candles: Candle[], type: "BUY" | "SELL") {
-        const rsi = this.calculateRSI(candles, 14);
-        if (!rsi || rsi.length < 10) return false;
+        const crsi = this.calculateCRSI(candles);
+        if (!crsi || crsi.length < 10) return false;
 
         // Apply Strictness levels
-        const currentRSI = rsi[rsi.length - 1];
+        const currentCRSI = crsi[crsi.length - 1];
+        let depth = 5;
         if (this.config.strategy3Strictness === 'medium') {
-            if (type === "BUY" && currentRSI > 35) return false;
-            if (type === "SELL" && currentRSI < 65) return false;
+            if (type === "BUY" && currentCRSI > 40) return false;
+            if (type === "SELL" && currentCRSI < 60) return false;
         } else if (this.config.strategy3Strictness === 'high') {
-            if (type === "BUY" && currentRSI > 25) return false;
-            if (type === "SELL" && currentRSI < 75) return false;
+            if (type === "BUY" && currentCRSI > 30) return false;
+            if (type === "SELL" && currentCRSI < 70) return false;
+            depth = 7;
+        } else if (this.config.strategy3Strictness === 'low') {
+            depth = 3;
         }
 
         const closes = candles.map(c => c.close);
-        const depth = 5; // Always use 5 to match trader's intention for divergence lookback
         
-        const pivots = this.getLastPivots(closes, depth);
-        const rsiPivots = this.getLastPivots(rsi, depth);
+        // Simple lookback comparison based on trader's original logic
+        const priceLast = closes[closes.length - 1];
+        const pricePrev = closes[closes.length - 1 - depth];
+        
+        const rsiLast = crsi[crsi.length - 1];
+        const rsiPrev = crsi[crsi.length - 1 - depth];
 
-        // Trader's source labels were: BUY for Short, SELL for Long.
-        // My labels are: SELL for Short, BUY for Long.
-        // BUG FIX: Trader accidentally applied Bullish Divergence to Short setups, and Bearish to Long setups.
-        // We will apply the correct divergence so signals actually trigger.
-        if (type === "SELL") {
-            // My SELL (Short). Retro-trend is UP. Need Bearish Divergence:
-            // Price makes a higher local high (last > prev), RSI makes lower local high (last < prev).
-            return pivots.highHigh && rsiPivots.highLow;
+        if (type === "BUY") {
+            // Price makes a lower low compared to 'depth' candles ago, but RSI makes higher low
+            return priceLast < pricePrev && rsiLast > rsiPrev;
         } else {
-            // My BUY (Long). Retro-trend is DOWN. Need Bullish Divergence:
-            // Price makes a lower local low (last < prev), RSI makes higher local low (last > prev).
-            return pivots.lowLow && rsiPivots.lowHigh;
+            // Price makes a higher high compared to 'depth' candles ago, but RSI makes lower high
+            return priceLast > pricePrev && rsiLast < rsiPrev;
         }
-    }
-
-    private getLastPivots(arr: number[], depth: number) {
-        const result = { highHigh: false, lowLow: false, highLow: false, lowHigh: false };
-        if (arr.length <= depth) return result;
-
-        const last = arr[arr.length - 1];
-        const prev = arr[arr.length - 1 - depth];
-
-        if (last > prev) result.highHigh = true;
-        if (last < prev) result.lowLow = true;
-
-        if (last < prev) result.highLow = true;
-        if (last > prev) result.lowHigh = true;
-
-        return result;
     }
 
     /**
@@ -669,16 +712,18 @@ export class TradingStrategy {
             // Standardizing based on Trader's math but corrected for Long/Short logic
             if (type === "BUY") {
                 // BUY (Long) signal from a "Low -> High" move that retraced down to 71-88%
+                // Entry is near high - 0.88 * range. Target should be higher!
                 sl = low - low * 0.0015;
-                tp1 = high - range * 0.38;
-                tp2 = high - range * 0.50;
-                tp3 = high - range * 0.71;
+                tp1 = high - range * 0.71; // closest
+                tp2 = high - range * 0.50; // middle
+                tp3 = high - range * 0.38; // furthest
             } else {
                 // SELL (Short) signal from a "High -> Low" move that bounced up to 71-88%
+                // Entry is near low + 0.88 * range. Target should be lower!
                 sl = high + high * 0.0015;
-                tp1 = low + range * 0.38;
-                tp2 = low + range * 0.50;
-                tp3 = low + range * 0.71;
+                tp1 = low + range * 0.71; // closest
+                tp2 = low + range * 0.50; // middle
+                tp3 = low + range * 0.38; // furthest
             }
         } else if (pattern.isFIB38) {
             const range = pattern.saghf - pattern.kaf;
