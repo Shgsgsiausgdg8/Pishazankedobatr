@@ -102,7 +102,7 @@ const AutoTradePanel = ({ onClose }: { onClose: () => void }) => {
             const res = await fetch('/api/autotrade/auth/request', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({phone})
+                body: JSON.stringify({phone: phone.trim()})
             });
             const data = await res.json();
             console.log("Request OTP Response:", data);
@@ -127,7 +127,7 @@ const AutoTradePanel = ({ onClose }: { onClose: () => void }) => {
             const res = await fetch('/api/autotrade/auth/confirm', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({phone, code: otp})
+                body: JSON.stringify({phone: phone.trim(), code: otp.trim()})
             });
             const data = await res.json();
             console.log("Confirm OTP Response:", data);
@@ -247,8 +247,8 @@ const AutoTradePanel = ({ onClose }: { onClose: () => void }) => {
                                 </div>
                                 <div>
                                     <div style={{ color: 'white', fontWeight: 'bold', fontSize: '0.95rem' }}>{userInfo.first_name ? `${userInfo.first_name} ${userInfo.last_name || ''}` : userInfo.username || userInfo.phone_number}</div>
-                                    <div style={{ color: userInfo.is_authenticated ? '#10b981' : '#f59e0b', fontSize: '0.75rem', marginTop: '2px' }}>
-                                        {userInfo.is_authenticated ? 'احراز هویت شده' : 'وضعیت نامشخص'}
+                                    <div style={{ color: '#10b981', fontSize: '0.75rem', marginTop: '2px' }}>
+                                        متصل شده
                                     </div>
                                 </div>
                             </div>

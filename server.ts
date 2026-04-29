@@ -241,7 +241,9 @@ async function startServer() {
         } catch (error: any) {
             const details = error.response?.data;
             let errMsg = error.message;
-            if (details) {
+            if (error.code === 'ENOTFOUND' || error.code === 'EAI_AGAIN' || error.message.includes('EAI_AGAIN')) {
+                errMsg = 'خطا در ارتباط شبکه با سرور آلفاگلد. لطفا مجدد تلاش کنید.';
+            } else if (details) {
                 if (details.username) errMsg = Array.isArray(details.username) ? details.username[0] : details.username;
                 else if (details.detail) errMsg = details.detail;
                 else errMsg = JSON.stringify(details);
@@ -263,7 +265,9 @@ async function startServer() {
         } catch (error: any) {
             const details = error.response?.data;
             let errMsg = error.message;
-            if (details) {
+            if (error.code === 'ENOTFOUND' || error.code === 'EAI_AGAIN' || error.message.includes('EAI_AGAIN')) {
+                errMsg = 'خطا در ارتباط شبکه با سرور آلفاگلد. لطفا مجدد تلاش کنید.';
+            } else if (details) {
                 if (details.code) errMsg = Array.isArray(details.code) ? details.code[0] : details.code;
                 else if (details.non_field_errors) errMsg = Array.isArray(details.non_field_errors) ? details.non_field_errors[0] : details.non_field_errors;
                 else if (details.detail) errMsg = details.detail;

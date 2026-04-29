@@ -86,6 +86,10 @@ export class AlphaGoldClient {
             tokens.access_token = response.data.access_token;
             tokens.refresh_token = response.data.refresh_token;
             tokens.user_id = response.data.user_id;
+        } else if (response.data.access) { // Standard Django SimpleJWT
+            tokens.access_token = response.data.access;
+            tokens.refresh_token = response.data.refresh;
+            tokens.user_id = response.data.user_id;
         }
 
         const setCookie = response.headers['set-cookie'];
