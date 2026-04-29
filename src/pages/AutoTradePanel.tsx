@@ -183,6 +183,16 @@ const AutoTradePanel = ({ onClose }: { onClose: () => void }) => {
                         >
                             {authLoading ? 'درحال ارسال...' : 'دریافت کد تایید'}
                         </button>
+                        <button 
+                            onClick={() => {
+                                setAuthError('');
+                                setAuthStep('OTP');
+                            }}
+                            disabled={!phone}
+                            style={{ width: '100%', padding: '14px', background: 'transparent', color: '#60a5fa', border: '1px solid #3b82f6', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.9rem', cursor: (!phone) ? 'not-allowed' : 'pointer', opacity: (!phone) ? 0.7 : 1, marginTop: '12px' }}
+                        >
+                            پیامک را دریافت نکردید؟ (از سایت اصلی درخواست بدید و کد را اینجا بزنید)
+                        </button>
                     </div>
                 )}
 
