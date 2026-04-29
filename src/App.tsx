@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import AutoTradePanel from './pages/AutoTradePanel';
 
 // --- Icons (SVG) ---
 const ActivityIcon = ({ size = 24 }: { size?: number }) => (
@@ -384,6 +385,7 @@ export default function App() {
   const [showAuth, setShowAuth] = useState(false);
   const [showBaleSettings, setShowBaleSettings] = useState(false);
   const [showStrategySettings, setShowStrategySettings] = useState(false);
+  const [showAutoTradePanel, setShowAutoTradePanel] = useState(false);
   const [baleToken, setBaleToken] = useState('');
   const [baleChatId, setBaleChatId] = useState('');
   const [farazToken, setFarazToken] = useState('');
@@ -637,6 +639,26 @@ export default function App() {
           </div>
 
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', flex: 1 }}>
+            <button 
+              onClick={() => setShowAutoTradePanel(true)}
+              style={{
+                background: activeBroker === 'alpha' ? '#10b981' : '#1e293b',
+                color: activeBroker === 'alpha' ? 'white' : '#94a3b8',
+                border: activeBroker === 'alpha' ? 'none' : '1px solid #334155',
+                borderRadius: '8px',
+                padding: '6px 12px',
+                fontSize: '0.7rem',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                whiteSpace: 'nowrap',
+                boxShadow: activeBroker === 'alpha' ? '0 2px 8px rgba(16, 185, 129, 0.4)' : 'none'
+              }}
+            >
+              اتو ترید (آلفا)
+            </button>
             <button 
               onClick={() => setShowBaleSettings(true)}
               style={{
@@ -1390,6 +1412,8 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {showAutoTradePanel && <AutoTradePanel onClose={() => setShowAutoTradePanel(false)} />}
     </div>
   );
 }

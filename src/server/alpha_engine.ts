@@ -344,6 +344,7 @@ export class AlphaGoldEngine {
             
             // ارسال به بله
             this.sendBaleNotification(sig);
+            if (this.onSignalCallback) this.onSignalCallback(sig);
         }
     }
 
@@ -385,6 +386,11 @@ export class AlphaGoldEngine {
         this.baleToken = token;
         this.baleChatId = chatId;
         this.saveSettings();
+    }
+
+    onSignalCallback: ((signal: Signal) => void) | null = null;
+    onSignal(callback: (signal: Signal) => void) {
+        this.onSignalCallback = callback;
     }
 
     cleanupCandles() {

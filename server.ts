@@ -7,7 +7,7 @@ import { createServer as createViteServer } from "vite";
 import { FarazGoldEngine } from "./src/server/faraz_engine.js";
 import { AlphaGoldEngine } from "./src/server/alpha_engine.js";
 import { BtcEngine } from "./src/server/btc_engine.js";
-
+import { AutoTrader } from "./src/server/auto_trader.js";
 import { BacktestEngine } from "./src/server/backtest.js";
 
 async function startServer() {
@@ -16,6 +16,7 @@ async function startServer() {
     const PORT = 3000;
 
     const backtestEngine = new BacktestEngine();
+    const autoTrader = new AutoTrader();
 
     // Prevent process crash from unhandled errors
     process.on('uncaughtException', (err) => {
@@ -29,6 +30,7 @@ async function startServer() {
     const alphaEngine = new AlphaGoldEngine();
     const btcEngine = new BtcEngine();
     
+    alphaEngine.onSignal((sig) => autoTrader.handleSignal(sig));
     btcEngine.start(); // Start history & websocket for BTC
     
     const engines: Record<string, any> = {
@@ -193,7 +195,6 @@ async function startServer() {
             return res.status(400).json({ error: 'Token is required' });
         try {
             process.env.FARAZGOLD_BASEURL = type === 'real' ? 'https://farazgold.com' : 'https://demo.farazgold.com';
-            // If it looks like an access token (starts with eyJ), set it as accessToken
             if (refreshToken.startsWith('eyJ')) {
                 farazEngine.accessToken = refreshToken;
                 console.log("[Server] Access token set directly.");
@@ -207,6 +208,81 @@ async function startServer() {
             res.json({ success: true });
         }
         catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    });
+
+    app.get("/api/autotrade/state", (req, res) => {
+        res.json({
+            config: autoTrader.config,
+            portfo: autoTrader.portfo,
+            openOrders: autoTrader.openOrders,
+            closedOrders: autoTrader.closedOrders,
+            livePrice: autoTrader.livePrice
+        });
+    });
+
+    app.post("/api/autotrade/config", (req, res) => {
+        try {
+            autoTrader.updateConfig(req.body);
+            res.json({ success: true });
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    });
+
+    app.post("/api/autotrade/auth/request", async (req, res) => {
+        try {
+            const { phone } = req.body;
+            const data = await autoTrader.client.requestOtp(phone);
+            res.json(data);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    });
+
+    app.post("/api/autotrade/auth/confirm", async (req, res) => {
+        try {
+            const { phone, code } = req.body;
+            const tokens = await autoTrader.client.confirmOtp(phone, code);
+            if (tokens.access_token) {
+                autoTrader.updateConfig({ accessToken: tokens.access_token });
+            }
+            res.json(tokens);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    });
+
+    app.get("/api/autotrade/user", async (req, res) => {
+        try {
+            const data = await autoTrader.client.getUserInfo();
+            // Automatically set demoNumber if valid user info is retrieved
+            if (data && data.demo_number && data.demo_number !== autoTrader.config.demoNumber) {
+                autoTrader.updateConfig({ demoNumber: data.demo_number });
+            }
+            res.json(data);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    });
+
+    app.post("/api/autotrade/order/close", async (req, res) => {
+        try {
+            const { id } = req.body;
+            const data = await autoTrader.client.closeOrderDemo(id);
+            res.json(data);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    });
+
+    app.post("/api/autotrade/order/edit", async (req, res) => {
+        try {
+            const { id, tp, sl } = req.body;
+            const data = await autoTrader.client.editOrderDemo(id, sl, tp);
+            res.json(data);
+        } catch (error: any) {
             res.status(500).json({ error: error.message });
         }
     });
