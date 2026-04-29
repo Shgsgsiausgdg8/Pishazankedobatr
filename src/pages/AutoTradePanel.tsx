@@ -105,10 +105,12 @@ const AutoTradePanel = ({ onClose }: { onClose: () => void }) => {
                 body: JSON.stringify({phone})
             });
             const data = await res.json();
+            console.log("Request OTP Response:", data);
             if (res.ok) {
                 setAuthStep('OTP');
             } else {
                 setAuthError(data.error || 'خطا در ارسال کد');
+                console.error("OTP Request failed:", data.details);
             }
         } catch(e: any) {
             setAuthError(e.message);
@@ -128,10 +130,12 @@ const AutoTradePanel = ({ onClose }: { onClose: () => void }) => {
                 body: JSON.stringify({phone, code: otp})
             });
             const data = await res.json();
+            console.log("Confirm OTP Response:", data);
             if (res.ok && data.access_token) {
                 await fetchUser(); // Will switch to dashboard if success
             } else {
                 setAuthError(data.error || 'کد نامعتبر است');
+                console.error("OTP Confirm failed:", data.details);
             }
         } catch(e: any) {
             setAuthError(e.message);

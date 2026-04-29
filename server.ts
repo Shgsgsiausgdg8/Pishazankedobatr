@@ -246,7 +246,7 @@ async function startServer() {
                 else if (details.detail) errMsg = details.detail;
                 else errMsg = JSON.stringify(details);
             }
-            res.status(400).json({ error: errMsg });
+            res.status(400).json({ error: errMsg, details: details });
         }
     });
 
@@ -269,7 +269,7 @@ async function startServer() {
                 else if (details.detail) errMsg = details.detail;
                 else errMsg = JSON.stringify(details);
             }
-            res.status(400).json({ error: errMsg });
+            res.status(400).json({ error: errMsg, details: details });
         }
     });
 

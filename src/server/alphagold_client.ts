@@ -1,4 +1,11 @@
 import axios from 'axios';
+
+// Set a browser-like User-Agent to prevent ArvanCloud/WAF from blocking requests
+axios.defaults.headers.common['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+axios.defaults.headers.common['Accept'] = 'application/json, text/plain, */*';
+axios.defaults.headers.common['Origin'] = 'https://alphagoldx.com';
+axios.defaults.headers.common['Referer'] = 'https://alphagoldx.com/';
+
 import WebSocket from 'ws';
 import FormData from 'form-data';
 
@@ -42,21 +49,32 @@ export class AlphaGoldClient {
      * ارسال شماره موبایل برای دریافت کد تأیید (OTP)
      */
     async requestOtp(phoneNumber: string) {
-        const { data } = await axios.post(`${API_BASE}/api/authenticate/`, {
-            username: phoneNumber
-        });
-        return data; 
+        console.log(`[AlphaGold] requestOtp for: ${phoneNumber}`);
+        try {
+            const { data } = await axios.post(`${API_BASE}/api/authenticate/`, {
+                username: phoneNumber
+            });
+            console.log(`[AlphaGold] requestOtp response:`, data);
+            return data; 
+        } catch (error: any) {
+            console.error(`[AlphaGold] requestOtp error:`, error.response?.data || error.message);
+            throw error;
+        }
     }
 
     /**
      * تأیید کد OTP و دریافت توکن‌های JWT
      */
     async confirmOtp(phoneNumber: string, code: string, ref = '') {
-        const response = await axios.post(`${API_BASE}/api/authenticate/comfirm/otp/`, {
-            username: phoneNumber,
-            code: code,
-            ref: ref
-        });
+        console.log(`[AlphaGold] confirmOtp for: ${phoneNumber}, code: ${code}`);
+        try {
+            const response = await axios.post(`${API_BASE}/api/authenticate/comfirm/otp/`, {
+                username: phoneNumber,
+                code: code,
+                ref: ref
+            });
+            console.log(`[AlphaGold] confirmOtp response:`, response.data);
+
 
         const tokens = {
             access_token: null as string | null,
@@ -80,6 +98,10 @@ export class AlphaGoldClient {
         }
 
         return tokens;
+        } catch (error: any) {
+            console.error(`[AlphaGold] confirmOtp error:`, error.response?.data || error.message);
+            throw error;
+        }
     }
 
     // ----------------------- USER INFO -----------------------
