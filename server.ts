@@ -234,23 +234,42 @@ async function startServer() {
     app.post("/api/autotrade/auth/request", async (req, res) => {
         try {
             const { phone } = req.body;
-            const data = await autoTrader.client.requestOtp(phone);
+            // Convert Persian/Arabic digits to English, just in case
+            const englishPhone = phone.replace(/[۰-۹]/g, (d: string) => String.fromCharCode(d.charCodeAt(0) - 1728)).replace(/[٠-٩]/g, (d: string) => String.fromCharCode(d.charCodeAt(0) - 1584));
+            const data = await autoTrader.client.requestOtp(englishPhone);
             res.json(data);
         } catch (error: any) {
-            res.status(500).json({ error: error.message });
+            const details = error.response?.data;
+            let errMsg = error.message;
+            if (details) {
+                if (details.username) errMsg = Array.isArray(details.username) ? details.username[0] : details.username;
+                else if (details.detail) errMsg = details.detail;
+                else errMsg = JSON.stringify(details);
+            }
+            res.status(400).json({ error: errMsg });
         }
     });
 
     app.post("/api/autotrade/auth/confirm", async (req, res) => {
         try {
             const { phone, code } = req.body;
-            const tokens = await autoTrader.client.confirmOtp(phone, code);
+            const englishPhone = phone.replace(/[۰-۹]/g, (d: string) => String.fromCharCode(d.charCodeAt(0) - 1728)).replace(/[٠-٩]/g, (d: string) => String.fromCharCode(d.charCodeAt(0) - 1584));
+            const englishCode = code.replace(/[۰-۹]/g, (d: string) => String.fromCharCode(d.charCodeAt(0) - 1728)).replace(/[٠-٩]/g, (d: string) => String.fromCharCode(d.charCodeAt(0) - 1584));
+            const tokens = await autoTrader.client.confirmOtp(englishPhone, englishCode);
             if (tokens.access_token) {
                 autoTrader.updateConfig({ accessToken: tokens.access_token });
             }
             res.json(tokens);
         } catch (error: any) {
-            res.status(500).json({ error: error.message });
+            const details = error.response?.data;
+            let errMsg = error.message;
+            if (details) {
+                if (details.code) errMsg = Array.isArray(details.code) ? details.code[0] : details.code;
+                else if (details.non_field_errors) errMsg = Array.isArray(details.non_field_errors) ? details.non_field_errors[0] : details.non_field_errors;
+                else if (details.detail) errMsg = details.detail;
+                else errMsg = JSON.stringify(details);
+            }
+            res.status(400).json({ error: errMsg });
         }
     });
 
