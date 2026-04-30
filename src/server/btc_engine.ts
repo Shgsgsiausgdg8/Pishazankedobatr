@@ -73,50 +73,68 @@ export class BtcEngine {
 
     async fetchHistory() {
         try {
-            const now = Math.floor(Date.now() / 1000);
-            const from = now - (1000 * 60); 
-            const url = `https://ir3.faraz.io/api/customer/trading-view/history?symbolName=BTCUSDT_FUTURES&resolution=${this.timeframe}&from=${from}&to=${now}&countback=1000&firstDataRequest=true&latest=true&adjustType=2&json=true`;
+            const resolution = this.timeframe;
+            let to = Math.floor(Date.now() / 1000);
+            const barsCount = 1000;
+            const targetDays = 30;
+            const targetTotalCandles = Math.floor((targetDays * 24 * 60) / parseInt(resolution));
+            const timeframeSeconds = (parseInt(resolution) || 1) * 60;
             
-            console.log(`[BTC-Engine] Fetching history from: ${url}`);
+            let allCandles: any[] = [];
+            console.log(`[BTC-Engine] Starting deep history fetch for ${targetDays} days (${targetTotalCandles} candles)...`);
 
-            const res = await fetch(url, {
-                headers: {
+            for (let i = 0; i < Math.ceil(targetTotalCandles / barsCount); i++) {
+                const from = to - (barsCount * timeframeSeconds); 
+                const url = `https://ir3.faraz.io/api/customer/trading-view/history?symbolName=BTCUSDT_FUTURES&resolution=${resolution}&from=${from}&to=${to}&countback=${barsCount}&firstDataRequest=true&latest=true&adjustType=2&json=true`;
+                
+                const headers: any = {
                     'accept': 'application/json, text/plain, */*',
                     'accept-language': 'fa-IR,fa;q=0.9,en-US;q=0.8,en;q=0.7',
-                    'cookie': `x-access-token=${this.currentToken}; farazSession=${this.farazSession}`,
                     'origin': 'https://faraz.io',
                     'referer': 'https://faraz.io/',
                     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
-                }
-            });
+                };
 
-            if (!res.ok) {
-                console.error(`[BTC-Engine] History HTTP error: ${res.status}`);
-                return;
+                if (this.currentToken) {
+                    headers['cookie'] = `x-access-token=${this.currentToken}; farazSession=${this.farazSession}`;
+                }
+
+                const res = await fetch(url, { headers });
+
+                if (!res.ok) break;
+
+                const data: any = await res.json();
+                
+                if (data.result && data.result.t && Array.isArray(data.result.t) && data.result.t.length > 0) {
+                    const r = data.result;
+                    const chunk = r.t.map((t: number, i: number) => ({
+                        time: t,
+                        open: parseFloat(r.o[i]),
+                        high: parseFloat(r.h[i]),
+                        low: parseFloat(r.l[i]),
+                        close: parseFloat(r.c[i])
+                    })).filter((c: any) => !isNaN(c.close));
+
+                    if (chunk.length === 0) break;
+
+                    allCandles = [...chunk, ...allCandles];
+                    to = chunk[0].time - 1; // Move backward
+                } else {
+                    break;
+                }
             }
 
-            const data: any = await res.json();
-            
-            if (data.result && data.result.t && Array.isArray(data.result.t)) {
-                const r = data.result;
-                this.candles = r.t.map((t: number, i: number) => ({
-                    time: t,
-                    open: parseFloat(r.o[i]),
-                    high: parseFloat(r.h[i]),
-                    low: parseFloat(r.l[i]),
-                    close: parseFloat(r.c[i])
-                })).filter((c: any) => !isNaN(c.close));
-
-                if (this.candles.length > 0) {
-                    this.price = this.candles[this.candles.length - 1].close;
-                    this.detectLevels();
-                }
+            if (allCandles.length > 0) {
+                // sort chronologically
+                allCandles.sort((a: any, b: any) => a.time - b.time);
+                
+                this.candles = allCandles;
+                this.price = this.candles[this.candles.length - 1].close;
+                this.detectLevels();
                 console.log(`[BTC-Engine] Successfully loaded ${this.candles.length} history bars.`);
-            } else {
-                console.warn("[BTC-Engine] History response format unknown or empty:", JSON.stringify(data).substring(0, 200));
             }
         } catch (e: any) {
-            console.error("[BTC-Engine] History fetch failed:", e.message);
+            console.error(`[BTC-Engine] Error fetching history: ${e.message}`);
         }
     }
 
