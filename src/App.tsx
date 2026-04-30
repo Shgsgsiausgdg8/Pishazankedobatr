@@ -1088,48 +1088,53 @@ export default function App() {
                 </div>
 
                 <div style={{ overflowX: 'auto', background: '#020617', borderRadius: '12px', padding: '0.5rem' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid #1e293b', textAlign: 'right' }}>
-                        <th style={{ padding: '12px', color: '#94a3b8' }}>نوع</th>
-                        <th style={{ padding: '12px', color: '#94a3b8' }}>عملکرد</th>
-                        <th style={{ padding: '12px', color: '#94a3b8' }}>ورود</th>
-                        <th style={{ padding: '12px', color: '#94a3b8' }}>خروج</th>
-                        <th style={{ padding: '12px', color: '#94a3b8' }}>سود</th>
-                        <th style={{ padding: '12px', color: '#94a3b8' }}>نتیجه</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {backtestResults.trades.slice(-20).reverse().map((trade: any, i: number) => (
-                        <tr key={i} style={{ borderBottom: '1px solid #1e293b' }}>
-                          <td style={{ padding: '12px', color: trade.type === 'BUY' ? '#10b981' : '#ef4444', fontWeight: '600' }}>{trade.type}</td>
-                          <td style={{ padding: '12px', fontWeight: 'bold', color: trade.outcomeType === 'TP' ? '#10b981' : (trade.outcomeType === 'SL' ? '#ef4444' : '#64748b') }}>
-                            {trade.outcomeType || 'نامعلوم'}
-                          </td>
-                          <td style={{ padding: '12px', fontFamily: 'var(--font-mono)' }}>{trade.entry.toLocaleString()}</td>
-                          <td style={{ padding: '12px', fontFamily: 'var(--font-mono)' }}>{trade.exit.toLocaleString()}</td>
-                          <td style={{ padding: '12px', color: trade.profit >= 0 ? '#10b981' : '#ef4444', fontWeight: 'bold' }}>{trade.profit > 0 ? '+' : ''}{trade.profit.toLocaleString(undefined, { maximumFractionDigits: 1 })}</td>
-                          <td style={{ padding: '12px' }}>
-                            <span style={{ 
-                              padding: '2px 8px', 
-                              borderRadius: '6px', 
-                              fontSize: '0.75rem',
-                              fontWeight: '600',
-                              background: trade.result === 'WIN' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                              color: trade.result === 'WIN' ? '#10b981' : '#ef4444'
-                            }}>
-                              {trade.result === 'WIN' ? 'WIN' : 'LOSS'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {backtestResults.trades.length > 20 && (
-                    <p style={{ textAlign: 'center', fontSize: '0.75rem', color: '#475569', marginTop: '12px' }}>
-                      نمایش ۲۰ معامله اخیر از مجموع {backtestResults.totalTrades} معامله در این ماه
-                    </p>
-                  )}
+                    <div style={{ overflowX: 'auto', maxHeight: '400px', overflowY: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                        <thead style={{ position: 'sticky', top: 0, background: '#020617', zIndex: 1 }}>
+                          <tr style={{ borderBottom: '1px solid #1e293b', textAlign: 'right' }}>
+                            <th style={{ padding: '12px', color: '#94a3b8' }}>نوع</th>
+                            <th style={{ padding: '12px', color: '#94a3b8' }}>عملکرد</th>
+                            <th style={{ padding: '12px', color: '#94a3b8' }}>زمان ورود</th>
+                            <th style={{ padding: '12px', color: '#94a3b8' }}>قیمت ورود</th>
+                            <th style={{ padding: '12px', color: '#94a3b8' }}>زمان خروج</th>
+                            <th style={{ padding: '12px', color: '#94a3b8' }}>قیمت خروج</th>
+                            <th style={{ padding: '12px', color: '#94a3b8' }}>سود/ضرر</th>
+                            <th style={{ padding: '12px', color: '#94a3b8' }}>نتیجه</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {backtestResults.trades.slice().reverse().map((trade: any, i: number) => (
+                            <tr key={i} style={{ borderBottom: '1px solid #1e293b' }}>
+                              <td style={{ padding: '12px', color: trade.type === 'BUY' ? '#10b981' : '#ef4444', fontWeight: '600' }}>{trade.type}</td>
+                              <td style={{ padding: '12px', fontWeight: 'bold', color: trade.outcomeType === 'TP' ? '#10b981' : (trade.outcomeType === 'SL' ? '#ef4444' : '#64748b') }}>
+                                {trade.outcomeType || 'نامعلوم'}
+                              </td>
+                              <td style={{ padding: '12px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: '#cbd5e1' }}>
+                                {new Date(trade.entryTime).toLocaleDateString('fa-IR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              </td>
+                              <td style={{ padding: '12px', fontFamily: 'var(--font-mono)' }}>{trade.entry.toLocaleString()}</td>
+                              <td style={{ padding: '12px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: '#cbd5e1' }}>
+                                {new Date(trade.exitTime).toLocaleDateString('fa-IR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              </td>
+                              <td style={{ padding: '12px', fontFamily: 'var(--font-mono)' }}>{trade.exit.toLocaleString()}</td>
+                              <td style={{ padding: '12px', color: trade.profit >= 0 ? '#10b981' : '#ef4444', fontWeight: 'bold' }}>{trade.profit > 0 ? '+' : ''}{trade.profit.toLocaleString(undefined, { maximumFractionDigits: 1 })}</td>
+                              <td style={{ padding: '12px' }}>
+                                <span style={{ 
+                                  padding: '2px 8px', 
+                                  borderRadius: '6px', 
+                                  fontSize: '0.75rem',
+                                  fontWeight: '600',
+                                  background: trade.result === 'WIN' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                                  color: trade.result === 'WIN' ? '#10b981' : '#ef4444'
+                                }}>
+                                  {trade.result === 'WIN' ? 'WIN' : 'LOSS'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                 </div>
               </div>
             )}

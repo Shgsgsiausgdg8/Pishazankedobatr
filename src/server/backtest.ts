@@ -58,14 +58,17 @@ export class BacktestEngine {
             if (signal) {
                 const outcome = this.findOutcome(candles.slice(i + 1), signal);
                 if (outcome) {
+                    const entryMs = candles[i].time > 20000000000 ? candles[i].time : candles[i].time * 1000;
+                    const exitMs = outcome.time > 20000000000 ? outcome.time : outcome.time * 1000;
+
                     const trade = {
                         type: signal.type,
                         entry: signal.entry,
                         exit: outcome.price,
                         profit: outcome.profit,
                         result: outcome.profit > 0 ? 'WIN' : 'LOSS' as 'WIN' | 'LOSS',
-                        entryTime: candles[i].time,
-                        exitTime: outcome.time,
+                        entryTime: entryMs,
+                        exitTime: exitMs,
                         outcomeType: outcome.outcomeType as 'TP' | 'SL'
                     };
                     trades.push(trade);
