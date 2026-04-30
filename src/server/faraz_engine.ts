@@ -354,7 +354,7 @@ export class FarazGoldEngine {
             this.candles.push(newCandle);
             this.candles.sort((a, b) => a.time - b.time);
             this.lastCandleTime = candleTime;
-            if (this.candles.length > 1000) this.candles.shift();
+            if (this.candles.length > 50000) this.candles.shift();
         } else {
             const last = this.candles[this.candles.length - 1];
             if (last && last.time === candleTimeSec) {
@@ -459,7 +459,7 @@ export class FarazGoldEngine {
         } else {
             this.candles.push({ time, open, high, low, close });
             this.candles.sort((a, b) => a.time - b.time);
-            if (this.candles.length > 1000) this.candles.shift();
+            if (this.candles.length > 50000) this.candles.shift();
             this.lastCandleTime = time * 1000;
             this.detectLevels();
         }

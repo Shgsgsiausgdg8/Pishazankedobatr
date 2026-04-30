@@ -260,7 +260,7 @@ export class AlphaGoldEngine {
     createNewCandle(time: number, price: number) {
         const c = { time, open: price, high: price, low: price, close: price };
         this.candles.push(c);
-        if (this.candles.length > 2000) this.candles.shift();
+        if (this.candles.length > 50000) this.candles.shift();
         this.lastCandleTime = time * 1000;
         this.detectLevels();
         this.runStrategy();
@@ -410,6 +410,6 @@ export class AlphaGoldEngine {
     }
 
     cleanupCandles() {
-        if (this.candles.length > 3000) this.candles = this.candles.slice(-2000);
+        if (this.candles.length > 60000) this.candles = this.candles.slice(-50000);
     }
 }

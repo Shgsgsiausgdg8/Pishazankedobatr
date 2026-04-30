@@ -200,7 +200,7 @@ export class BtcEngine {
             this.candles[this.candles.length - 1] = { time, open, high, low, close };
         } else {
             this.candles.push({ time, open, high, low, close });
-            if (this.candles.length > 1000) this.candles.shift();
+            if (this.candles.length > 50000) this.candles.shift();
             this.detectLevels();
         }
         this.runStrategy();
