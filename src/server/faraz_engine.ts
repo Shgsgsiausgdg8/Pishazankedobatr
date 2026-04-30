@@ -45,62 +45,73 @@ export class FarazGoldEngine {
         try {
             const baseUrl = process.env.FARAZGOLD_BASEURL || 'https://demo.farazgold.com';
             const resolution = this.timeframe;
-            const now = Math.floor(Date.now() / 1000);
-            const barsCount = 1000;
+            let to = Math.floor(Date.now() / 1000);
+            const barsCount = 2000;
+            const targetDays = 30;
+            const targetTotalCandles = Math.floor((targetDays * 24 * 60) / parseInt(resolution));
             const timeframeSeconds = (parseInt(resolution) || 1) * 60;
-            const from = now - (barsCount * timeframeSeconds);
-            const to = now;
-            const url = `${baseUrl}/api/room/api/get-bars/?symbol=mazane&from=${from}&to=${to}&resolution=${resolution}`;
-            console.log(`[Engine] Fetching history: ${url}`);
+            let allCandles: any[] = [];
 
-            const headers: any = {
-                'accept': 'application/json, text/plain, */*',
-                'accept-language': 'fa-IR,fa;q=0.9,en-US;q=0.8,en;q=0.7',
-                'cache-control': 'no-cache',
-                'pragma': 'no-cache',
-                'referer': `${baseUrl}/room/`,
-                'sec-ch-ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
-                'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': '"Windows"',
-                'sec-fetch-dest': 'empty',
-                'sec-fetch-mode': 'cors',
-                'sec-fetch-site': 'same-origin',
-                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                'X-Requested-With': 'XMLHttpRequest'
-            };
-            if (this.accessToken) headers['authorization'] = `Bearer ${this.accessToken}`;
+            console.log(`[Engine] Starting deep history fetch for ${targetDays} days (${targetTotalCandles} candles)...`);
 
-            const cookies = [];
-            if (this.sessionId) cookies.push(`sessionid=${this.sessionId}`);
-            if (this.csrfToken) cookies.push(`csrftoken=${this.csrfToken}`);
-            if (cookies.length > 0) headers['cookie'] = cookies.join('; ');
-            if (this.csrfToken) headers['X-CSRFToken'] = this.csrfToken;
+            for (let i = 0; i < Math.ceil(targetTotalCandles / barsCount); i++) {
+                const from = to - (barsCount * timeframeSeconds);
+                const url = `${baseUrl}/api/room/api/get-bars/?symbol=mazane&from=${from}&to=${to}&resolution=${resolution}`;
+                
+                const headers: any = {
+                    'accept': 'application/json, text/plain, */*',
+                    'accept-language': 'fa-IR,fa;q=0.9,en-US;q=0.8,en;q=0.7',
+                    'cache-control': 'no-cache',
+                    'pragma': 'no-cache',
+                    'referer': `${baseUrl}/room/`,
+                    'sec-ch-ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+                    'sec-ch-ua-mobile': '?0',
+                    'sec-ch-ua-platform': '"Windows"',
+                    'sec-fetch-dest': 'empty',
+                    'sec-fetch-mode': 'cors',
+                    'sec-fetch-site': 'same-origin',
+                    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                    'X-Requested-With': 'XMLHttpRequest'
+                };
+                if (this.accessToken) headers['authorization'] = `Bearer ${this.accessToken}`;
 
-            const res = await fetch(url, { headers });
-            if (!res.ok) {
-                console.error(`[Engine] History API failed: ${res.status}`);
-                return;
-            }
-            const text = await res.text();
-            try {
-                const data = JSON.parse(text);
-                if (Array.isArray(data)) {
-                    this.candles = data.map((b) => ({
-                        time: b.time,
-                        open: parseFloat(b.open || b.close),
-                        high: parseFloat(b.high || b.close),
-                        low: parseFloat(b.low || b.close),
-                        close: parseFloat(b.close)
-                    })).sort((a, b) => a.time - b.time);
-                    if (this.candles.length > 0) {
-                        this.lastCandleTime = this.candles[this.candles.length - 1].time * 1000;
-                        this.detectLevels();
-                        this.runStrategy();   // اجرای استراتژی روی داده‌های تاریخی
+                const cookies = [];
+                if (this.sessionId) cookies.push(`sessionid=${this.sessionId}`);
+                if (this.csrfToken) cookies.push(`csrftoken=${this.csrfToken}`);
+                if (cookies.length > 0) headers['cookie'] = cookies.join('; ');
+                if (this.csrfToken) headers['X-CSRFToken'] = this.csrfToken;
+
+                const res = await fetch(url, { headers });
+                if (!res.ok) break;
+
+                const text = await res.text();
+                try {
+                    const data = JSON.parse(text);
+                    if (Array.isArray(data) && data.length > 0) {
+                        const chunk = data.map((b) => ({
+                            time: b.time,
+                            open: parseFloat(b.open || b.close),
+                            high: parseFloat(b.high || b.close),
+                            low: parseFloat(b.low || b.close),
+                            close: parseFloat(b.close)
+                        }));
+                        
+                        allCandles = [...chunk, ...allCandles];
+                        to = chunk[0].time - 1;
+                    } else {
+                        break;
                     }
-                    console.log(`[Engine] Successfully loaded ${this.candles.length} candles.`);
+                } catch (e) {
+                    break;
                 }
-            } catch (e) {
-                console.error("[Engine] Failed to parse history JSON.");
+            }
+
+            if (allCandles.length > 0) {
+                this.candles = allCandles.sort((a, b) => a.time - b.time);
+                this.lastCandleTime = this.candles[this.candles.length - 1].time * 1000;
+                this.detectLevels();
+                this.runStrategy();   // اجرای استراتژی روی داده‌های تاریخی
+                console.log(`[Engine] Successfully loaded ${this.candles.length} candles.`);
             }
         } catch (e: any) {
             console.error(`[Engine] Error fetching history: ${e.message}`);

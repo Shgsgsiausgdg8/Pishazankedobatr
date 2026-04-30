@@ -1068,9 +1068,15 @@ export default function App() {
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
                   <div style={{ background: 'rgba(59, 130, 246, 0.05)', padding: '15px', borderRadius: '12px', textAlign: 'center', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>بهترین ساعت معامله</div>
-                    <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#3b82f6' }}>
-                      {backtestResults.bestHour !== -1 ? `${backtestResults.bestHour}:00` : '---'}
+                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>رسیدن به تارگت (TP)</div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#10b981' }}>
+                      {backtestResults.tpHits || 0} بار
+                    </div>
+                  </div>
+                  <div style={{ background: 'rgba(239, 68, 68, 0.05)', padding: '15px', borderRadius: '12px', textAlign: 'center', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>برخورد به استاپ (SL)</div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#ef4444' }}>
+                      {backtestResults.slHits || 0} بار
                     </div>
                   </div>
                   <div style={{ background: 'rgba(168, 85, 247, 0.05)', padding: '15px', borderRadius: '12px', textAlign: 'center', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
@@ -1086,6 +1092,7 @@ export default function App() {
                     <thead>
                       <tr style={{ borderBottom: '1px solid #1e293b', textAlign: 'right' }}>
                         <th style={{ padding: '12px', color: '#94a3b8' }}>نوع</th>
+                        <th style={{ padding: '12px', color: '#94a3b8' }}>عملکرد</th>
                         <th style={{ padding: '12px', color: '#94a3b8' }}>ورود</th>
                         <th style={{ padding: '12px', color: '#94a3b8' }}>خروج</th>
                         <th style={{ padding: '12px', color: '#94a3b8' }}>سود</th>
@@ -1093,9 +1100,12 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {backtestResults.trades.slice(-5).reverse().map((trade: any, i: number) => (
+                      {backtestResults.trades.slice(-20).reverse().map((trade: any, i: number) => (
                         <tr key={i} style={{ borderBottom: '1px solid #1e293b' }}>
                           <td style={{ padding: '12px', color: trade.type === 'BUY' ? '#10b981' : '#ef4444', fontWeight: '600' }}>{trade.type}</td>
+                          <td style={{ padding: '12px', fontWeight: 'bold', color: trade.outcomeType === 'TP' ? '#10b981' : (trade.outcomeType === 'SL' ? '#ef4444' : '#64748b') }}>
+                            {trade.outcomeType || 'نامعلوم'}
+                          </td>
                           <td style={{ padding: '12px', fontFamily: 'var(--font-mono)' }}>{trade.entry.toLocaleString()}</td>
                           <td style={{ padding: '12px', fontFamily: 'var(--font-mono)' }}>{trade.exit.toLocaleString()}</td>
                           <td style={{ padding: '12px', color: trade.profit >= 0 ? '#10b981' : '#ef4444', fontWeight: 'bold' }}>{trade.profit > 0 ? '+' : ''}{trade.profit.toLocaleString(undefined, { maximumFractionDigits: 1 })}</td>
@@ -1115,9 +1125,9 @@ export default function App() {
                       ))}
                     </tbody>
                   </table>
-                  {backtestResults.trades.length > 5 && (
+                  {backtestResults.trades.length > 20 && (
                     <p style={{ textAlign: 'center', fontSize: '0.75rem', color: '#475569', marginTop: '12px' }}>
-                      نمایش ۵ معامله اخیر از مجموع {backtestResults.totalTrades} معامله
+                      نمایش ۲۰ معامله اخیر از مجموع {backtestResults.totalTrades} معامله در این ماه
                     </p>
                   )}
                 </div>

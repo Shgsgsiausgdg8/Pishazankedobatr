@@ -86,59 +86,75 @@ export class AlphaGoldEngine {
     async fetchHistoricalCandles() {
         try {
             const resolution = this.timeframe;
-            const now = Math.floor(Date.now() / 1000);
+            let toTs = Math.floor(Date.now() / 1000);
             const limit = 2000;
-            const fromTs = now - (limit * parseInt(resolution) * 60);
-            const toTs = now;
-
-            // Try different variants of the API
-            const apiVariants = [
-                `https://chrt.alphagoldx.com/api/data/histoday/?e=ALPHAGOLDX&fsym=XAU&tsym=USD&toTs=${toTs}&fromTs=${fromTs}&resolution=${resolution}&limit=${limit}`,
-                `https://light.alphagoldx.com/api/data/histoday/?e=ALPHAGOLDX&fsym=XAU&tsym=USD&toTs=${toTs}&fromTs=${fromTs}&resolution=${resolution}&limit=${limit}`
-            ];
-
-            let json: any = null;
-            for (const url of apiVariants) {
-                try {
-                    console.log(`[AlphaEngine] Trying history fetch: ${url}`);
-                    const res = await fetch(url, {
-                        headers: {
-                            "accept": "application/json, text/plain, */*",
-                            "origin": "https://light.alphagoldx.com",
-                            "referer": "https://light.alphagoldx.com/",
-                            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                        }
-                    });
-                    
-                    const text = await res.text();
-                    if (text.startsWith('{')) {
-                        json = JSON.parse(text);
-                        if (json.Data) break;
-                    }
-                } catch (e) { }
-            }
+            const targetDays = 30; // 30 days
+            const targetTotalCandles = Math.floor((targetDays * 24 * 60) / parseInt(resolution));
             
-            if (json && json.Data && Array.isArray(json.Data)) {
-                // IMPORTANT: Filter out any Mazane data (above 10k) that might be in the history API
-                const rawCandles = json.Data
-                    .map((item: any) => ({
-                        time: item.time,
-                        open: parseFloat(item.open),
-                        high: parseFloat(item.high),
-                        low: parseFloat(item.low),
-                        close: parseFloat(item.close)
-                    }))
-                    .filter((c: any) => c.close > 1000 && c.close < 10000)
-                    .sort((a: any, b: any) => a.time - b.time);
+            let allCandles: any[] = [];
+            
+            console.log(`[AlphaEngine] Starting deep history fetch for ${targetDays} days (${targetTotalCandles} candles)...`);
 
-                if (rawCandles.length > 0) {
-                    this.candles = rawCandles;
-                    const last = this.candles[this.candles.length - 1];
-                    this.lastCandleTime = last.time * 1000;
-                    this.price = last.close;
-                    this.detectLevels();
-                    console.log(`[AlphaEngine] Loaded ${this.candles.length} clean historical candles`);
+            for (let i = 0; i < Math.ceil(targetTotalCandles / limit); i++) {
+                const fromTs = toTs - (limit * parseInt(resolution) * 60);
+
+                // Try different variants of the API
+                const apiVariants = [
+                    `https://chrt.alphagoldx.com/api/data/histoday/?e=ALPHAGOLDX&fsym=XAU&tsym=USD&toTs=${toTs}&fromTs=${fromTs}&resolution=${resolution}&limit=${limit}`,
+                    `https://light.alphagoldx.com/api/data/histoday/?e=ALPHAGOLDX&fsym=XAU&tsym=USD&toTs=${toTs}&fromTs=${fromTs}&resolution=${resolution}&limit=${limit}`
+                ];
+
+                let json: any = null;
+                for (const url of apiVariants) {
+                    try {
+                        const res = await fetch(url, {
+                            headers: {
+                                "accept": "application/json, text/plain, */*",
+                                "origin": "https://light.alphagoldx.com",
+                                "referer": "https://light.alphagoldx.com/",
+                                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                            }
+                        });
+                        
+                        const text = await res.text();
+                        if (text.startsWith('{')) {
+                            json = JSON.parse(text);
+                            if (json.Data) break;
+                        }
+                    } catch (e) { }
                 }
+                
+                if (json && json.Data && Array.isArray(json.Data)) {
+                    // IMPORTANT: Filter out any Mazane data (above 10k) that might be in the history API
+                    const chunk = json.Data
+                        .map((item: any) => ({
+                            time: item.time,
+                            open: parseFloat(item.open),
+                            high: parseFloat(item.high),
+                            low: parseFloat(item.low),
+                            close: parseFloat(item.close)
+                        }))
+                        .filter((c: any) => c.close > 1000 && c.close < 10000);
+                        
+                    if (chunk.length === 0) break; // no more data
+                    
+                    allCandles = [...chunk, ...allCandles];
+                    toTs = chunk[0].time - 1; // move backwards
+                } else {
+                    break; // Request failed, stop fetching older data
+                }
+            }
+
+            if (allCandles.length > 0) {
+                // sort chronologically just in case
+                allCandles.sort((a: any, b: any) => a.time - b.time);
+                
+                this.candles = allCandles;
+                const last = this.candles[this.candles.length - 1];
+                this.lastCandleTime = last.time * 1000;
+                this.price = last.close;
+                this.detectLevels();
+                console.log(`[AlphaEngine] Loaded ${this.candles.length} clean historical candles successfully.`);
             }
         } catch (err: any) {
             console.error("[AlphaEngine] History fetch error:", err.message);

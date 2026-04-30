@@ -7,6 +7,8 @@ export interface BacktestResult {
     winRate: number;
     totalProfit: number;
     maxDrawdown: number;
+    tpHits: number;
+    slHits: number;
     bestHour: number;
     bestDay: string;
     trades: {
@@ -17,6 +19,7 @@ export interface BacktestResult {
         result: 'WIN' | 'LOSS';
         entryTime: number;
         exitTime: number;
+        outcomeType: 'TP' | 'SL';
     }[];
 }
 
@@ -38,6 +41,8 @@ export class BacktestEngine {
         let wins = 0;
         let peak = 0;
         let maxDrawdown = 0;
+        let tpHits = 0;
+        let slHits = 0;
 
         // Statistics for best hour/day
         const hourStats: Record<number, number> = {};
@@ -60,11 +65,15 @@ export class BacktestEngine {
                         profit: outcome.profit,
                         result: outcome.profit > 0 ? 'WIN' : 'LOSS' as 'WIN' | 'LOSS',
                         entryTime: candles[i].time,
-                        exitTime: outcome.time
+                        exitTime: outcome.time,
+                        outcomeType: outcome.outcomeType as 'TP' | 'SL'
                     };
                     trades.push(trade);
                     if (trade.type === 'BUY') buyTradesCount++;
                     else sellTradesCount++;
+
+                    if (trade.outcomeType === 'TP') tpHits++;
+                    else if (trade.outcomeType === 'SL') slHits++;
 
                     totalProfit += outcome.profit;
                     if (outcome.profit > 0) wins++;
@@ -118,6 +127,8 @@ export class BacktestEngine {
             winRate: trades.length > 0 ? (wins / trades.length) * 100 : 0,
             totalProfit: totalProfit,
             maxDrawdown: maxDrawdown,
+            tpHits,
+            slHits,
             bestHour,
             bestDay,
             trades: trades
@@ -147,11 +158,11 @@ export class BacktestEngine {
     private findOutcome(future: Candle[], signal: Signal) {
         for (const c of future) {
             if (signal.type === 'BUY') {
-                if (c.high >= signal.tp1) return { price: signal.tp1, profit: signal.tp1 - signal.entry, time: c.time };
-                if (c.low <= signal.sl) return { price: signal.sl, profit: signal.sl - signal.entry, time: c.time };
+                if (c.high >= signal.tp1) return { price: signal.tp1, profit: signal.tp1 - signal.entry, time: c.time, outcomeType: 'TP' };
+                if (c.low <= signal.sl) return { price: signal.sl, profit: signal.sl - signal.entry, time: c.time, outcomeType: 'SL' };
             } else {
-                if (c.low <= signal.tp1) return { price: signal.tp1, profit: signal.entry - signal.tp1, time: c.time };
-                if (c.high >= signal.sl) return { price: signal.sl, profit: signal.entry - signal.sl, time: c.time };
+                if (c.low <= signal.tp1) return { price: signal.tp1, profit: signal.entry - signal.tp1, time: c.time, outcomeType: 'TP' };
+                if (c.high >= signal.sl) return { price: signal.sl, profit: signal.entry - signal.sl, time: c.time, outcomeType: 'SL' };
             }
         }
         return null;
