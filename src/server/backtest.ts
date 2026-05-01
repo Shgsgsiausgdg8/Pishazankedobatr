@@ -146,7 +146,8 @@ export class BacktestEngine {
             { id: 'N-PATTERN', name: 'الگوی N' },
             { id: 'FIB-38', name: 'فیبوناتچی ۳۸٪' },
             { id: 'STRATEGY_3', name: 'استراتژی فراز (Fib+CRSI)' },
-            { id: 'STRATEGY_4', name: 'استراتژی چهارم (ساده)' }
+            { id: 'STRATEGY_4', name: 'استراتژی چهارم (ساده)' },
+            { id: 'STRATEGY_5', name: 'استراتژی پنجم (کف و سقف)' }
         ];
         const comparison = types.map(type => {
             return {

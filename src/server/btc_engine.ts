@@ -46,6 +46,7 @@ export class BtcEngine {
                 if (s.candleConfirmations) this.candleConfirmations = s.candleConfirmations;
                 if (s.isEnabled !== undefined) this.isEnabled = s.isEnabled;
                 if (s.liveStrategyType) this.liveStrategyType = s.liveStrategyType;
+                if (s.strategyConfig) this.strategy.updateConfig(s.strategyConfig);
             }
         } catch (e) {}
     }
@@ -59,7 +60,8 @@ export class BtcEngine {
                 farazSession: this.farazSession,
                 candleConfirmations: this.candleConfirmations,
                 isEnabled: this.isEnabled,
-                liveStrategyType: this.liveStrategyType
+                liveStrategyType: this.liveStrategyType,
+                strategyConfig: (this.strategy as any).config
             };
             fs.writeFileSync(this.settingsFile, JSON.stringify(s, null, 2));
         } catch (e) {}
@@ -303,5 +305,6 @@ export class BtcEngine {
 
     setStrategyConfig(config: any) {
         this.strategy.updateConfig(config);
+        this.saveSettings();
     }
 }

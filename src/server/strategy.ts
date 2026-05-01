@@ -19,6 +19,10 @@ export interface Signal {
   tp1: number;
   tp2: number;
   tp3: number;
+  tp4?: number;
+  tp5?: number;
+  tp6?: number;
+  tp7?: number;
   sl: number;
   time: number;
   timeframe: string;
@@ -35,20 +39,24 @@ export interface StrategyConfig {
     fibLookback: number;
     fibMinRange: number;
     strategy3Strictness: 'low' | 'medium' | 'high';
+    customKaf?: number;
+    customSaghf?: number;
 }
 
 export class TradingStrategy {
     private lastSignalTime: number = 0;       // جلوگیری از سیگنال‌های تکراری
     private lastPatternKey: string | null = null;    // کلید منحصربه‌فرد الگو
     private totalPatternsCount: number = 0;
-    private config: StrategyConfig = {
+    public config: StrategyConfig = {
         smaPeriod: 100,
         nMinPullback: 0.382, // Standard Fib level
         nMaxPullback: 0.70,  // Lowered from 0.85 to avoid "dead" patterns
         nReversalThreshold: 0.02,
         fibLookback: 60,
         fibMinRange: 0.5,
-        strategy3Strictness: 'medium'
+        strategy3Strictness: 'medium',
+        customKaf: 0,
+        customSaghf: 0
     };
 
     private activeStructure: { 
@@ -85,6 +93,9 @@ export class TradingStrategy {
                 break;
             case 'STRATEGY_4':
                 result = this.detectStrategy4(candles);
+                break;
+            case 'STRATEGY_5':
+                result = this.detectStrategy5(candles);
                 break;
             case 'N-PATTERN':
             default:
@@ -397,6 +408,53 @@ export class TradingStrategy {
     }
 
     /**
+     * استراتژی پنجم
+     */
+    private detectStrategy5(candles: Candle[]) {
+        if (!candles || candles.length < 50) return null;
+        
+        const kaf = this.config.customKaf;
+        const saghf = this.config.customSaghf;
+        if (!kaf || !saghf || saghf <= kaf) return null;
+
+        const R = saghf - kaf;
+        const lastPrice = candles[candles.length - 1].close;
+
+        const buyLevel = kaf - 0.618 * R;
+        const sellLevel = saghf + 0.618 * R;
+        const tolerance = R * 0.05;
+
+        if (Math.abs(lastPrice - buyLevel) < tolerance || lastPrice <= buyLevel) {
+            const hasDiv = this.checkCRSIDivergence(candles, "BUY");
+            if (hasDiv) {
+                return {
+                    type: "BUY",
+                    signalPrice: lastPrice,
+                    high: saghf,
+                    low: kaf,
+                    range: R,
+                    isStrategy5: true,
+                    confidence: 85
+                };
+            }
+        } else if (Math.abs(lastPrice - sellLevel) < tolerance || lastPrice >= sellLevel) {
+            const hasDiv = this.checkCRSIDivergence(candles, "SELL");
+            if (hasDiv) {
+                return {
+                    type: "SELL",
+                    signalPrice: lastPrice,
+                    high: saghf,
+                    low: kaf,
+                    range: R,
+                    isStrategy5: true,
+                    confidence: 85
+                };
+            }
+        }
+        return null;
+    }
+
+    /**
      * استراتژی چهارم - ساده (MA Cross)
      * معامله‌گر می‌تواند به راحتی این بخش را تغییر دهد
      */
@@ -678,7 +736,11 @@ export class TradingStrategy {
         // Dynamic SL/TP based on ATR, or fixed % for N-Pattern
         const atr = pattern.atr || entry * 0.001; 
         
-        let tp1, tp2, tp3, sl;
+        let tp1 = 0, tp2 = 0, tp3 = 0, sl = 0;
+        let tp4: number | undefined;
+        let tp5: number | undefined;
+        let tp6: number | undefined;
+        let tp7: number | undefined;
 
         if (isN) {
             const structure = this.activeStructure!;
@@ -725,6 +787,27 @@ export class TradingStrategy {
                 tp2 = low + range * 0.50; // middle
                 tp3 = low + range * 0.38; // furthest
             }
+        } else if (pattern.isStrategy5) {
+            const { high: saghf, low: kaf, range: R } = pattern;
+            if (isBuy) {
+                sl = kaf - 0.79 * R;
+                tp1 = kaf + 0.38 * R;
+                tp2 = kaf + 0.50 * R;
+                tp3 = kaf + 0.12 * R;
+                tp4 = saghf;
+                tp5 = saghf + 0.22 * R;
+                tp6 = saghf + 0.45 * R;
+                tp7 = saghf + 0.71 * R;
+            } else {
+                sl = saghf + 0.79 * R;
+                tp1 = kaf + 0.41 * R; // 41% از کف
+                tp2 = kaf + 0.50 * R; // 50% از کف
+                tp3 = kaf + 0.12 * R; // 12% از کف
+                tp4 = kaf;
+                tp5 = kaf - 0.22 * R;
+                tp6 = kaf - 0.45 * R;
+                tp7 = kaf - 0.71 * R;
+            }
         } else if (pattern.isFIB38) {
             const range = pattern.saghf - pattern.kaf;
             if (isBuy) {
@@ -754,6 +837,10 @@ export class TradingStrategy {
             tp1: tp1,
             tp2: tp2,
             tp3: tp3,
+            tp4: tp4,
+            tp5: tp5,
+            tp6: tp6,
+            tp7: tp7,
             time: Date.now(),
             timeframe: timeframe,
             kaf: pattern.kaf,

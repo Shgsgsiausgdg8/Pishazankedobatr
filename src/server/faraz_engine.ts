@@ -170,6 +170,7 @@ export class FarazGoldEngine {
                 if (settings.candleConfirmations) this.candleConfirmations = settings.candleConfirmations;
                 if (settings.isEnabled !== undefined) this.isEnabled = settings.isEnabled;
                 if (settings.liveStrategyType) this.liveStrategyType = settings.liveStrategyType;
+                if (settings.strategyConfig) this.strategy.updateConfig(settings.strategyConfig);
             }
         } catch (e) {
             console.error("Error loading settings:", e);
@@ -187,7 +188,8 @@ export class FarazGoldEngine {
                 baleChatId: this.baleChatId,
                 candleConfirmations: this.candleConfirmations,
                 isEnabled: this.isEnabled,
-                liveStrategyType: this.liveStrategyType
+                liveStrategyType: this.liveStrategyType,
+                strategyConfig: (this.strategy as any).config
             };
             fs.writeFileSync(this.settingsFile, JSON.stringify(settings, null, 2));
         } catch (e) {
@@ -524,6 +526,7 @@ export class FarazGoldEngine {
 
     setStrategyConfig(config: any) {
         this.strategy.updateConfig(config);
+        this.saveSettings();
     }
 
     updateBaleConfig(token: string, chatId: string) {

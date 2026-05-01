@@ -714,6 +714,7 @@ export default function App() {
                   <option value="FIB-38">فیبوناچی ۳۸٪ (FIB-38)</option>
                   <option value="STRATEGY_3">استراتژی فراز (Fib+CRSI)</option>
                   <option value="STRATEGY_4">استراتژی چهارم (ساده)</option>
+                  <option value="STRATEGY_5">استراتژی پنجم (کف و سقف)</option>
                 </select>
                 <button 
                   onClick={() => setShowStrategySettings(true)}
@@ -810,6 +811,56 @@ export default function App() {
                   </button>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {data?.liveStrategy === 'STRATEGY_5' && (
+          <div style={{ 
+            background: 'linear-gradient(90deg, #0f172a 0%, #1e293b 100%)', 
+            padding: '10px 1.2rem', 
+            borderBottom: '1px solid #334155',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '16px',
+            overflowX: 'auto',
+            whiteSpace: 'nowrap',
+            boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.05)'
+          }}>
+             <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '6px', 
+              color: '#a855f7', 
+              fontSize: '0.75rem', 
+              fontWeight: 'bold',
+              background: 'rgba(168, 85, 247, 0.1)',
+              padding: '4px 10px',
+              borderRadius: '20px',
+              border: '1px solid rgba(168, 85, 247, 0.2)'
+            }}>
+              مقاطع (کف و سقف)
+            </div>
+            
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>کف موردنظر:</span>
+                <input 
+                  type="number"
+                  value={data?.strategyConfig?.customKaf || ''}
+                  onChange={(e) => {
+                     updateStrategyConfig({ customKaf: parseFloat(e.target.value) });
+                  }}
+                  style={{ background: '#020617', border: '1px solid #334155', borderRadius: '4px', color: '#fff', width: '80px', padding: '2px 4px', fontSize: '0.75rem' }}
+                />
+                <span style={{ fontSize: '0.7rem', color: '#94a3b8', marginLeft: '12px' }}>سقف موردنظر:</span>
+                <input 
+                  type="number"
+                  value={data?.strategyConfig?.customSaghf || ''}
+                  onChange={(e) => {
+                     updateStrategyConfig({ customSaghf: parseFloat(e.target.value) });
+                  }}
+                  style={{ background: '#020617', border: '1px solid #334155', borderRadius: '4px', color: '#fff', width: '80px', padding: '2px 4px', fontSize: '0.75rem' }}
+                />
             </div>
           </div>
         )}
@@ -949,6 +1000,7 @@ export default function App() {
                     <option value="FIB-38">فیبوناچی ۳۸٪ (Fibonacci)</option>
                     <option value="STRATEGY_3">استراتژی فراز (Fib+CRSI)</option>
                     <option value="STRATEGY_4">استراتژی چهارم (ساید)</option>
+                    <option value="STRATEGY_5">استراتژی پنجم (کف و سقف)</option>
                   </select>
                   
                   {selectedStrategy === 'STRATEGY_3' && (
@@ -961,6 +1013,25 @@ export default function App() {
                       <option value="medium">متوسط</option>
                       <option value="high">سخت‌گیرانه</option>
                     </select>
+                  )}
+
+                  {selectedStrategy === 'STRATEGY_5' && (
+                    <div style={{ flex: 1, display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <input 
+                        type="number" 
+                        placeholder="کف مورد نظر"
+                        value={data?.strategyConfig?.customKaf || ''} 
+                        onChange={(e) => updateStrategyConfig({ customKaf: parseFloat(e.target.value) })}
+                        style={{ width: '100px', padding: '10px', borderRadius: '10px', background: '#0f172a', border: '1px solid #a855f7', color: '#a855f7', fontSize: '0.8rem', fontWeight: 'bold' }}
+                      />
+                      <input 
+                        type="number" 
+                        placeholder="سقف مورد نظر"
+                        value={data?.strategyConfig?.customSaghf || ''} 
+                        onChange={(e) => updateStrategyConfig({ customSaghf: parseFloat(e.target.value) })}
+                        style={{ width: '100px', padding: '10px', borderRadius: '10px', background: '#0f172a', border: '1px solid #a855f7', color: '#a855f7', fontSize: '0.8rem', fontWeight: 'bold' }}
+                      />
+                    </div>
                   )}
                 </div>
               </div>
@@ -1213,6 +1284,10 @@ export default function App() {
                     <div style={{ color: '#94a3b8' }}>تارگت ۱: <span style={{ color: '#10b981', fontFamily: 'var(--font-mono)' }}>{sig.tp1.toLocaleString()}</span></div>
                     <div style={{ color: '#94a3b8' }}>تارگت ۲: <span style={{ color: '#10b981', fontFamily: 'var(--font-mono)' }}>{sig.tp2.toLocaleString()}</span></div>
                     <div style={{ color: '#94a3b8' }}>تارگت ۳: <span style={{ color: '#10b981', fontFamily: 'var(--font-mono)' }}>{sig.tp3.toLocaleString()}</span></div>
+                    {sig.tp4 && <div style={{ color: '#94a3b8' }}>تارگت ۴: <span style={{ color: '#10b981', fontFamily: 'var(--font-mono)' }}>{sig.tp4.toLocaleString()}</span></div>}
+                    {sig.tp5 && <div style={{ color: '#94a3b8' }}>تارگت ۵: <span style={{ color: '#10b981', fontFamily: 'var(--font-mono)' }}>{sig.tp5.toLocaleString()}</span></div>}
+                    {sig.tp6 && <div style={{ color: '#94a3b8' }}>تارگت ۶: <span style={{ color: '#10b981', fontFamily: 'var(--font-mono)' }}>{sig.tp6.toLocaleString()}</span></div>}
+                    {sig.tp7 && <div style={{ color: '#94a3b8' }}>تارگت ۷: <span style={{ color: '#10b981', fontFamily: 'var(--font-mono)' }}>{sig.tp7.toLocaleString()}</span></div>}
                     <div style={{ color: '#94a3b8' }}>تایم: <span style={{ color: '#fff' }}>{sig.timeframe}m</span></div>
                     {sig.saghf && <div style={{ color: '#94a3b8' }}>سقف: <span style={{ color: '#fff', fontFamily: 'var(--font-mono)' }}>{sig.saghf.toLocaleString()}</span></div>}
                     {sig.kaf && <div style={{ color: '#94a3b8' }}>کف: <span style={{ color: '#fff', fontFamily: 'var(--font-mono)' }}>{sig.kaf.toLocaleString()}</span></div>}
