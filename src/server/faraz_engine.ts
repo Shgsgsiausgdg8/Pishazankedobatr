@@ -102,7 +102,7 @@ export class FarazGoldEngine {
                     const data = JSON.parse(text);
                     if (Array.isArray(data) && data.length > 0) {
                         const chunk = data.map((b) => ({
-                            time: b.time,
+                            time: b.time > 20000000000 ? b.time : b.time * 1000,
                             open: parseFloat(b.open || b.close),
                             high: parseFloat(b.high || b.close),
                             low: parseFloat(b.low || b.close),
@@ -110,7 +110,7 @@ export class FarazGoldEngine {
                         }));
                         
                         allCandles = [...chunk, ...allCandles];
-                        to = chunk[0].time - 1;
+                        to = Math.floor(chunk[0].time / 1000) - 1;
                     } else {
                         break;
                     }
@@ -125,7 +125,7 @@ export class FarazGoldEngine {
                     const fs = await import('fs');
                     fs.writeFileSync(cacheFile, JSON.stringify(this.candles));
                 } catch (e) {}
-                this.lastCandleTime = this.candles[this.candles.length - 1].time * 1000;
+                this.lastCandleTime = this.candles[this.candles.length - 1].time;
                 this.detectLevels();
                 this.runStrategy();   // اجرای استراتژی روی داده‌های تاریخی
                 console.log(`[Engine] Successfully loaded ${this.candles.length} candles.`);
@@ -154,13 +154,13 @@ export class FarazGoldEngine {
                     const data = await res.json();
                     if (Array.isArray(data)) {
                         this.candles = data.map((b: any) => ({
-                            time: b.time,
+                            time: b.time > 20000000000 ? b.time : b.time * 1000,
                             open: parseFloat(b.open),
                             high: parseFloat(b.high),
                             low: parseFloat(b.low),
                             close: parseFloat(b.close)
                         })).sort((a, b) => a.time - b.time);
-                        this.lastCandleTime = this.candles[this.candles.length - 1].time * 1000;
+                        this.lastCandleTime = this.candles[this.candles.length - 1].time;
                         this.detectLevels();
                         this.runStrategy();
                         return;
@@ -366,17 +366,16 @@ export class FarazGoldEngine {
         const now = Date.now();
         const timeframeMs = (parseInt(this.timeframe) || 1) * 60000;
         const candleTime = Math.floor(now / timeframeMs) * timeframeMs;
-        const candleTimeSec = candleTime / 1000;
 
         if (this.candles.length === 0 || candleTime > this.lastCandleTime) {
-            const newCandle = { time: candleTimeSec, open: newPrice, high: newPrice, low: newPrice, close: newPrice };
+            const newCandle = { time: candleTime, open: newPrice, high: newPrice, low: newPrice, close: newPrice };
             this.candles.push(newCandle);
             this.candles.sort((a, b) => a.time - b.time);
             this.lastCandleTime = candleTime;
             if (this.candles.length > 50000) this.candles.shift();
         } else {
             const last = this.candles[this.candles.length - 1];
-            if (last && last.time === candleTimeSec) {
+            if (last && last.time === candleTime) {
                 last.high = Math.max(last.high, newPrice);
                 last.low = Math.min(last.low, newPrice);
                 last.close = newPrice;
@@ -465,7 +464,7 @@ export class FarazGoldEngine {
 
     processBar(bar: any) {
         if (!bar || !bar.time) return;
-        const time = bar.time;
+        const time = bar.time > 20000000000 ? bar.time : bar.time * 1000;
         const open = parseFloat(bar.open || bar.close);
         const high = parseFloat(bar.high || bar.close);
         const low = parseFloat(bar.low || bar.close);
@@ -479,7 +478,7 @@ export class FarazGoldEngine {
             this.candles.push({ time, open, high, low, close });
             this.candles.sort((a, b) => a.time - b.time);
             if (this.candles.length > 50000) this.candles.shift();
-            this.lastCandleTime = time * 1000;
+            this.lastCandleTime = time;
             this.detectLevels();
         }
         this.runStrategy(); // اجرای استراتژی پس از بروزرسانی شمع
@@ -494,7 +493,7 @@ export class FarazGoldEngine {
         this.levels = pivots.map(p => ({
             type: p.type === 'high' ? 'RESISTANCE' : 'SUPPORT' as 'SUPPORT' | 'RESISTANCE',
             price: p.price,
-            time: p.time * 1000
+            time: p.time
         })).slice(-30);
     }
 

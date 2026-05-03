@@ -122,11 +122,11 @@ export class BtcEngine {
                 }
 
                 const data: any = await res.json();
+                const r = data.result ? data.result : data;
                 
-                if (data.result && data.result.t && Array.isArray(data.result.t) && data.result.t.length > 0) {
-                    const r = data.result;
+                if (r && r.t && Array.isArray(r.t) && r.t.length > 0) {
                     const chunk = r.t.map((t: number, i: number) => ({
-                        time: t,
+                        time: t > 20000000000 ? t : t * 1000,
                         open: parseFloat(r.o[i]),
                         high: parseFloat(r.h[i]),
                         low: parseFloat(r.l[i]),
@@ -136,7 +136,7 @@ export class BtcEngine {
                     if (chunk.length === 0) break;
 
                     allCandles = [...chunk, ...allCandles];
-                    to = chunk[0].time - 1; // Move backward
+                    to = Math.floor(chunk[0].time / 1000) - 1; // Move backward
                 } else {
                     break;
                 }
@@ -220,7 +220,7 @@ export class BtcEngine {
     }
 
     updateFromTick(tick: any) {
-        const time = tick.time;
+        const time = tick.time > 20000000000 ? tick.time : tick.time * 1000;
         const open = tick.open;
         const high = tick.high;
         const low = tick.low;
@@ -244,7 +244,7 @@ export class BtcEngine {
         this.levels = pivots.map((p: any) => ({
             type: p.type === 'high' ? 'RESISTANCE' : 'SUPPORT',
             price: p.price,
-            time: p.time * 1000
+            time: p.time
         })).slice(-30);
     }
 
@@ -309,6 +309,19 @@ export class BtcEngine {
         this.baleToken = token;
         this.baleChatId = chatId;
         this.saveSettings();
+    }
+
+    async setTimeframe(tf: string) {
+        if (this.timeframe === tf) return;
+        this.timeframe = tf;
+        this.candles = [];
+        this.levels = [];
+        this.signals = [];
+        await this.fetchHistory();
+        
+        if (this.ws && this.ws.readyState === 1) { // 1 is WebSocket.OPEN
+            this.ws.send(`42/customer,["join-room","symbol-room-@BTCUSDT_FUTURES@${this.timeframe}@0"]`);
+        }
     }
 
     getState() {

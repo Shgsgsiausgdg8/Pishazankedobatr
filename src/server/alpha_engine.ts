@@ -143,7 +143,7 @@ export class AlphaGoldEngine {
                     // IMPORTANT: Filter out any Mazane data (above 10k) that might be in the history API
                     const chunk = json.Data
                         .map((item: any) => ({
-                            time: item.time,
+                            time: item.time > 20000000000 ? item.time : item.time * 1000,
                             open: parseFloat(item.open),
                             high: parseFloat(item.high),
                             low: parseFloat(item.low),
@@ -154,7 +154,7 @@ export class AlphaGoldEngine {
                     if (chunk.length === 0) break; // no more data
                     
                     allCandles = [...chunk, ...allCandles];
-                    toTs = chunk[0].time - 1; // move backwards
+                    toTs = Math.floor(chunk[0].time / 1000) - 1; // move backwards
                 } else {
                     break; // Request failed, stop fetching older data
                 }
@@ -171,7 +171,7 @@ export class AlphaGoldEngine {
                 } catch (e) {}
 
                 const last = this.candles[this.candles.length - 1];
-                this.lastCandleTime = last.time * 1000;
+                this.lastCandleTime = last.time;
                 this.price = last.close;
                 this.detectLevels();
                 console.log(`[AlphaEngine] Loaded ${this.candles.length} clean historical candles successfully.`);
@@ -253,17 +253,16 @@ export class AlphaGoldEngine {
         const now = Date.now();
         const tf = (parseInt(this.timeframe) || 1) * 60000;
         const cTime = Math.floor(now / tf) * tf;
-        const sec = Math.floor(cTime / 1000);
 
         if (this.candles.length === 0) {
-            this.createNewCandle(sec, newPrice);
+            this.createNewCandle(cTime, newPrice);
             return;
         }
 
         const last = this.candles[this.candles.length - 1];
 
-        if (sec > last.time) {
-            this.createNewCandle(sec, newPrice);
+        if (cTime > last.time) {
+            this.createNewCandle(cTime, newPrice);
         } else {
             last.high = Math.max(last.high, newPrice);
             last.low = Math.min(last.low, newPrice);
@@ -281,7 +280,7 @@ export class AlphaGoldEngine {
         const c = { time, open: price, high: price, low: price, close: price };
         this.candles.push(c);
         if (this.candles.length > 50000) this.candles.shift();
-        this.lastCandleTime = time * 1000;
+        this.lastCandleTime = time;
         this.detectLevels();
         this.runStrategy();
     }
