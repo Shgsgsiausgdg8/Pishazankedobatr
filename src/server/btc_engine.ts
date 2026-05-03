@@ -100,14 +100,14 @@ export class BtcEngine {
 
             for (let i = 0; i < Math.ceil(targetTotalCandles / barsCount); i++) {
                 const from = to - (barsCount * timeframeSeconds); 
-                const url = `https://ir3.faraz.io/api/customer/trading-view/history?symbolName=BTCUSDT_FUTURES&resolution=${resolution}&from=${from}&to=${to}&countback=${barsCount}&firstDataRequest=true&latest=true&adjustType=2&json=true`;
+                const url = `https://ir.faraz.io/api/customer/trading-view/history?symbolName=BTCUSDT_FUTURES&resolution=${resolution}&from=${from}&to=${to}&countback=${barsCount}&firstDataRequest=true&latest=true&adjustType=2&json=true`;
                 
                 const headers: any = {
                     'accept': 'application/json, text/plain, */*',
                     'accept-language': 'fa-IR,fa;q=0.9,en-US;q=0.8,en;q=0.7',
                     'origin': 'https://faraz.io',
                     'referer': 'https://faraz.io/',
-                    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+                    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
                 };
 
                 if (this.currentToken) {
@@ -115,39 +115,10 @@ export class BtcEngine {
                 }
 
                 let res: Response | null = null;
-                try {
-                    res = await fetch(url, { headers });
-                } catch (e: any) {
-                    console.warn(`[BTC-Engine] Faraz API failed (${e.message}), trying Binance fallback for history...`);
-                }
+                res = await fetch(url, { headers });
 
                 if (!res || !res.ok) {
-                    const intervalMap: any = { '1': '1m', '5': '5m', '15': '15m', '30': '30m', '60': '1h', '240': '4h', 'D': '1d' };
-                    const interval = intervalMap[this.timeframe] || '1m';
-                    const binanceUrl = `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=${interval}&limit=${barsCount}&endTime=${to * 1000}`;
-                    try {
-                        res = await fetch(binanceUrl);
-                    } catch(e) {}
-                    
-                    if (res && res.ok) {
-                        const data: any = await res.json();
-                        if (Array.isArray(data) && data.length > 0) {
-                            const chunk = data.map(k => ({
-                                time: Math.floor(k[0] / 1000),
-                                open: parseFloat(k[1]),
-                                high: parseFloat(k[2]),
-                                low: parseFloat(k[3]),
-                                close: parseFloat(k[4])
-                            }));
-                            allCandles = [...chunk, ...allCandles];
-                            to = chunk[0].time - 1;
-                            continue;
-                        } else {
-                            break;
-                        }
-                    } else {
-                        break;
-                    }
+                    break;
                 }
 
                 const data: any = await res.json();
@@ -191,12 +162,15 @@ export class BtcEngine {
 
     connectWS() {
         if (!this.isEnabled) return;
-        const url = "wss://ir3.faraz.io/srv09/realtime/?EIO=4&transport=websocket";
+        const url = "wss://ir.faraz.io/srv05/realtime/?EIO=4&transport=websocket";
         this.ws = new WebSocket(url, {
             origin: "https://faraz.io",
             referer: "https://faraz.io/",
             headers: {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+                "Cache-Control": "no-cache",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Pragma": "no-cache",
             }
         });
 
@@ -209,12 +183,14 @@ export class BtcEngine {
             if (msg === '2') { this.ws?.send('3'); return; }
             
             if (msg.startsWith('0{')) {
-                this.ws?.send(`40/customer,${JSON.stringify({ token: this.currentToken })}`);
+                this.ws?.send(`40/customer,${JSON.stringify({ token: this.currentToken, UserId: null })}`);
                 return;
             }
 
             if (msg.startsWith('40/customer,')) {
-                this.ws?.send(`42/customer,["join-room","symbol-room-@BTCUSDT_FUTURES@1@0"]`);
+                this.ws?.send(`42/customer,["join-room","term-room-@BTCUSDT_FUTURES"]`);
+                this.ws?.send(`42/customer,["join-room","symbol-room-@BTCUSDT_FUTURES@1D@0"]`);
+                this.ws?.send(`42/customer,["join-room","symbol-room-@BTCUSDT_FUTURES@${this.timeframe}@0"]`);
                 return;
             }
 
@@ -224,9 +200,14 @@ export class BtcEngine {
                 const jsonPart = msg.substring(commaIdx + 1);
                 try {
                     const parsed = JSON.parse(jsonPart);
-                    if (parsed[0] === 'symbol-room-@BTCUSDT_FUTURES@1@0') {
+                    if (parsed[0] === `symbol-room-@BTCUSDT_FUTURES@${this.timeframe}@0`) {
                         const raw = parsed[1];
                         this.updateFromTick(raw);
+                    } else if (parsed[0] === 'term-room-@BTCUSDT_FUTURES') {
+                        const raw = parsed[1];
+                        if (raw.price) {
+                            this.price = raw.price;
+                        }
                     }
                 } catch (e) {}
             }
