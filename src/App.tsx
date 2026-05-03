@@ -367,16 +367,65 @@ const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount, active
 
 const NumberSettingInput = ({ value, onChange, placeholder, style }: any) => {
   const [val, setVal] = useState(value || '');
-  useEffect(() => { setVal(value || ''); }, [value]);
+  const [isFocused, setIsFocused] = useState(false);
+  
+  useEffect(() => { 
+    if (!isFocused) {
+      setVal(value || ''); 
+    }
+  }, [value, isFocused]);
+
   return (
     <input 
       type="number"
       placeholder={placeholder}
       value={val}
+      onFocus={() => setIsFocused(true)}
       onChange={e => setVal(e.target.value)}
-      onBlur={() => { if(parseFloat(val) !== value && val !== '') onChange(parseFloat(val)); }}
-      onKeyDown={e => { if(e.key === 'Enter') { if(parseFloat(val) !== value && val !== '') onChange(parseFloat(val)); } }}
+      onBlur={() => { 
+        setIsFocused(false);
+        if(parseFloat(val) !== value && val !== '') onChange(parseFloat(val)); 
+      }}
+      onKeyDown={e => { 
+        if(e.key === 'Enter') { 
+          // Keep it focused but trigger change
+          if(parseFloat(val) !== value && val !== '') onChange(parseFloat(val)); 
+        } 
+      }}
       style={style}
+    />
+  );
+};
+
+const StringSettingInput = ({ value, onChange, placeholder, style, className, type = "text" }: any) => {
+  const [val, setVal] = useState(value || '');
+  const [isFocused, setIsFocused] = useState(false);
+  
+  useEffect(() => { 
+    if (!isFocused) {
+      setVal(value || ''); 
+    }
+  }, [value, isFocused]);
+
+  return (
+    <input 
+      type={type}
+      placeholder={placeholder}
+      value={val}
+      onFocus={() => setIsFocused(true)}
+      onChange={e => setVal(e.target.value)}
+      onBlur={() => { 
+        setIsFocused(false);
+        if(val !== value && val !== '') onChange(val); 
+      }}
+      onKeyDown={e => { 
+        if(e.key === 'Enter') { 
+          // Keep it focused but trigger change
+          if(val !== value && val !== '') onChange(val); 
+        } 
+      }}
+      style={style}
+      className={className}
     />
   );
 };
@@ -1451,10 +1500,9 @@ export default function App() {
                 <h3 style={{ fontSize: '0.9rem', color: '#10b981', marginBottom: '10px' }}>🔔 تنظیمات بله</h3>
                 <div style={{ marginBottom: '10px' }}>
                   <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '6px' }}>توکن ربات بله:</label>
-                  <input 
-                    type="text" 
+                  <StringSettingInput 
                     value={baleToken} 
-                    onChange={e => setBaleToken(e.target.value)}
+                    onChange={(val: string) => setBaleToken(val)}
                     placeholder="1892918835:dxRd..."
                     className="ltr"
                     style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', background: '#1e293b', border: 'none', color: 'white', fontSize: '0.8rem' }}
@@ -1462,10 +1510,9 @@ export default function App() {
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>آیدی چت:</label>
-                  <input 
-                    type="text" 
+                  <StringSettingInput 
                     value={baleChatId} 
-                    onChange={e => setBaleChatId(e.target.value)}
+                    onChange={(val: string) => setBaleChatId(val)}
                     placeholder="6211548865"
                     className="ltr"
                     style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', background: '#1e293b', border: 'none', color: 'white', fontSize: '0.8rem' }}
@@ -1477,20 +1524,18 @@ export default function App() {
                 <h3 style={{ fontSize: '0.85rem', color: '#3b82f6', marginBottom: '8px' }}>📡 تنظیمات API بیت‌کوین (BTC)</h3>
                 <div style={{ marginBottom: '8px' }}>
                   <label style={{ display: 'block', fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>x-access-token:</label>
-                  <input 
-                    type="text" 
+                  <StringSettingInput 
                     value={farazToken} 
-                    onChange={e => setFarazToken(e.target.value)}
+                    onChange={(val: string) => setFarazToken(val)}
                     className="ltr"
                     style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', background: '#1e293b', border: 'none', color: 'white', fontSize: '0.7rem' }}
                   />
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>farazSession:</label>
-                  <input 
-                    type="text" 
+                  <StringSettingInput 
                     value={farazSession} 
-                    onChange={e => setFarazSession(e.target.value)}
+                    onChange={(val: string) => setFarazSession(val)}
                     className="ltr"
                     style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', background: '#1e293b', border: 'none', color: 'white', fontSize: '0.7rem' }}
                   />

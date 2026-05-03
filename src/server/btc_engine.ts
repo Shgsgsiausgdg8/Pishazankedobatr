@@ -114,9 +114,41 @@ export class BtcEngine {
                     headers['cookie'] = `x-access-token=${this.currentToken}; farazSession=${this.farazSession}`;
                 }
 
-                const res = await fetch(url, { headers });
+                let res: Response | null = null;
+                try {
+                    res = await fetch(url, { headers });
+                } catch (e: any) {
+                    console.warn(`[BTC-Engine] Faraz API failed (${e.message}), trying Binance fallback for history...`);
+                }
 
-                if (!res.ok) break;
+                if (!res || !res.ok) {
+                    const intervalMap: any = { '1': '1m', '5': '5m', '15': '15m', '30': '30m', '60': '1h', '240': '4h', 'D': '1d' };
+                    const interval = intervalMap[this.timeframe] || '1m';
+                    const binanceUrl = `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=${interval}&limit=${barsCount}&endTime=${to * 1000}`;
+                    try {
+                        res = await fetch(binanceUrl);
+                    } catch(e) {}
+                    
+                    if (res && res.ok) {
+                        const data: any = await res.json();
+                        if (Array.isArray(data) && data.length > 0) {
+                            const chunk = data.map(k => ({
+                                time: Math.floor(k[0] / 1000),
+                                open: parseFloat(k[1]),
+                                high: parseFloat(k[2]),
+                                low: parseFloat(k[3]),
+                                close: parseFloat(k[4])
+                            }));
+                            allCandles = [...chunk, ...allCandles];
+                            to = chunk[0].time - 1;
+                            continue;
+                        } else {
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
 
                 const data: any = await res.json();
                 
