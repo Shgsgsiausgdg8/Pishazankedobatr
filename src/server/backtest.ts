@@ -41,6 +41,7 @@ export class BacktestEngine {
         let sellTradesCount = 0;
         let totalProfit = 0;
         let wins = 0;
+        let losses = 0;
         let peak = 0;
         let maxDrawdown = 0;
         let tpHits = 0;
@@ -69,7 +70,7 @@ export class BacktestEngine {
                         entry: signal.entry,
                         exit: outcome.price,
                         profit: outcome.profit,
-                        result: outcome.profit > 0 ? 'WIN' : (outcome.profit < 0 ? 'LOSS' : 'BREAKEVEN'),
+                        result: (outcome.profit > 0 || outcome.maxTpReached > 0) ? 'WIN' : (outcome.profit < 0 ? 'LOSS' : 'BREAKEVEN'),
                         entryTime: entryMs,
                         exitTime: exitMs,
                         outcomeType: outcome.outcomeType,
@@ -79,12 +80,15 @@ export class BacktestEngine {
                     if (trade.type === 'BUY') buyTradesCount++;
                     else sellTradesCount++;
 
-                    if (trade.outcomeType.startsWith('TP')) tpHits++;
-                    else if (trade.outcomeType === 'SL') slHits++;
-                    else if (trade.outcomeType === 'RISK_FREE') riskFreeHits++;
+                    // Count as TP hit if any TP was reached during trade's life
+                    if (trade.maxTpReached > 0) tpHits++;
+                    
+                    if (trade.outcomeType === 'SL') slHits++;
+                    else if (trade.outcomeType.startsWith('RISK_FREE')) riskFreeHits++;
 
                     totalProfit += outcome.profit;
-                    if (outcome.profit > 0) wins++;
+                    if (trade.result === 'WIN') wins++;
+                    else if (trade.result === 'LOSS') losses++;
                     
                     const date = new Date(trade.entryTime);
                     const hour = date.getHours();
