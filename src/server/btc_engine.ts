@@ -209,7 +209,7 @@ export class BtcEngine {
                     } else if (parsed[0] === 'term-room-@BTCUSDT_FUTURES') {
                         const raw = parsed[1];
                         if (raw.price) {
-                            this.price = raw.price;
+                            this.updatePrice(parseFloat(raw.price));
                         }
                     }
                 } catch (e) {}
@@ -222,17 +222,47 @@ export class BtcEngine {
         });
     }
 
+    updatePrice(newPrice: number) {
+        if (!newPrice || isNaN(newPrice)) return;
+        this.price = newPrice;
+        const now = Date.now();
+        const tfMs = (parseInt(this.timeframe) || 1) * 60000;
+        const cTime = Math.floor(now / tfMs) * tfMs;
+
+        const last = this.candles[this.candles.length - 1];
+        if (last && last.time === cTime) {
+            last.high = Math.max(last.high, newPrice);
+            last.low = Math.min(last.low, newPrice);
+            last.close = newPrice;
+        } else if (this.candles.length > 0 && cTime > last.time) {
+            this.candles.push({ time: cTime, open: newPrice, high: newPrice, low: newPrice, close: newPrice });
+            if (this.candles.length > 50000) this.candles.shift();
+            this.detectLevels();
+        }
+        this.runStrategy();
+    }
+
     updateFromTick(tick: any) {
-        const time = tick.time > 20000000000 ? tick.time : tick.time * 1000;
-        const open = tick.open;
-        const high = tick.high;
-        const low = tick.low;
-        const close = tick.close;
+        if (!tick || !tick.time) return;
+        let time = tick.time > 20000000000 ? tick.time : tick.time * 1000;
+        
+        // Normalize
+        const tfMs = (parseInt(this.timeframe) || 1) * 60000;
+        time = Math.floor(time / tfMs) * tfMs;
+
+        const open = parseFloat(tick.open || tick.close);
+        const high = parseFloat(tick.high || tick.close);
+        const low = parseFloat(tick.low || tick.close);
+        const close = parseFloat(tick.close);
         this.price = close;
 
         const existingIdx = this.candles.findIndex(c => c.time === time);
         if (existingIdx !== -1) {
-            this.candles[existingIdx] = { time, open, high, low, close };
+            const existing = this.candles[existingIdx];
+            existing.open = open;
+            existing.high = Math.max(existing.high, high);
+            existing.low = Math.min(existing.low, low);
+            existing.close = close;
         } else {
             this.candles.push({ time, open, high, low, close });
             this.candles.sort((a, b) => a.time - b.time);

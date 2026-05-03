@@ -1203,10 +1203,10 @@ export default function App() {
                     </div>
                   </div>
                   <div style={{ background: '#020617', padding: '15px', borderRadius: '12px', textAlign: 'center', border: '1px solid #1e293b' }}>
-                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>مجموع الگوها</div>
+                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>مجموع معامله</div>
                     <div style={{ fontSize: '1.4rem', fontWeight: 'bold' }}>{backtestResults.totalTrades}</div>
                     <div style={{ fontSize: '0.65rem', color: '#475569', marginTop: '4px' }}>
-                      N: {backtestResults.buyTrades || 0} | Inv N: {backtestResults.sellTrades || 0}
+                      {backtestResults.tradesPerDay?.toFixed(1) || '0'} معامله در روز
                     </div>
                   </div>
                   <div style={{ background: 'rgba(16, 185, 129, 0.05)', padding: '15px', borderRadius: '12px', textAlign: 'center', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
@@ -1214,11 +1214,17 @@ export default function App() {
                     <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: backtestResults.totalProfit >= 0 ? '#10b981' : '#ef4444' }}>
                       {backtestResults.totalProfit.toLocaleString(undefined, { maximumFractionDigits: 1 })}
                     </div>
+                    <div style={{ fontSize: '0.65rem', color: '#475569', marginTop: '4px' }}>
+                      PF: {backtestResults.profitFactor?.toFixed(2) || '0'}
+                    </div>
                   </div>
                   <div style={{ background: 'rgba(239, 68, 68, 0.05)', padding: '15px', borderRadius: '12px', textAlign: 'center', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
                     <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>افت (DD)</div>
                     <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#ef4444' }}>
                       {backtestResults.maxDrawdown.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: '#475569', marginTop: '4px' }}>
+                      Exp: {backtestResults.expectancy?.toFixed(1) || '0'}
                     </div>
                   </div>
                 </div>

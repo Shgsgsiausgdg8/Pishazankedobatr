@@ -11,6 +11,9 @@ export interface BacktestResult {
     slHits: number;
     bestHour: number;
     bestDay: string;
+    profitFactor: number;
+    expectancy: number;
+    tradesPerDay: number;
     trades: {
         type: 'BUY' | 'SELL';
         entry: number;
@@ -49,21 +52,35 @@ export class BacktestEngine {
         const dayStats: Record<string, number> = {};
         const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+        const spread = 0.5; // Average spread in gold points for more realistic results
+
         // Iterate through candles to find signals
-        for (let i = 50; i < candles.length - 10; i++) {
+        for (let i = 50; i < candles.length - 2; i++) {
             // Optimization: avoid slicing large datasets repeatedly where possible
-            const window = candles.slice(Math.max(0, i - 1000), i + 1);
+            const window = candles.slice(Math.max(0, i - 500), i + 1);
             const signal = strategy.analyze(window, timeframe, strategyType);
 
             if (signal) {
-                const outcome = this.findOutcome(candles.slice(i + 1), signal);
+                // Determine Entry: Realistic entry is at the OPEN of the NEXT candle
+                const entryCandle = candles[i + 1];
+                if (!entryCandle) continue;
+
+                const actualEntry = signal.type === 'BUY' ? entryCandle.open + spread : entryCandle.open - spread;
+                
+                // If the next candle opens beyond SL, skip or count as instant SL
+                if (signal.type === 'BUY' && entryCandle.open <= signal.sl) continue;
+                if (signal.type === 'SELL' && entryCandle.open >= signal.sl) continue;
+
+                const updatedSignal = { ...signal, entry: actualEntry };
+                const outcome = this.findOutcome(candles.slice(i + 1), updatedSignal);
+                
                 if (outcome) {
-                    const entryMs = candles[i].time > 20000000000 ? candles[i].time : candles[i].time * 1000;
+                    const entryMs = entryCandle.time > 20000000000 ? entryCandle.time : entryCandle.time * 1000;
                     const exitMs = outcome.time > 20000000000 ? outcome.time : outcome.time * 1000;
 
                     const trade = {
                         type: signal.type,
-                        entry: signal.entry,
+                        entry: actualEntry,
                         exit: outcome.price,
                         profit: outcome.profit,
                         result: outcome.profit > 0 ? 'WIN' : 'LOSS' as 'WIN' | 'LOSS',
@@ -72,6 +89,7 @@ export class BacktestEngine {
                         outcomeType: outcome.outcomeType,
                         maxTpReached: outcome.maxTpReached
                     };
+                    
                     trades.push(trade);
                     if (trade.type === 'BUY') buyTradesCount++;
                     else sellTradesCount++;
@@ -93,13 +111,10 @@ export class BacktestEngine {
                     const dd = peak - totalProfit;
                     if (dd > maxDrawdown) maxDrawdown = dd;
 
-                    // Safety exit indexing to prevent infinite loops
+                    // Skip processed candles
                     const exitIdx = candles.findIndex(c => c.time === outcome.time);
                     if (exitIdx > i) {
                         i = exitIdx;
-                    } else {
-                        // If something went wrong, just move to next candle
-                        continue;
                     }
                 }
             }
@@ -124,6 +139,26 @@ export class BacktestEngine {
             }
         }
 
+        // Calculate Profit Factor & Expectancy
+        let grossWins = 0;
+        let grossLosses = 0;
+        trades.forEach(t => {
+            if (t.profit > 0) grossWins += t.profit;
+            else grossLosses += Math.abs(t.profit);
+        });
+
+        const profitFactor = grossLosses === 0 ? (grossWins > 0 ? 99 : 0) : grossWins / grossLosses;
+        const expectancy = trades.length > 0 ? totalProfit / trades.length : 0;
+        
+        // Trades per day calculation
+        let tradesPerDay = 0;
+        if (candles.length > 0 && trades.length > 0) {
+            const firstCandleTime = candles[0].time > 20000000000 ? candles[0].time : candles[0].time * 1000;
+            const lastCandleTime = candles[candles.length - 1].time > 20000000000 ? candles[candles.length - 1].time : candles[candles.length - 1].time * 1000;
+            const daysInRange = Math.max(1, (lastCandleTime - firstCandleTime) / (1000 * 60 * 60 * 24));
+            tradesPerDay = trades.length / daysInRange;
+        }
+
         return {
             totalTrades: trades.length,
             buyTrades: buyTradesCount,
@@ -135,6 +170,9 @@ export class BacktestEngine {
             slHits,
             bestHour,
             bestDay,
+            profitFactor,
+            expectancy,
+            tradesPerDay,
             trades: trades
         };
     }
@@ -168,6 +206,25 @@ export class BacktestEngine {
 
         for (const c of future) {
             if (signal.type === 'BUY') {
+                // Check for SL first or simultaneously in the same candle (CONSERVATIVE)
+                // If the candle low hits SL, check if we might have hit TP before SL.
+                // Without tick data, if both hit in one candle, we assume SL to be safe.
+                const hitsSL = c.low <= signal.sl;
+                const hitsTP1 = c.high >= signal.tp1;
+
+                if (hitsSL) {
+                    // Even if it hit TP1, if it also hit SL in the same candle, we count SL as the most likely outcome 
+                    // unless we want to be aggressive. Being conservative is more "accurate" for backtesting.
+                    if (maxTpReached === 0 || hitsSL) {
+                        exitPrice = signal.sl;
+                        time = c.time;
+                        outcomeType = 'SL';
+                        maxTpReached = 0; // Reset just in case
+                        break;
+                    }
+                }
+
+                // Check for TPs
                 if (c.high >= signal.tp1 && maxTpReached < 1) { maxTpReached = 1; exitPrice = signal.tp1; time = c.time; outcomeType = 'TP1'; }
                 if (signal.tp2 && c.high >= signal.tp2 && maxTpReached < 2) { maxTpReached = 2; exitPrice = signal.tp2; time = c.time; outcomeType = 'TP2'; }
                 if (signal.tp3 && c.high >= signal.tp3 && maxTpReached < 3) { maxTpReached = 3; exitPrice = signal.tp3; time = c.time; outcomeType = 'TP3'; }
@@ -178,14 +235,22 @@ export class BacktestEngine {
                     maxTpReached = 7; exitPrice = signal.tp7; time = c.time; outcomeType = 'TP7'; 
                     break; 
                 }
-
-                if (c.low <= signal.sl) {
-                    if (maxTpReached === 0) {
-                        exitPrice = signal.sl; time = c.time; outcomeType = 'SL';
-                    }
-                    break;
-                }
             } else {
+                // SELL Outcome
+                const hitsSL = c.high >= signal.sl;
+                const hitsTP1 = c.low <= signal.tp1;
+
+                if (hitsSL) {
+                    if (maxTpReached === 0 || hitsSL) {
+                        exitPrice = signal.sl;
+                        time = c.time;
+                        outcomeType = 'SL';
+                        maxTpReached = 0;
+                        break;
+                    }
+                }
+
+                // Check for TPs
                 if (c.low <= signal.tp1 && maxTpReached < 1) { maxTpReached = 1; exitPrice = signal.tp1; time = c.time; outcomeType = 'TP1'; }
                 if (signal.tp2 && c.low <= signal.tp2 && maxTpReached < 2) { maxTpReached = 2; exitPrice = signal.tp2; time = c.time; outcomeType = 'TP2'; }
                 if (signal.tp3 && c.low <= signal.tp3 && maxTpReached < 3) { maxTpReached = 3; exitPrice = signal.tp3; time = c.time; outcomeType = 'TP3'; }
@@ -195,13 +260,6 @@ export class BacktestEngine {
                 if (signal.tp7 && c.low <= signal.tp7) { 
                     maxTpReached = 7; exitPrice = signal.tp7; time = c.time; outcomeType = 'TP7'; 
                     break; 
-                }
-
-                if (c.high >= signal.sl) {
-                    if (maxTpReached === 0) {
-                        exitPrice = signal.sl; time = c.time; outcomeType = 'SL';
-                    }
-                    break;
                 }
             }
         }

@@ -365,17 +365,26 @@ export class FarazGoldEngine {
     }
 
     updatePrice(newPrice: number) {
+        if (!newPrice || isNaN(newPrice)) return;
         this.price = newPrice;
         const now = Date.now();
         const timeframeMs = (parseInt(this.timeframe) || 1) * 60000;
         const candleTime = Math.floor(now / timeframeMs) * timeframeMs;
 
         if (this.candles.length === 0 || candleTime > this.lastCandleTime) {
-            const newCandle = { time: candleTime, open: newPrice, high: newPrice, low: newPrice, close: newPrice };
-            this.candles.push(newCandle);
-            this.candles.sort((a, b) => a.time - b.time);
-            this.lastCandleTime = candleTime;
-            if (this.candles.length > 50000) this.candles.shift();
+            // Check if we already have a candle for this time (e.g. from processBar)
+            const existing = this.candles.find(c => c.time === candleTime);
+            if (existing) {
+                existing.close = newPrice;
+                existing.high = Math.max(existing.high, newPrice);
+                existing.low = Math.min(existing.low, newPrice);
+            } else {
+                const newCandle = { time: candleTime, open: newPrice, high: newPrice, low: newPrice, close: newPrice };
+                this.candles.push(newCandle);
+                this.candles.sort((a, b) => a.time - b.time);
+                if (this.candles.length > 50000) this.candles.shift();
+            }
+            this.lastCandleTime = Math.max(this.lastCandleTime, candleTime);
         } else {
             const last = this.candles[this.candles.length - 1];
             if (last && last.time === candleTime) {
@@ -467,7 +476,12 @@ export class FarazGoldEngine {
 
     processBar(bar: any) {
         if (!bar || !bar.time) return;
-        const time = bar.time > 20000000000 ? bar.time : bar.time * 1000;
+        let time = bar.time > 20000000000 ? bar.time : bar.time * 1000;
+        
+        // Normalize time to timeframe boundary to match updatePrice
+        const tfMs = (parseInt(this.timeframe) || 1) * 60000;
+        time = Math.floor(time / tfMs) * tfMs;
+
         const open = parseFloat(bar.open || bar.close);
         const high = parseFloat(bar.high || bar.close);
         const low = parseFloat(bar.low || bar.close);
@@ -476,15 +490,20 @@ export class FarazGoldEngine {
 
         const existingIdx = this.candles.findIndex(c => c.time === time);
         if (existingIdx !== -1) {
-            this.candles[existingIdx] = { time, open, high, low, close };
+            // Combine with existing instead of blind overwrite to keep tick info
+            const existing = this.candles[existingIdx];
+            existing.open = open;
+            existing.high = Math.max(existing.high, high);
+            existing.low = Math.min(existing.low, low);
+            existing.close = close;
         } else {
             this.candles.push({ time, open, high, low, close });
             this.candles.sort((a, b) => a.time - b.time);
             if (this.candles.length > 50000) this.candles.shift();
-            this.lastCandleTime = time;
+            this.lastCandleTime = Math.max(this.lastCandleTime, time);
             this.detectLevels();
         }
-        this.runStrategy(); // اجرای استراتژی پس از بروزرسانی شمع
+        this.runStrategy(); 
     }
 
     detectLevels() {

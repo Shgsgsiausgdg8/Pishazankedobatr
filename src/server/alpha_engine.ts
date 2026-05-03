@@ -246,7 +246,6 @@ export class AlphaGoldEngine {
         if (!newPrice || Number.isNaN(newPrice)) return;
         
         // STRICT PRICE GUARD: Alpha Ounce must be between 1000 and 10000.
-        // Mazane (80k+) is rejected to prevent chart scale jumping.
         if (newPrice > 10000 || newPrice < 1000) {
             return;
         }
@@ -265,16 +264,26 @@ export class AlphaGoldEngine {
         const last = this.candles[this.candles.length - 1];
 
         if (cTime > last.time) {
-            this.createNewCandle(cTime, newPrice);
+            // Check if we already have a candle for this time (e.g. from a past tick that was slightly off)
+            const existing = this.candles.find(c => c.time === cTime);
+            if (existing) {
+                existing.high = Math.max(existing.high, newPrice);
+                existing.low = Math.min(existing.low, newPrice);
+                existing.close = newPrice;
+            } else {
+                this.createNewCandle(cTime, newPrice);
+            }
         } else {
-            last.high = Math.max(last.high, newPrice);
-            last.low = Math.min(last.low, newPrice);
-            last.close = newPrice;
+            // Match exactly with cTime for the current candle
+            const current = this.candles.find(c => c.time === cTime) || last;
+            current.high = Math.max(current.high, newPrice);
+            current.low = Math.min(current.low, newPrice);
+            current.close = newPrice;
         }
 
         if (now - this.lastLevelsUpdate > 1000) {
             this.detectLevels();
-            this.runStrategy(); // آپدیت استراتژی در هر تیک برای جلوگیری از ماندن خطوط باطل شده
+            this.runStrategy(); 
             this.lastLevelsUpdate = now;
         }
     }
