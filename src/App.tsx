@@ -192,6 +192,11 @@ const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount, active
 
     // Draw N-Pattern ZigZag Visualization
     if (nPattern && nPattern.points && nPattern.points.length >= 2) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, chartWidth, height);
+      ctx.clip();
+      
       const isConfirmed = nPattern.isConfirmed;
       ctx.strokeStyle = nPattern.type === 'BUY' ? '#10b981' : '#ef4444';
       ctx.lineWidth = isConfirmed ? 5 : 2.5; // ضخیم‌تر برای سیگنال تایید شده
@@ -292,6 +297,7 @@ const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount, active
             ctx.fillText(label, x, labelY);
         });
       }
+      ctx.restore();
     }
 
   }, [data, levels, nPattern, viewState, mousePos, dimensions]);

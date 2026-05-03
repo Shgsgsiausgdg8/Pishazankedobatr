@@ -120,7 +120,10 @@ export class FarazGoldEngine {
             }
 
             if (allCandles.length > 0) {
-                this.candles = allCandles.sort((a, b) => a.time - b.time);
+                allCandles.sort((a: any, b: any) => a.time - b.time);
+                allCandles = allCandles.filter((c: any, i: number, arr: any[]) => i === 0 || c.time !== arr[i-1].time);
+                
+                this.candles = allCandles;
                 try {
                     const fs = await import('fs');
                     fs.writeFileSync(cacheFile, JSON.stringify(this.candles));

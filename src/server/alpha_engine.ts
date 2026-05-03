@@ -164,6 +164,9 @@ export class AlphaGoldEngine {
                 // sort chronologically just in case
                 allCandles.sort((a: any, b: any) => a.time - b.time);
                 
+                // Remove duplicates
+                allCandles = allCandles.filter((c: any, i: number, arr: any[]) => i === 0 || c.time !== arr[i-1].time);
+                
                 this.candles = allCandles;
                 try {
                     const fs = await import('fs');

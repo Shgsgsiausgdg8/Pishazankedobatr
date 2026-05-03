@@ -146,6 +146,9 @@ export class BtcEngine {
                 // sort chronologically
                 allCandles.sort((a: any, b: any) => a.time - b.time);
                 
+                // Remove duplicates
+                allCandles = allCandles.filter((c: any, i: number, arr: any[]) => i === 0 || c.time !== arr[i-1].time);
+                
                 this.candles = allCandles;
                 try {
                     const fs = await import('fs');
@@ -227,11 +230,12 @@ export class BtcEngine {
         const close = tick.close;
         this.price = close;
 
-        const last = this.candles[this.candles.length - 1];
-        if (last && last.time === time) {
-            this.candles[this.candles.length - 1] = { time, open, high, low, close };
+        const existingIdx = this.candles.findIndex(c => c.time === time);
+        if (existingIdx !== -1) {
+            this.candles[existingIdx] = { time, open, high, low, close };
         } else {
             this.candles.push({ time, open, high, low, close });
+            this.candles.sort((a, b) => a.time - b.time);
             if (this.candles.length > 50000) this.candles.shift();
             this.detectLevels();
         }
