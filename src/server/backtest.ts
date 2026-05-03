@@ -69,13 +69,14 @@ export class BacktestEngine {
                         result: outcome.profit > 0 ? 'WIN' : 'LOSS' as 'WIN' | 'LOSS',
                         entryTime: entryMs,
                         exitTime: exitMs,
-                        outcomeType: outcome.outcomeType as 'TP' | 'SL'
+                        outcomeType: outcome.outcomeType,
+                        maxTpReached: outcome.maxTpReached
                     };
                     trades.push(trade);
                     if (trade.type === 'BUY') buyTradesCount++;
                     else sellTradesCount++;
 
-                    if (trade.outcomeType === 'TP') tpHits++;
+                    if (trade.outcomeType.startsWith('TP')) tpHits++;
                     else if (trade.outcomeType === 'SL') slHits++;
 
                     totalProfit += outcome.profit;
@@ -160,15 +161,48 @@ export class BacktestEngine {
     }
 
     private findOutcome(future: Candle[], signal: Signal) {
+        let maxTpReached = 0;
+        let exitPrice = 0;
+        let time = 0;
+        let outcomeType = '';
+
         for (const c of future) {
             if (signal.type === 'BUY') {
-                if (c.high >= signal.tp1) return { price: signal.tp1, profit: signal.tp1 - signal.entry, time: c.time, outcomeType: 'TP' };
-                if (c.low <= signal.sl) return { price: signal.sl, profit: signal.sl - signal.entry, time: c.time, outcomeType: 'SL' };
+                if (c.high >= signal.tp1 && maxTpReached < 1) { maxTpReached = 1; exitPrice = signal.tp1; time = c.time; outcomeType = 'TP1'; }
+                if (signal.tp2 && c.high >= signal.tp2 && maxTpReached < 2) { maxTpReached = 2; exitPrice = signal.tp2; time = c.time; outcomeType = 'TP2'; }
+                if (signal.tp3 && c.high >= signal.tp3) { 
+                    maxTpReached = 3; exitPrice = signal.tp3; time = c.time; outcomeType = 'TP3'; 
+                    break; // Max profit reached
+                }
+
+                if (c.low <= signal.sl) {
+                    if (maxTpReached === 0) {
+                        exitPrice = signal.sl; time = c.time; outcomeType = 'SL';
+                    }
+                    break;
+                }
             } else {
-                if (c.low <= signal.tp1) return { price: signal.tp1, profit: signal.entry - signal.tp1, time: c.time, outcomeType: 'TP' };
-                if (c.high >= signal.sl) return { price: signal.sl, profit: signal.entry - signal.sl, time: c.time, outcomeType: 'SL' };
+                if (c.low <= signal.tp1 && maxTpReached < 1) { maxTpReached = 1; exitPrice = signal.tp1; time = c.time; outcomeType = 'TP1'; }
+                if (signal.tp2 && c.low <= signal.tp2 && maxTpReached < 2) { maxTpReached = 2; exitPrice = signal.tp2; time = c.time; outcomeType = 'TP2'; }
+                if (signal.tp3 && c.low <= signal.tp3) { 
+                    maxTpReached = 3; exitPrice = signal.tp3; time = c.time; outcomeType = 'TP3'; 
+                    break; 
+                }
+
+                if (c.high >= signal.sl) {
+                    if (maxTpReached === 0) {
+                        exitPrice = signal.sl; time = c.time; outcomeType = 'SL';
+                    }
+                    break;
+                }
             }
         }
+
+        if (outcomeType) {
+            const profit = signal.type === 'BUY' ? exitPrice - signal.entry : signal.entry - exitPrice;
+            return { price: exitPrice, profit, time, outcomeType, maxTpReached };
+        }
+        
         return null;
     }
 }

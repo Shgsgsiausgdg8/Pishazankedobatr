@@ -73,12 +73,25 @@ export class BtcEngine {
         this.connectWS();
     }
 
-    async fetchHistory() {
+    async fetchHistory(targetDays = 2) {
         try {
+            const fs = await import('fs');
+            const path = await import('path');
+            const cacheFile = path.join(process.cwd(), `btc_history_${this.timeframe}_${targetDays}.json`);
+            
+            if (fs.existsSync(cacheFile)) {
+                const stats = fs.statSync(cacheFile);
+                if (Date.now() - stats.mtimeMs < 12 * 60 * 60 * 1000) {
+                    const cached = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+                    this.candles = cached;
+                    console.log(`[BTC-Engine] Loaded ${cached.length} candles from cache.`);
+                    return;
+                }
+            }
+
             const resolution = this.timeframe;
             let to = Math.floor(Date.now() / 1000);
             const barsCount = 1000;
-            const targetDays = 30;
             const targetTotalCandles = Math.floor((targetDays * 24 * 60) / parseInt(resolution));
             const timeframeSeconds = (parseInt(resolution) || 1) * 60;
             
@@ -131,6 +144,10 @@ export class BtcEngine {
                 allCandles.sort((a: any, b: any) => a.time - b.time);
                 
                 this.candles = allCandles;
+                try {
+                    const fs = await import('fs');
+                    fs.writeFileSync(cacheFile, JSON.stringify(this.candles));
+                } catch (e) {}
                 this.price = this.candles[this.candles.length - 1].close;
                 this.detectLevels();
                 console.log(`[BTC-Engine] Successfully loaded ${this.candles.length} history bars.`);

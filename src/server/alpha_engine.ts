@@ -85,12 +85,25 @@ export class AlphaGoldEngine {
         setInterval(() => this.cleanupCandles(), 60000);
     }
 
-    async fetchHistoricalCandles() {
+    async fetchHistoricalCandles(targetDays = 2) {
         try {
+            const fs = await import('fs');
+            const path = await import('path');
+            const cacheFile = path.join(process.cwd(), `alpha_history_${this.timeframe}_${targetDays}.json`);
+            
+            if (fs.existsSync(cacheFile)) {
+                const stats = fs.statSync(cacheFile);
+                if (Date.now() - stats.mtimeMs < 12 * 60 * 60 * 1000) { // Cache valid for 12 hours
+                    const cached = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+                    this.candles = cached;
+                    console.log(`[AlphaEngine] Loaded ${cached.length} candles from cache.`);
+                    return;
+                }
+            }
+
             const resolution = this.timeframe;
             let toTs = Math.floor(Date.now() / 1000);
             const limit = 2000;
-            const targetDays = 30; // 30 days
             const targetTotalCandles = Math.floor((targetDays * 24 * 60) / parseInt(resolution));
             
             let allCandles: any[] = [];
@@ -152,6 +165,11 @@ export class AlphaGoldEngine {
                 allCandles.sort((a: any, b: any) => a.time - b.time);
                 
                 this.candles = allCandles;
+                try {
+                    const fs = await import('fs');
+                    fs.writeFileSync(cacheFile, JSON.stringify(allCandles));
+                } catch (e) {}
+
                 const last = this.candles[this.candles.length - 1];
                 this.lastCandleTime = last.time * 1000;
                 this.price = last.close;

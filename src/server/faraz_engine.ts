@@ -41,13 +41,26 @@ export class FarazGoldEngine {
         this.loadSettings();
     }
 
-    async fetchHistory() {
+    async fetchHistory(targetDays = 2) {
         try {
+            const fs = await import('fs');
+            const path = await import('path');
+            const cacheFile = path.join(process.cwd(), `faraz_history_${this.timeframe}_${targetDays}.json`);
+            
+            if (fs.existsSync(cacheFile)) {
+                const stats = fs.statSync(cacheFile);
+                if (Date.now() - stats.mtimeMs < 12 * 60 * 60 * 1000) {
+                    const cached = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+                    this.candles = cached;
+                    console.log(`[Engine] Loaded ${cached.length} candles from cache.`);
+                    return;
+                }
+            }
+
             const baseUrl = process.env.FARAZGOLD_BASEURL || 'https://demo.farazgold.com';
             const resolution = this.timeframe;
             let to = Math.floor(Date.now() / 1000);
             const barsCount = 2000;
-            const targetDays = 30;
             const targetTotalCandles = Math.floor((targetDays * 24 * 60) / parseInt(resolution));
             const timeframeSeconds = (parseInt(resolution) || 1) * 60;
             let allCandles: any[] = [];
@@ -108,6 +121,10 @@ export class FarazGoldEngine {
 
             if (allCandles.length > 0) {
                 this.candles = allCandles.sort((a, b) => a.time - b.time);
+                try {
+                    const fs = await import('fs');
+                    fs.writeFileSync(cacheFile, JSON.stringify(this.candles));
+                } catch (e) {}
                 this.lastCandleTime = this.candles[this.candles.length - 1].time * 1000;
                 this.detectLevels();
                 this.runStrategy();   // اجرای استراتژی روی داده‌های تاریخی

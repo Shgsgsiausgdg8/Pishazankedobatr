@@ -365,6 +365,22 @@ const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount, active
   );
 };
 
+const NumberSettingInput = ({ value, onChange, placeholder, style }: any) => {
+  const [val, setVal] = useState(value || '');
+  useEffect(() => { setVal(value || ''); }, [value]);
+  return (
+    <input 
+      type="number"
+      placeholder={placeholder}
+      value={val}
+      onChange={e => setVal(e.target.value)}
+      onBlur={() => { if(parseFloat(val) !== value && val !== '') onChange(parseFloat(val)); }}
+      onKeyDown={e => { if(e.key === 'Enter') { if(parseFloat(val) !== value && val !== '') onChange(parseFloat(val)); } }}
+      style={style}
+    />
+  );
+};
+
 export default function App() {
   // Persistent broker selection
   const [activeBroker, setActiveBroker] = useState<'faraz' | 'alpha' | 'btc'>(() => {
@@ -384,6 +400,9 @@ export default function App() {
   
   const [showAuth, setShowAuth] = useState(false);
   const [showBaleSettings, setShowBaleSettings] = useState(false);
+  const showBaleSettingsRef = useRef(false);
+  useEffect(() => { showBaleSettingsRef.current = showBaleSettings; }, [showBaleSettings]);
+
   const [showStrategySettings, setShowStrategySettings] = useState(false);
   const [showAutoTradePanel, setShowAutoTradePanel] = useState(false);
   const [baleToken, setBaleToken] = useState('');
@@ -408,6 +427,7 @@ export default function App() {
   const [selectedStrategy, setSelectedStrategy] = useState('N-PATTERN');
   const [isBacktesting, setIsBacktesting] = useState(false);
   const [isGlobalTesting, setIsGlobalTesting] = useState(false);
+  const [backtestLoadingMsg, setBacktestLoadingMsg] = useState<string | null>(null);
 
   useEffect(() => {
     activeBrokerRef.current = activeBroker;
@@ -435,21 +455,27 @@ export default function App() {
             // CRITICAL FIX: Ensure broker name is part of the data so the loading check passes
             if (msg.broker === activeBrokerRef.current) {
               setData({ ...msg.data, broker: msg.broker });
-              // Sync Bale settings from engine
-              if (msg.data.baleToken) setBaleToken(msg.data.baleToken);
-              if (msg.data.baleChatId) setBaleChatId(msg.data.baleChatId);
-              if (msg.data.currentToken) setFarazToken(msg.data.currentToken);
-              if (msg.data.farazSession) setFarazSession(msg.data.farazSession);
-              if (msg.data.candleConfirmations) setCandleConfirmations(msg.data.candleConfirmations);
+              // Sync Bale settings from engine ONLY if the settings modal is NOT open
+              if (!showBaleSettingsRef.current) {
+                if (msg.data.baleToken) setBaleToken(msg.data.baleToken);
+                if (msg.data.baleChatId) setBaleChatId(msg.data.baleChatId);
+                if (msg.data.currentToken) setFarazToken(msg.data.currentToken);
+                if (msg.data.farazSession) setFarazSession(msg.data.farazSession);
+                if (msg.data.candleConfirmations) setCandleConfirmations(msg.data.candleConfirmations);
+              }
             }
           } else if (msg.type === 'BACKTEST_RESULTS') {
             setBacktestResults(msg.data);
             setGlobalResults(null);
             setIsBacktesting(false);
+            setBacktestLoadingMsg(null);
           } else if (msg.type === 'GLOBAL_BACKTEST_RESULTS') {
             setGlobalResults(msg.data);
             setBacktestResults(null);
             setIsGlobalTesting(false);
+            setBacktestLoadingMsg(null);
+          } else if (msg.type === 'BACKTEST_LOADING') {
+             setBacktestLoadingMsg(msg.message);
           }
         } catch (err) {
           console.error("WS Parse Error", err);
@@ -465,6 +491,7 @@ export default function App() {
   const runBacktest = () => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
     setIsBacktesting(true);
+    setBacktestLoadingMsg(null);
     setBacktestResults(null);
     wsRef.current.send(JSON.stringify({ 
       type: 'RUN_BACKTEST', 
@@ -475,6 +502,7 @@ export default function App() {
   const runGlobalBacktest = () => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
     setIsGlobalTesting(true);
+    setBacktestLoadingMsg(null);
     setGlobalResults(null);
     setBacktestResults(null);
     wsRef.current.send(JSON.stringify({ type: 'RUN_GLOBAL_BACKTEST' }));
@@ -844,20 +872,18 @@ export default function App() {
             
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>کف موردنظر:</span>
-                <input 
-                  type="number"
+                <NumberSettingInput 
                   value={data?.strategyConfig?.customKaf || ''}
-                  onChange={(e) => {
-                     updateStrategyConfig({ customKaf: parseFloat(e.target.value) });
+                  onChange={(val: number) => {
+                     updateStrategyConfig({ customKaf: val });
                   }}
                   style={{ background: '#020617', border: '1px solid #334155', borderRadius: '4px', color: '#fff', width: '80px', padding: '2px 4px', fontSize: '0.75rem' }}
                 />
                 <span style={{ fontSize: '0.7rem', color: '#94a3b8', marginLeft: '12px' }}>سقف موردنظر:</span>
-                <input 
-                  type="number"
+                <NumberSettingInput 
                   value={data?.strategyConfig?.customSaghf || ''}
-                  onChange={(e) => {
-                     updateStrategyConfig({ customSaghf: parseFloat(e.target.value) });
+                  onChange={(val: number) => {
+                     updateStrategyConfig({ customSaghf: val });
                   }}
                   style={{ background: '#020617', border: '1px solid #334155', borderRadius: '4px', color: '#fff', width: '80px', padding: '2px 4px', fontSize: '0.75rem' }}
                 />
@@ -1017,18 +1043,16 @@ export default function App() {
 
                   {selectedStrategy === 'STRATEGY_5' && (
                     <div style={{ flex: 1, display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <input 
-                        type="number" 
+                      <NumberSettingInput 
                         placeholder="کف مورد نظر"
                         value={data?.strategyConfig?.customKaf || ''} 
-                        onChange={(e) => updateStrategyConfig({ customKaf: parseFloat(e.target.value) })}
+                        onChange={(val: number) => updateStrategyConfig({ customKaf: val })}
                         style={{ width: '100px', padding: '10px', borderRadius: '10px', background: '#0f172a', border: '1px solid #a855f7', color: '#a855f7', fontSize: '0.8rem', fontWeight: 'bold' }}
                       />
-                      <input 
-                        type="number" 
+                      <NumberSettingInput 
                         placeholder="سقف مورد نظر"
                         value={data?.strategyConfig?.customSaghf || ''} 
-                        onChange={(e) => updateStrategyConfig({ customSaghf: parseFloat(e.target.value) })}
+                        onChange={(val: number) => updateStrategyConfig({ customSaghf: val })}
                         style={{ width: '100px', padding: '10px', borderRadius: '10px', background: '#0f172a', border: '1px solid #a855f7', color: '#a855f7', fontSize: '0.8rem', fontWeight: 'bold' }}
                       />
                     </div>
@@ -1054,6 +1078,13 @@ export default function App() {
                 </button>
               </div>
             </div>
+
+            {(backtestLoadingMsg) && (
+              <div style={{ animation: 'pulse 2s infinite', marginBottom: '1rem', padding: '12px', background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', borderRadius: '8px', border: '1px solid rgba(59, 130, 246, 0.2)', textAlign: 'center', fontSize: '0.85rem' }}>
+                <span className="typing-indicator" style={{ marginRight: '8px' }}>🤖</span>
+                {backtestLoadingMsg}
+              </div>
+            )}
 
             {globalResults && (
               <div style={{ animation: 'fadeIn 0.5s ease', background: 'rgba(2, 6, 23, 0.5)', borderRadius: '16px', padding: '1rem', border: '1px solid #1e293b' }}>
@@ -1177,15 +1208,15 @@ export default function App() {
                           {backtestResults.trades.slice().reverse().map((trade: any, i: number) => (
                             <tr key={i} style={{ borderBottom: '1px solid #1e293b' }}>
                               <td style={{ padding: '12px', color: trade.type === 'BUY' ? '#10b981' : '#ef4444', fontWeight: '600' }}>{trade.type}</td>
-                              <td style={{ padding: '12px', fontWeight: 'bold', color: trade.outcomeType === 'TP' ? '#10b981' : (trade.outcomeType === 'SL' ? '#ef4444' : '#64748b') }}>
-                                {trade.outcomeType || 'نامعلوم'}
+                              <td style={{ padding: '12px', fontWeight: 'bold', color: trade.outcomeType?.startsWith('TP') ? '#10b981' : (trade.outcomeType === 'SL' ? '#ef4444' : '#64748b') }}>
+                                {trade.outcomeType || 'نامعلوم'} {trade.maxTpReached > 0 ? `(Max: TP${trade.maxTpReached})` : ''}
                               </td>
                               <td style={{ padding: '12px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: '#cbd5e1' }}>
-                                {new Date(trade.entryTime).toLocaleDateString('fa-IR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                {new Date(trade.entryTime).toLocaleString('fa-IR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                               </td>
                               <td style={{ padding: '12px', fontFamily: 'var(--font-mono)' }}>{trade.entry.toLocaleString()}</td>
                               <td style={{ padding: '12px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: '#cbd5e1' }}>
-                                {new Date(trade.exitTime).toLocaleDateString('fa-IR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                {new Date(trade.exitTime).toLocaleString('fa-IR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                               </td>
                               <td style={{ padding: '12px', fontFamily: 'var(--font-mono)' }}>{trade.exit.toLocaleString()}</td>
                               <td style={{ padding: '12px', color: trade.profit >= 0 ? '#10b981' : '#ef4444', fontWeight: 'bold' }}>{trade.profit > 0 ? '+' : ''}{trade.profit.toLocaleString(undefined, { maximumFractionDigits: 1 })}</td>

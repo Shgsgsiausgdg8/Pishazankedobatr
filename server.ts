@@ -71,7 +71,7 @@ async function startServer() {
             }
         }, 3000); // Reduce frequency to 3 seconds to save memory/CPU
 
-        ws.on("message", (message) => {
+        ws.on("message", async (message) => {
             try {
                 const command = JSON.parse(message.toString());
                 if (command.type === 'SET_BROKER') {
@@ -82,6 +82,24 @@ async function startServer() {
                     }
                 } else if (command.type === 'RUN_BACKTEST') {
                     const engine = engines[currentBroker] as any;
+                    
+                    if (engine.candles && engine.candles.length < 5000) {
+                        ws.send(JSON.stringify({ 
+                            type: 'BACKTEST_LOADING', 
+                            broker: currentBroker,
+                            message: 'در حال دریافت اطلاعات ۳۰ روز گذشته... لطفا کمی صبر کنید.'
+                        }));
+                        try {
+                            if (engine.fetchHistoricalCandles) {
+                                await engine.fetchHistoricalCandles(30);
+                            } else if (engine.fetchHistory) {
+                                await engine.fetchHistory(30);
+                            }
+                        } catch (e) {
+                            console.error(e);
+                        }
+                    }
+
                     const fullCandles = engine.candles || [];
                     const state = engine.getState();
                     console.log(`[Server] Running backtest for ${currentBroker} (${command.strategyType}) with ${fullCandles.length} candles`);
@@ -102,6 +120,24 @@ async function startServer() {
                     }
                 } else if (command.type === 'RUN_GLOBAL_BACKTEST') {
                     const engine = engines[currentBroker] as any;
+                    
+                    if (engine.candles && engine.candles.length < 5000) {
+                        ws.send(JSON.stringify({ 
+                            type: 'BACKTEST_LOADING', 
+                            broker: currentBroker,
+                            message: 'در حال دریافت اطلاعات ۳۰ روز گذشته... لطفا کمی صبر کنید.'
+                        }));
+                        try {
+                            if (engine.fetchHistoricalCandles) {
+                                await engine.fetchHistoricalCandles(30);
+                            } else if (engine.fetchHistory) {
+                                await engine.fetchHistory(30);
+                            }
+                        } catch (e) {
+                            console.error(e);
+                        }
+                    }
+
                     const fullCandles = engine.candles || [];
                     const state = engine.getState();
                     console.log(`[Server] Running global backtest for ${currentBroker} with ${fullCandles.length} candles`);
