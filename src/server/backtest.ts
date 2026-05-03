@@ -9,6 +9,7 @@ export interface BacktestResult {
     maxDrawdown: number;
     tpHits: number;
     slHits: number;
+    riskFreeHits: number;
     bestHour: number;
     bestDay: string;
     trades: {
@@ -16,10 +17,11 @@ export interface BacktestResult {
         entry: number;
         exit: number;
         profit: number;
-        result: 'WIN' | 'LOSS';
+        result: 'WIN' | 'LOSS' | 'BREAKEVEN';
         entryTime: number;
         exitTime: number;
-        outcomeType: 'TP' | 'SL';
+        outcomeType: string;
+        maxTpReached: number;
     }[];
 }
 
@@ -43,6 +45,7 @@ export class BacktestEngine {
         let maxDrawdown = 0;
         let tpHits = 0;
         let slHits = 0;
+        let riskFreeHits = 0;
 
         // Statistics for best hour/day
         const hourStats: Record<number, number> = {};
@@ -61,12 +64,12 @@ export class BacktestEngine {
                     const entryMs = candles[i].time > 20000000000 ? candles[i].time : candles[i].time * 1000;
                     const exitMs = outcome.time > 20000000000 ? outcome.time : outcome.time * 1000;
 
-                    const trade = {
+                    const trade: any = {
                         type: signal.type,
                         entry: signal.entry,
                         exit: outcome.price,
                         profit: outcome.profit,
-                        result: outcome.profit > 0 ? 'WIN' : 'LOSS' as 'WIN' | 'LOSS',
+                        result: outcome.profit > 0 ? 'WIN' : (outcome.profit < 0 ? 'LOSS' : 'BREAKEVEN'),
                         entryTime: entryMs,
                         exitTime: exitMs,
                         outcomeType: outcome.outcomeType,
@@ -78,6 +81,7 @@ export class BacktestEngine {
 
                     if (trade.outcomeType.startsWith('TP')) tpHits++;
                     else if (trade.outcomeType === 'SL') slHits++;
+                    else if (trade.outcomeType === 'RISK_FREE') riskFreeHits++;
 
                     totalProfit += outcome.profit;
                     if (outcome.profit > 0) wins++;
@@ -133,9 +137,10 @@ export class BacktestEngine {
             maxDrawdown: maxDrawdown,
             tpHits,
             slHits,
+            riskFreeHits: riskFreeHits,
             bestHour,
             bestDay,
-            trades: trades
+            trades: trades as any // Array elements are checked against trade: any above
         };
     }
 
@@ -165,11 +170,19 @@ export class BacktestEngine {
         let exitPrice = 0;
         let time = 0;
         let outcomeType = '';
+        let riskFreeAt = 0; // The TP level index that triggered risk-free
 
         for (const c of future) {
             if (signal.type === 'BUY') {
-                if (c.high >= signal.tp1 && maxTpReached < 1) { maxTpReached = 1; exitPrice = signal.tp1; time = c.time; outcomeType = 'TP1'; }
-                if (signal.tp2 && c.high >= signal.tp2 && maxTpReached < 2) { maxTpReached = 2; exitPrice = signal.tp2; time = c.time; outcomeType = 'TP2'; }
+                // Check for TP hits
+                if (c.high >= signal.tp1 && maxTpReached < 1) { 
+                    maxTpReached = 1; exitPrice = signal.tp1; time = c.time; outcomeType = 'TP1'; 
+                    riskFreeAt = 1;
+                }
+                if (signal.tp2 && c.high >= signal.tp2 && maxTpReached < 2) { 
+                    maxTpReached = 2; exitPrice = signal.tp2; time = c.time; outcomeType = 'TP2'; 
+                    riskFreeAt = 2; // User mentioned TP1 or TP2
+                }
                 if (signal.tp3 && c.high >= signal.tp3 && maxTpReached < 3) { maxTpReached = 3; exitPrice = signal.tp3; time = c.time; outcomeType = 'TP3'; }
                 if (signal.tp4 && c.high >= signal.tp4 && maxTpReached < 4) { maxTpReached = 4; exitPrice = signal.tp4; time = c.time; outcomeType = 'TP4'; }
                 if (signal.tp5 && c.high >= signal.tp5 && maxTpReached < 5) { maxTpReached = 5; exitPrice = signal.tp5; time = c.time; outcomeType = 'TP5'; }
@@ -179,15 +192,31 @@ export class BacktestEngine {
                     break; 
                 }
 
-                if (c.low <= signal.sl) {
-                    if (maxTpReached === 0) {
-                        exitPrice = signal.sl; time = c.time; outcomeType = 'SL';
+                // Check for SL or Risk-Free exit
+                if (riskFreeAt > 0) {
+                    if (c.low <= signal.entry) {
+                        exitPrice = signal.entry;
+                        time = c.time;
+                        outcomeType = `RISK_FREE_AT_TP${riskFreeAt}`;
+                        break;
                     }
-                    break;
+                } else {
+                    if (c.low <= signal.sl) {
+                        exitPrice = signal.sl;
+                        time = c.time;
+                        outcomeType = 'SL';
+                        break;
+                    }
                 }
-            } else {
-                if (c.low <= signal.tp1 && maxTpReached < 1) { maxTpReached = 1; exitPrice = signal.tp1; time = c.time; outcomeType = 'TP1'; }
-                if (signal.tp2 && c.low <= signal.tp2 && maxTpReached < 2) { maxTpReached = 2; exitPrice = signal.tp2; time = c.time; outcomeType = 'TP2'; }
+            } else { // SELL
+                if (c.low <= signal.tp1 && maxTpReached < 1) { 
+                    maxTpReached = 1; exitPrice = signal.tp1; time = c.time; outcomeType = 'TP1'; 
+                    riskFreeAt = 1;
+                }
+                if (signal.tp2 && c.low <= signal.tp2 && maxTpReached < 2) { 
+                    maxTpReached = 2; exitPrice = signal.tp2; time = c.time; outcomeType = 'TP2'; 
+                    riskFreeAt = 2;
+                }
                 if (signal.tp3 && c.low <= signal.tp3 && maxTpReached < 3) { maxTpReached = 3; exitPrice = signal.tp3; time = c.time; outcomeType = 'TP3'; }
                 if (signal.tp4 && c.low <= signal.tp4 && maxTpReached < 4) { maxTpReached = 4; exitPrice = signal.tp4; time = c.time; outcomeType = 'TP4'; }
                 if (signal.tp5 && c.low <= signal.tp5 && maxTpReached < 5) { maxTpReached = 5; exitPrice = signal.tp5; time = c.time; outcomeType = 'TP5'; }
@@ -197,11 +226,20 @@ export class BacktestEngine {
                     break; 
                 }
 
-                if (c.high >= signal.sl) {
-                    if (maxTpReached === 0) {
-                        exitPrice = signal.sl; time = c.time; outcomeType = 'SL';
+                if (riskFreeAt > 0) {
+                    if (c.high >= signal.entry) {
+                        exitPrice = signal.entry;
+                        time = c.time;
+                        outcomeType = `RISK_FREE_AT_TP${riskFreeAt}`;
+                        break;
                     }
-                    break;
+                } else {
+                    if (c.high >= signal.sl) {
+                        exitPrice = signal.sl;
+                        time = c.time;
+                        outcomeType = 'SL';
+                        break;
+                    }
                 }
             }
         }
