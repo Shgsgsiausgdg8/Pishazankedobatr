@@ -22,6 +22,7 @@ export class AutoTrader {
         limitMode: 'virtual' as 'broker' | 'virtual', // <-- added
 
         autoRiskFree: false,
+        riskFreeMode: 'pips' as 'pips' | 'targets',
         riskFreePips: 100,
 
         portfoType: 1
@@ -39,13 +40,18 @@ export class AutoTrader {
     virtualLimitsFile = path.join(process.cwd(), 'virtual_limits.json');
     virtualLimits: Record<string, {tp: number, sl: number}> = {};
 
-    // Keep track of which orders have been risk-freed
-    riskFreedOrders = new Set<string>();
+    // Keep track of original signal for each order to move SL based on targets
+    orderSignals: Record<string, Signal> = {};
+    orderSignalsFile = path.join(process.cwd(), 'order_signals.json');
+
+    // Keep track of last hit TP level for each order (0=none, 1=TP1, etc.)
+    orderTpProgress: Record<string, number> = {};
 
     constructor() {
         this.client = new AlphaGoldClient();
         this.loadSettings();
         this.loadVirtualLimits();
+        this.loadOrderSignals();
         if (this.config.demoNumber) {
             this.client.setDemoNumber(this.config.demoNumber);
             this.connectLive();
@@ -81,6 +87,25 @@ export class AutoTrader {
     saveSettings() {
         try {
             fs.writeFileSync(this.settingsFile, JSON.stringify(this.config, null, 2));
+        } catch(e) {}
+    }
+
+    loadOrderSignals() {
+        try {
+            if (fs.existsSync(this.orderSignalsFile)) {
+                const data = JSON.parse(fs.readFileSync(this.orderSignalsFile, 'utf8'));
+                this.orderSignals = data.signals || {};
+                this.orderTpProgress = data.progress || {};
+            }
+        } catch(e) {}
+    }
+
+    saveOrderSignals() {
+        try {
+            fs.writeFileSync(this.orderSignalsFile, JSON.stringify({
+                signals: this.orderSignals,
+                progress: this.orderTpProgress
+            }, null, 2));
         } catch(e) {}
     }
 
@@ -135,11 +160,17 @@ export class AutoTrader {
         if (!this.config.autoRiskFree || !this.livePrice || this.openOrders.length === 0) return;
 
         for (const order of this.openOrders) {
-            if (this.riskFreedOrders.has(order.id)) continue;
-            
             const isBuy = order.side === 1;
             const entry = order.price;
-            const current = this.livePrice; // can use sale_price, but livePrice is faster
+            const current = this.livePrice;
+
+            if (this.config.riskFreeMode === 'targets') {
+                this.handleTargetBasedRiskFree(order);
+                continue;
+            }
+
+            // Legacy Pips mode
+            if (this.orderTpProgress[order.id] && this.orderTpProgress[order.id] > 0) continue; 
             
             // Calculate profit in pips (alpha gold 1 pip = 0.01)
             let profitPips = 0;
@@ -147,31 +178,82 @@ export class AutoTrader {
             else profitPips = (entry - current) * 100;
 
             if (profitPips >= this.config.riskFreePips) {
-                // Determine new SL (Entry point). We keep TP exactly the same.
-                const newSl = entry.toFixed(2);
-                const currentTp = order.profit_limit;
+                this.moveSL(order, entry, 0.5); // Level 0.5 means pips mode risk free
+            }
+        }
+    }
 
-                console.log(`[AutoTrader] Risk-Free Triggered for Order ${order.id}. Profit: ${profitPips.toFixed(1)} pips. Moving SL to ${newSl}`);
-                
-                // Add to set immediately to prevent duplicate API calls
-                this.riskFreedOrders.add(order.id);
+    handleTargetBasedRiskFree(order: any) {
+        const signal = this.orderSignals[order.id];
+        if (!signal) return;
 
-                if (this.config.limitMode === 'virtual') {
-                    // Update the virtual limit so the virtual monitor handles it
-                    if (this.virtualLimits[order.id]) {
-                        this.virtualLimits[order.id].sl = parseFloat(newSl);
-                        this.saveVirtualLimits();
-                        console.log(`[AutoTrader] Order ${order.id} is now Risk Free! Virtual SL moved to ${newSl}`);
-                    }
+        const isBuy = order.side === 1;
+        const current = this.livePrice;
+        const entry = order.price;
+        const currentProgress = this.orderTpProgress[order.id] || 0;
+
+        // Possible targets in order: TP1, TP2, TP3, TP4, TP5, TP6, TP7
+        const targets = [signal.tp1, signal.tp2, signal.tp3, signal.tp4, signal.tp5, signal.tp6, signal.tp7].filter(t => !!t) as number[];
+        
+        let newProgress = currentProgress;
+        let targetToMoveTo: number | null = null;
+
+        for (let i = 0; i < targets.length; i++) {
+            const targetLevel = i + 1;
+            if (targetLevel <= currentProgress) continue;
+
+            const targetPrice = targets[i];
+            const hit = isBuy ? (current >= targetPrice) : (current <= targetPrice);
+
+            if (hit) {
+                newProgress = targetLevel;
+                // Logic: 
+                // Hit TP1 -> move SL to Entry
+                // Hit TP2 -> move SL to TP1
+                // Hit TP3 -> move SL to TP2
+                if (targetLevel === 1) {
+                    targetToMoveTo = entry;
                 } else {
-                    this.client.editOrderDemo(order.id, newSl, currentTp).then(() => {
-                        console.log(`[AutoTrader] Order ${order.id} is now Risk Free! SL moved to ${newSl}`);
-                    }).catch(e => {
-                        console.error('[AutoTrader] Failed to set Risk Free', e.message);
-                        // If failed, remove from set so it tries again
-                        this.riskFreedOrders.delete(order.id);
-                    });
+                    targetToMoveTo = targets[i - 1]; // Previous TP
                 }
+            }
+        }
+
+        if (targetToMoveTo !== null) {
+            console.log(`[AutoTrader] Step-RiskFree Order ${order.id}: Reached TP${newProgress}. Moving SL to ${targetToMoveTo}`);
+            this.moveSL(order, targetToMoveTo, newProgress);
+        }
+    }
+
+    async moveSL(order: any, newSlPrice: number, progressLevel: number) {
+        const newSl = newSlPrice.toFixed(2);
+        const currentTp = order.profit_limit;
+
+        // Check if movement is valid (not moving back)
+        const currentSl = parseFloat(order.loss_limit);
+        if (currentSl) {
+            const isBuy = order.side === 1;
+            const isMovingBack = isBuy ? (parseFloat(newSl) < currentSl) : (parseFloat(newSl) > currentSl);
+            if (isMovingBack) return; 
+        }
+
+        // Update local state first to prevent repeats
+        this.orderTpProgress[order.id] = progressLevel;
+        this.saveOrderSignals();
+
+        if (this.config.limitMode === 'virtual') {
+            if (this.virtualLimits[order.id]) {
+                this.virtualLimits[order.id].sl = parseFloat(newSl);
+                this.saveVirtualLimits();
+                console.log(`[AutoTrader] Virtual SL for ${order.id} moved to ${newSl}`);
+            }
+        } else {
+            try {
+                await this.client.editOrderDemo(order.id, newSl, currentTp);
+                console.log(`[AutoTrader] Order ${order.id} SL moved to ${newSl} via Broker`);
+            } catch (e: any) {
+                console.error('[AutoTrader] Failed to move SL', e.message);
+                // Rollback if needed? Usually broker errors are valid reasons to retry
             }
         }
     }
@@ -267,6 +349,12 @@ export class AutoTrader {
             const response = await this.client.openFastOrderDemo(side, amount, lossParam, profitParam);
             console.log(`[AutoTrader] Order submitted successfully!`);
             
+            if (response && response.id) {
+                this.orderSignals[response.id] = signal;
+                this.orderTpProgress[response.id] = 0;
+                this.saveOrderSignals();
+            }
+
             // Wait for WebSocket to broadcast the open order before we assign the virtual limit
             if (this.config.enableTpSl && this.config.limitMode === 'virtual' && response && response.id) {
                 this.virtualLimits[response.id] = { tp, sl };

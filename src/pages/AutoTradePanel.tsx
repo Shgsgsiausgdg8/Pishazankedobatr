@@ -29,6 +29,7 @@ const AutoTradePanel = ({ onClose }: { onClose: () => void }) => {
         slPips: 200,
         limitMode: 'virtual',
         autoRiskFree: false,
+        riskFreeMode: 'pips',
         riskFreePips: 100,
         portfoType: 1
     });
@@ -402,14 +403,34 @@ const AutoTradePanel = ({ onClose }: { onClose: () => void }) => {
                                 </label>
                             </div>
                             {config.autoRiskFree && (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px' }}>
-                                    <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>فعال‌سازی در سود (پیپ):</div>
-                                    <input 
-                                        type="number" 
-                                        value={config.riskFreePips} 
-                                        onChange={e => updateConfig('riskFreePips', parseFloat(e.target.value))}
-                                        style={{ width: '80px', padding: '6px 10px', background: '#0f172a', border: '1px solid #334155', color: 'white', borderRadius: '6px', outline: 'none', fontSize: '0.9rem' }}
-                                    />
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '12px', padding: '12px', background: '#0f172a', borderRadius: '8px' }}>
+                                    <div>
+                                        <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.8rem', marginBottom: '8px' }}>منطق ریسک فری:</label>
+                                        <select 
+                                            value={config.riskFreeMode || 'pips'}
+                                            onChange={e => updateConfig('riskFreeMode', e.target.value)}
+                                            style={{ width: '100%', padding: '8px 12px', background: '#1e293b', border: '1px solid #334155', color: 'white', borderRadius: '6px', outline: 'none', fontSize: '0.85rem' }}
+                                        >
+                                            <option value="pips">بر اساس مقدار پیپس (ثابت)</option>
+                                            <option value="targets">بر اساس اهداف سیگنال (پله‌ای - پشنهادی)</option>
+                                        </select>
+                                    </div>
+                                    
+                                    {config.riskFreeMode === 'pips' ? (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                            <div style={{ color: '#94a3b8', fontSize: '0.8rem' }}>فعال‌سازی در سود (پیپ):</div>
+                                            <input 
+                                                type="number" 
+                                                value={config.riskFreePips} 
+                                                onChange={e => updateConfig('riskFreePips', parseFloat(e.target.value))}
+                                                style={{ width: '80px', padding: '6px 10px', background: '#1e293b', border: '1px solid #334155', color: 'white', borderRadius: '6px', outline: 'none', fontSize: '0.9rem' }}
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div style={{ color: '#10b981', fontSize: '0.75rem', lineHeight: '1.5' }}>
+                                            منطق پله‌ای: با رسیدن به TP1 ریست‌فری می‌شود. با رسیدن به TP2، حد ضرر به TP1 منتقل می‌شود و به همین ترتیب تا آخرین هدف.
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
