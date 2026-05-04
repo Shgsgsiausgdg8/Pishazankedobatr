@@ -375,8 +375,13 @@ export class AlphaGoldEngine {
                 })
             });
             console.log(`[Notification-Alpha] Signal sent to Bale.`);
-        } catch (error) {
-            console.error(`[Notification-Alpha] Failed to send to Bale:`, error);
+        } catch (error: any) {
+            const isNetworkError = error.message.includes('EAI_AGAIN') || error.message.includes('fetch failed');
+            if (isNetworkError) {
+                console.warn(`[Notification-Alpha] Bale server temporarily unreachable (Network error).`);
+            } else {
+                console.error(`[Notification-Alpha] Failed to send to Bale:`, error.message);
+            }
         }
     }
 

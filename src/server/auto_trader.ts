@@ -184,13 +184,14 @@ export class AutoTrader {
     }
 
     handleTargetBasedRiskFree(order: any) {
-        const signal = this.orderSignals[order.id];
+        const orderIdStr = String(order.id);
+        const signal = this.orderSignals[orderIdStr];
         if (!signal) return;
 
         const isBuy = order.side === 1;
         const current = this.livePrice;
-        const entry = order.price;
-        const currentProgress = this.orderTpProgress[order.id] || 0;
+        const entry = parseFloat(order.price);
+        const currentProgress = this.orderTpProgress[orderIdStr] || 0;
 
         // Possible targets in order: TP1, TP2, TP3, TP4, TP5, TP6, TP7
         const targets = [signal.tp1, signal.tp2, signal.tp3, signal.tp4, signal.tp5, signal.tp6, signal.tp7].filter(t => !!t) as number[];
@@ -203,7 +204,8 @@ export class AutoTrader {
             if (targetLevel <= currentProgress) continue;
 
             const targetPrice = targets[i];
-            const hit = isBuy ? (current >= targetPrice) : (current <= targetPrice);
+            // Added 0.05 margin for volatility
+            const hit = isBuy ? (current >= targetPrice - 0.05) : (current <= targetPrice + 0.05);
 
             if (hit) {
                 newProgress = targetLevel;
@@ -220,40 +222,50 @@ export class AutoTrader {
         }
 
         if (targetToMoveTo !== null) {
-            console.log(`[AutoTrader] Step-RiskFree Order ${order.id}: Reached TP${newProgress}. Moving SL to ${targetToMoveTo}`);
+            console.log(`[AutoTrader] STEP-RISKFREE: Order ${orderIdStr} reached TP${newProgress}. Price: ${current}. Moving SL to ${targetToMoveTo}`);
             this.moveSL(order, targetToMoveTo, newProgress);
         }
     }
 
     async moveSL(order: any, newSlPrice: number, progressLevel: number) {
+        const orderIdStr = String(order.id);
         const newSl = newSlPrice.toFixed(2);
         const currentTp = order.profit_limit;
 
         // Check if movement is valid (not moving back)
-        const currentSl = parseFloat(order.loss_limit);
-        if (currentSl) {
+        const currentSlStr = String(order.loss_limit || '');
+        const currentSl = parseFloat(currentSlStr);
+        
+        if (!isNaN(currentSl) && currentSl !== 0) {
             const isBuy = order.side === 1;
             const isMovingBack = isBuy ? (parseFloat(newSl) < currentSl) : (parseFloat(newSl) > currentSl);
-            if (isMovingBack) return; 
+            if (isMovingBack) {
+                console.log(`[AutoTrader] Skip SL Move for ${orderIdStr}: new SL ${newSl} would be worse than current ${currentSl}`);
+                return; 
+            }
         }
 
         // Update local state first to prevent repeats
-        this.orderTpProgress[order.id] = progressLevel;
+        this.orderTpProgress[orderIdStr] = progressLevel;
         this.saveOrderSignals();
 
         if (this.config.limitMode === 'virtual') {
-            if (this.virtualLimits[order.id]) {
-                this.virtualLimits[order.id].sl = parseFloat(newSl);
+            if (this.virtualLimits[orderIdStr]) {
+                this.virtualLimits[orderIdStr].sl = parseFloat(newSl);
                 this.saveVirtualLimits();
-                console.log(`[AutoTrader] Virtual SL for ${order.id} moved to ${newSl}`);
+                console.log(`[AutoTrader] Virtual SL for ${orderIdStr} moved to ${newSl}`);
+            } else {
+                // If not in virtualLimits, maybe it just arrived. Try mapping now
+                this.virtualLimits[orderIdStr] = { tp: parseFloat(order.profit_limit || '0'), sl: parseFloat(newSl) };
+                this.saveVirtualLimits();
             }
         } else {
             try {
-                await this.client.editOrderDemo(order.id, newSl, currentTp);
-                console.log(`[AutoTrader] Order ${order.id} SL moved to ${newSl} via Broker`);
+                await this.client.editOrderDemo(orderIdStr, newSl, currentTp);
+                console.log(`[AutoTrader] Order ${orderIdStr} SL moved to ${newSl} via Broker`);
             } catch (e: any) {
-                console.error('[AutoTrader] Failed to move SL', e.message);
-                // Rollback if needed? Usually broker errors are valid reasons to retry
+                console.error(`[AutoTrader] Failed to move SL for ${orderIdStr}:`, e.message);
+                // We keep it in progress so we don't spam errors
             }
         }
     }
@@ -346,30 +358,56 @@ export class AutoTrader {
             const profitParam = shouldSendLimitsToBroker ? tp.toFixed(2) : '';
 
             // Wait for response to get the order ID
-            const response = await this.client.openFastOrderDemo(side, amount, lossParam, profitParam);
+            let response;
+            let retries = 0;
+            const maxRetries = 2;
+            
+            while (retries <= maxRetries) {
+                try {
+                    response = await this.client.openFastOrderDemo(side, amount, lossParam, profitParam);
+                    break; 
+                } catch (err: any) {
+                    const isNetworkError = err.message.includes('EAI_AGAIN') || err.message.includes('ECONN') || err.message.includes('fetch failed');
+                    if (isNetworkError && retries < maxRetries) {
+                        retries++;
+                        console.log(`[AutoTrader] Network error, retrying (${retries}/${maxRetries})...`);
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        continue;
+                    }
+                    throw err;
+                }
+            }
+            
             console.log(`[AutoTrader] Order submitted successfully!`);
             
-            if (response && response.id) {
-                this.orderSignals[response.id] = signal;
-                this.orderTpProgress[response.id] = 0;
+            const orderId = response?.id || response?.order_id || (response?.data?.id);
+            if (orderId) {
+                const finalId = String(orderId);
+                this.orderSignals[finalId] = signal;
+                this.orderTpProgress[finalId] = 0;
                 this.saveOrderSignals();
+                console.log(`[AutoTrader] Signal mapped to Order ID: ${finalId}`);
+            } else {
+                console.warn(`[AutoTrader] Could not find ID in broker response:`, response);
             }
 
             // Wait for WebSocket to broadcast the open order before we assign the virtual limit
-            if (this.config.enableTpSl && this.config.limitMode === 'virtual' && response && response.id) {
-                this.virtualLimits[response.id] = { tp, sl };
+            if (this.config.enableTpSl && this.config.limitMode === 'virtual' && orderId) {
+                const finalId = String(orderId);
+                this.virtualLimits[finalId] = { tp, sl };
                 this.saveVirtualLimits();
-                console.log(`[AutoTrader] Virtual Limits saved for Order ${response.id}`);
+                console.log(`[AutoTrader] Virtual Limits saved for Order ${finalId}`);
             } else if (this.config.enableTpSl && this.config.limitMode === 'virtual') {
                  // Fallback: If we don't know order ID from response, maybe we can fetch orders
                  // or just attach to the newest order we see in websocket that doesn't have a limit
                  setTimeout(() => {
-                     const ordersWithoutLimit = this.openOrders.filter(o => !this.virtualLimits[o.id]);
+                     const ordersWithoutLimit = this.openOrders.filter(o => !this.virtualLimits[String(o.id)]);
                      if (ordersWithoutLimit.length > 0) {
                          const matchOrder = ordersWithoutLimit[0];
-                         this.virtualLimits[matchOrder.id] = { tp, sl };
+                         const finalId = String(matchOrder.id);
+                         this.virtualLimits[finalId] = { tp, sl };
                          this.saveVirtualLimits();
-                         console.log(`[AutoTrader] Virtual Limits mapped via WS fallback for Order ${matchOrder.id}`);
+                         console.log(`[AutoTrader] Virtual Limits mapped via WS fallback for Order ${finalId}`);
                      }
                  }, 3000);
             }
