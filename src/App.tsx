@@ -74,56 +74,57 @@ const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount, active
     const prices = visibleData.flatMap(d => [d.high, d.low]);
     const minPrice = Math.min(...prices);
     const maxPrice = Math.max(...prices);
-    const priceRange = (maxPrice - minPrice) || 1;
-    const yBuffer = priceRange * 0.1;
+    const priceRange = (maxPrice - minPrice) || 0.1;
+    const yBuffer = priceRange * 0.15;
     const displayMin = minPrice - yBuffer;
     const displayMax = maxPrice + yBuffer;
     const displayRange = displayMax - displayMin;
 
-    const getX = (index: number) => currentOffset + (index * candleWidth);
+    const getX = (index: number) => Math.round(currentOffset + (index * candleWidth));
     const getY = (price: number) => {
       const y = paddingTop + chartHeight - ((price - displayMin) / displayRange) * chartHeight;
-      return Number.isNaN(y) ? 0 : y;
+      return y;
     };
 
     // Clear background
+    ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = '#020617';
     ctx.fillRect(0, 0, width, height);
 
     // Draw Grid & Labels
     ctx.strokeStyle = '#1e293b';
     ctx.lineWidth = 1;
-    ctx.setLineDash([5, 5]);
+    ctx.setLineDash([4, 4]);
     ctx.fillStyle = '#94a3b8';
     ctx.font = '10px JetBrains Mono';
 
-    const gridLines = 6;
+    const gridLines = 8;
     for (let i = 0; i <= gridLines; i++) {
-      const y = paddingTop + (i / gridLines) * chartHeight;
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(chartWidth, y);
-      ctx.stroke();
+        const y = Math.round(paddingTop + (i / gridLines) * chartHeight);
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(chartWidth, y);
+        ctx.stroke();
 
-      const price = displayMax - (i / gridLines) * displayRange;
-      ctx.fillText(Math.round(price).toLocaleString(), chartWidth + 5, y + 4);
+        const priceValue = displayMax - (i / gridLines) * displayRange;
+        ctx.fillText(priceValue.toLocaleString(undefined, { minimumFractionDigits: 1 }), chartWidth + 5, y + 4);
     }
     ctx.setLineDash([]);
 
     // Draw Levels
     levels.forEach(level => {
       if (level.price >= displayMin && level.price <= displayMax) {
-        const y = getY(level.price);
-        ctx.strokeStyle = level.type === 'RESISTANCE' ? 'rgba(239, 68, 68, 0.4)' : 'rgba(16, 185, 129, 0.4)';
-        ctx.lineWidth = 1;
+        const y = Math.round(getY(level.price));
+        ctx.strokeStyle = level.type === 'RESISTANCE' ? 'rgba(239, 68, 68, 0.45)' : 'rgba(16, 185, 129, 0.45)';
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(chartWidth, y);
         ctx.stroke();
         
-        ctx.fillStyle = level.type === 'RESISTANCE' ? 'rgba(239, 68, 68, 0.8)' : 'rgba(16, 185, 129, 0.8)';
-        ctx.font = '8px JetBrains Mono'; // Smaller font
-        ctx.fillText(level.type === 'RESISTANCE' ? 'RES' : 'SUP', 2, y - 2);
+        ctx.fillStyle = level.type === 'RESISTANCE' ? '#ef4444' : '#10b981';
+        ctx.font = '8px Inter';
+        ctx.fillText(level.type === 'RESISTANCE' ? 'RES' : 'SUP', chartWidth - 25, y - 4);
       }
     });
 
@@ -140,16 +141,19 @@ const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount, active
       ctx.strokeStyle = isUp ? '#10b981' : '#ef4444';
       ctx.fillStyle = isUp ? '#10b981' : '#ef4444';
       
-      // Wick
+      // Wick - Round X for sharpness
+      ctx.lineWidth = Math.max(1, candleWidth * 0.1);
       ctx.beginPath();
-      ctx.moveTo(x, highY);
-      ctx.lineTo(x, lowY);
+      ctx.moveTo(x, Math.round(highY));
+      ctx.lineTo(x, Math.round(lowY));
       ctx.stroke();
 
       // Body
-      const bWidth = candleWidth * 0.7;
-      const bodyHeight = Math.max(Math.abs(closeY - openY), 1);
-      ctx.fillRect(x - bWidth / 2, Math.min(openY, closeY), bWidth, bodyHeight);
+      const bWidth = Math.max(1, candleWidth * 0.8);
+      const bodyTop = Math.round(Math.min(openY, closeY));
+      const bodyBottom = Math.round(Math.max(openY, closeY));
+      const bHeight = Math.max(1, bodyBottom - bodyTop);
+      ctx.fillRect(Math.round(x - bWidth / 2), bodyTop, Math.round(bWidth), bHeight);
     });
 
     // Crosshair

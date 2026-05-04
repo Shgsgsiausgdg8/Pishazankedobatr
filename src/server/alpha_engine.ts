@@ -261,24 +261,23 @@ export class AlphaGoldEngine {
             return;
         }
 
-        const last = this.candles[this.candles.length - 1];
+        // Optimization: Only check the last few candles, not 50,000!
+        const lastIndex = this.candles.length - 1;
+        let found = false;
+        for (let i = lastIndex; i >= Math.max(0, lastIndex - 5); i--) {
+            if (this.candles[i].time === cTime) {
+                this.candles[i].high = Math.max(this.candles[i].high, newPrice);
+                this.candles[i].low = Math.min(this.candles[i].low, newPrice);
+                this.candles[i].close = newPrice;
+                found = true;
+                break;
+            }
+        }
 
-        if (cTime > last.time) {
-            // Check if we already have a candle for this time (e.g. from a past tick that was slightly off)
-            const existing = this.candles.find(c => c.time === cTime);
-            if (existing) {
-                existing.high = Math.max(existing.high, newPrice);
-                existing.low = Math.min(existing.low, newPrice);
-                existing.close = newPrice;
-            } else {
+        if (!found) {
+            if (cTime > this.candles[lastIndex].time) {
                 this.createNewCandle(cTime, newPrice);
             }
-        } else {
-            // Match exactly with cTime for the current candle
-            const current = this.candles.find(c => c.time === cTime) || last;
-            current.high = Math.max(current.high, newPrice);
-            current.low = Math.min(current.low, newPrice);
-            current.close = newPrice;
         }
 
         if (now - this.lastLevelsUpdate > 1000) {

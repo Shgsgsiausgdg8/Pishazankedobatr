@@ -36,6 +36,11 @@ export class BacktestEngine {
         if (config) {
             strategy.updateConfig(config);
         }
+
+        // --- CRITICAL FIX: Limit candles to prevent OOM ---
+        const maxProcess = 5000;
+        const testCandles = candles.slice(-maxProcess);
+        
         const trades = [];
         let buyTradesCount = 0;
         let sellTradesCount = 0;
@@ -54,15 +59,15 @@ export class BacktestEngine {
         const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
         // Iterate through candles to find signals
-        for (let i = 50; i < candles.length - 10; i++) {
+        for (let i = 50; i < testCandles.length - 10; i++) {
             // Optimization: avoid slicing large datasets repeatedly where possible
-            const window = candles.slice(Math.max(0, i - 1000), i + 1);
+            const window = testCandles.slice(Math.max(0, i - 1000), i + 1);
             const signal = strategy.analyze(window, timeframe, strategyType);
 
             if (signal) {
-                const outcome = this.findOutcome(candles.slice(i + 1), signal);
+                const outcome = this.findOutcome(testCandles.slice(i + 1), signal);
                 if (outcome) {
-                    const entryMs = candles[i].time > 20000000000 ? candles[i].time : candles[i].time * 1000;
+                    const entryMs = testCandles[i].time > 20000000000 ? testCandles[i].time : testCandles[i].time * 1000;
                     const exitMs = outcome.time > 20000000000 ? outcome.time : outcome.time * 1000;
 
                     const trade: any = {
@@ -144,7 +149,7 @@ export class BacktestEngine {
             riskFreeHits: riskFreeHits,
             bestHour,
             bestDay,
-            trades: trades as any // Array elements are checked against trade: any above
+            trades: (trades.length > 200 ? trades.slice(-200) : trades) as any
         };
     }
 
