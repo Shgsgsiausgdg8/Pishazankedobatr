@@ -171,16 +171,19 @@ export class AlphaGoldClient {
         if (!this.demoNumber) throw new Error("Demo number is missing.");
         
         const url = `${DEMO_BASE}/api/order/ounce/edit/opened/orders/${orderId}/?demo_number=${this.demoNumber}`;
+        
+        // Ensure values are strings formatted with 2 decimals if they are numbers
         const body = {
-            profit_limit: String(profit),
-            loss_limit: String(loss)
+            profit_limit: typeof profit === 'number' ? profit.toFixed(2) : String(profit),
+            loss_limit: typeof loss === 'number' ? loss.toFixed(2) : String(loss)
         };
 
         console.log(`[AlphaClient] EDIT REQUEST: ${url}`);
         console.log(`[AlphaClient] PAYLOAD:`, JSON.stringify(body));
 
         try {
-            const { data } = await axios.put(url, body, { 
+            // Logic change: Use POST instead of PUT as confirmed by user logs
+            const { data } = await axios.post(url, body, { 
                 headers: { 'Content-Type': 'application/json' } 
             });
             console.log(`[AlphaClient] EDIT SUCCESS:`, JSON.stringify(data));
