@@ -201,11 +201,12 @@ export class AutoTrader {
 
         for (let i = 0; i < targets.length; i++) {
             const targetLevel = i + 1;
+            const targetPrice = targets[i];
+            const hit = isBuy ? (current >= targetPrice - 0.05) : (current <= targetPrice + 0.05);
+
             if (targetLevel <= currentProgress) continue;
 
-            const targetPrice = targets[i];
-            // Added 0.05 margin for volatility
-            const hit = isBuy ? (current >= targetPrice - 0.05) : (current <= targetPrice + 0.05);
+            console.log(`[AutoTrader] Order ${orderIdStr} check TP${targetLevel}. Price: ${current}, Target: ${targetPrice}, Hit: ${hit}`);
 
             if (hit) {
                 newProgress = targetLevel;

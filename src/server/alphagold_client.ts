@@ -169,15 +169,26 @@ export class AlphaGoldClient {
      */
     async editOrderDemo(orderId: string, loss: number | string = '', profit: number | string = '') {
         if (!this.demoNumber) throw new Error("Demo number is missing.");
-        const { data } = await axios.put(
-            `${DEMO_BASE}/api/order/ounce/edit/opened/orders/${orderId}/?demo_number=${this.demoNumber}`,
-            {
-                profit_limit: String(profit),
-                loss_limit: String(loss)
-            },
-            { headers: { 'Content-Type': 'application/json' } }
-        );
-        return data;
+        
+        const url = `${DEMO_BASE}/api/order/ounce/edit/opened/orders/${orderId}/?demo_number=${this.demoNumber}`;
+        const body = {
+            profit_limit: String(profit),
+            loss_limit: String(loss)
+        };
+
+        console.log(`[AlphaClient] EDIT REQUEST: ${url}`);
+        console.log(`[AlphaClient] PAYLOAD:`, JSON.stringify(body));
+
+        try {
+            const { data } = await axios.put(url, body, { 
+                headers: { 'Content-Type': 'application/json' } 
+            });
+            console.log(`[AlphaClient] EDIT SUCCESS:`, JSON.stringify(data));
+            return data;
+        } catch (error: any) {
+            console.error(`[AlphaClient] EDIT FAILED:`, error.response?.data || error.message);
+            throw error;
+        }
     }
 
     // ----------------------- WEBSOCKET (LIVE DATA) -----------------------
