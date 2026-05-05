@@ -217,10 +217,22 @@ export class AlphaGoldClient {
             if (callbacks.onOpen) callbacks.onOpen();
         });
 
+        let loggedKeys = false;
         ws.on('message', (raw) => {
             try {
                 const msg = JSON.parse(raw.toString());
-                if (msg.orders?.price && callbacks.onPrice) callbacks.onPrice(msg.orders.price);
+                if (!loggedKeys && Math.random() < 0.1) {
+                    console.log('[AlphaGold-WS] MSG KEYS:', Object.keys(msg));
+                    if (msg.orders) console.log('[AlphaGold-WS] MSG.ORDERS:', JSON.stringify(msg.orders));
+                    if (msg.portfo) console.log('[AlphaGold-WS] MSG.PORTFO:', JSON.stringify(msg.portfo));
+                    loggedKeys = true;
+                }
+                
+                const livePrice = msg.orders?.price || msg.portfo?.price || msg.portfo?.asset_price || msg.price;
+                if (livePrice && callbacks.onPrice) {
+                    callbacks.onPrice(String(livePrice));
+                }
+                
                 if (msg.open_orders && callbacks.onOpenOrders) callbacks.onOpenOrders(msg.open_orders);
                 if (msg.portfo && callbacks.onPortfo) callbacks.onPortfo(msg.portfo);
                 if (msg.closed_orders && callbacks.onClosedOrders) callbacks.onClosedOrders(msg.closed_orders);

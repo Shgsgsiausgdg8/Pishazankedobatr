@@ -196,13 +196,19 @@ export class AutoTrader {
         const currentProgress = this.orderTpProgress[orderIdStr] || 0;
 
         // Possible targets in order: extract and sanitize
-        let rawTargets = [signal.tp1, signal.tp2, signal.tp3, signal.tp4, signal.tp5, signal.tp6, signal.tp7].filter(t => !!t && !isNaN(t as number)) as number[];
+        let rawTargets = [signal.tp1, signal.tp2, signal.tp3, signal.tp4, signal.tp5, signal.tp6, signal.tp7]
+            .map(t => typeof t === 'string' ? parseFloat(t) : t)
+            .filter(t => t !== undefined && t !== null && !isNaN(t as number)) as number[];
+        
+        // Define base comparison entry to prevent small slippage from breaking structure
+        // E.g., if order.price slipped PAST TP1, valid targets logic might drop TP1
+        const signalEntry = parseFloat(String(signal.entry)) || entry;
         
         let validTargets: number[] = [];
         if (isBuy) {
-            validTargets = rawTargets.filter(t => t > entry).sort((a,b) => a - b);
+            validTargets = rawTargets.filter(t => t > signalEntry).sort((a,b) => a - b);
         } else {
-            validTargets = rawTargets.filter(t => t < entry).sort((a,b) => b - a);
+            validTargets = rawTargets.filter(t => t < signalEntry).sort((a,b) => b - a);
         }
 
         let newProgress = currentProgress;
@@ -419,22 +425,35 @@ export class AutoTrader {
             }
 
             // Wait for WebSocket to broadcast the open order before we assign the virtual limit
-            if (this.config.enableTpSl && this.config.limitMode === 'virtual' && orderId) {
-                const finalId = String(orderId);
-                this.virtualLimits[finalId] = { tp, sl };
-                this.saveVirtualLimits();
-                console.log(`[AutoTrader] Virtual Limits saved for Order ${finalId}`);
-            } else if (this.config.enableTpSl && this.config.limitMode === 'virtual') {
+            if (orderId) {
+                if (this.config.enableTpSl && this.config.limitMode === 'virtual') {
+                    const finalId = String(orderId);
+                    this.virtualLimits[finalId] = { tp, sl };
+                    this.saveVirtualLimits();
+                    console.log(`[AutoTrader] Virtual Limits saved for Order ${finalId}`);
+                }
+            } else {
                  // Fallback: If we don't know order ID from response, maybe we can fetch orders
-                 // or just attach to the newest order we see in websocket that doesn't have a limit
+                 // or just attach to the newest order we see in websocket that isn't mapped
                  setTimeout(() => {
-                     const ordersWithoutLimit = this.openOrders.filter(o => !this.virtualLimits[String(o.id)]);
-                     if (ordersWithoutLimit.length > 0) {
-                         const matchOrder = ordersWithoutLimit[0];
-                         const finalId = String(matchOrder.id);
-                         this.virtualLimits[finalId] = { tp, sl };
-                         this.saveVirtualLimits();
-                         console.log(`[AutoTrader] Virtual Limits mapped via WS fallback for Order ${finalId}`);
+                     const fallbackOrder = this.openOrders.find(o => !this.orderSignals[String(o.id)]);
+                     if (fallbackOrder) {
+                         const finalId = String(fallbackOrder.id);
+                         
+                         // Map the signal
+                         this.orderSignals[finalId] = signal;
+                         this.orderTpProgress[finalId] = 0;
+                         this.saveOrderSignals();
+                         console.log(`[AutoTrader] Signal mapped via WS fallback for Order ID: ${finalId}`);
+
+                         // Map the virtual limit if needed
+                         if (this.config.enableTpSl && this.config.limitMode === 'virtual') {
+                             this.virtualLimits[finalId] = { tp, sl };
+                             this.saveVirtualLimits();
+                             console.log(`[AutoTrader] Virtual Limits mapped via WS fallback for Order ${finalId}`);
+                         }
+                     } else {
+                         console.log(`[AutoTrader] WS fallback failed. No unmapped open order found for signal.`);
                      }
                  }, 3000);
             }
