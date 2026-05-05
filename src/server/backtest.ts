@@ -37,11 +37,12 @@ export class BacktestEngine {
             strategy.updateConfig(config);
         }
 
-        // --- CRITICAL FIX: Limit candles to prevent OOM ---
-        const maxProcess = 5000;
+        // --- CRITICAL FIX: Further limit candles for performance ---
+        // 3000 candles is enough for a deep backtest on 1m/5m history
+        const maxProcess = 3000;
         const testCandles = candles.slice(-maxProcess);
         
-        const trades = [];
+        let trades: any[] = [];
         let buyTradesCount = 0;
         let sellTradesCount = 0;
         let totalProfit = 0;
@@ -148,7 +149,7 @@ export class BacktestEngine {
             }
         }
 
-        return {
+        const finalResult = {
             totalTrades: trades.length,
             buyTrades: buyTradesCount,
             sellTrades: sellTradesCount,
@@ -162,6 +163,13 @@ export class BacktestEngine {
             bestDay,
             trades: (trades.length > 200 ? trades.slice(-200) : trades) as any
         };
+
+        // EXPLICIT CLEANUP FOR GC
+        trades = [];
+        (testCandles as any) = null;
+        (strategy as any) = null;
+
+        return finalResult;
     }
 
     /**

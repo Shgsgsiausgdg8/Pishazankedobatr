@@ -7,6 +7,8 @@ export class BtcEngine {
     price = 0;
     timeframe = '1';
     candles: Candle[] = [];
+    backtestResults: any = null;
+    trades: any[] = [];
     signals: Signal[] = [];
     levels: any[] = [];
     
@@ -369,6 +371,11 @@ export class BtcEngine {
         if (this.ws && this.ws.readyState === 1) { // 1 is WebSocket.OPEN
             this.ws.send(`42/customer,["join-room","symbol-room-@BTCUSDT_FUTURES@${this.timeframe}@0"]`);
         }
+    }
+
+    clearResults() {
+        this.backtestResults = null;
+        this.trades = [];
     }
 
     getState() {
