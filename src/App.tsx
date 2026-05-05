@@ -82,12 +82,12 @@ const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount, active
     const displayRange = displayMax - displayMin;
 
     const getX = (index: number) => {
-      // Use floor for pixel-perfect alignment
+      // Direct calculation for speed
       return Math.floor(currentOffset + (index * candleWidth));
     };
 
     const getY = (price: number) => {
-      // Precision for price levels
+      // Direct calculation with floor for vertical positioning
       return paddingTop + chartHeight - ((price - displayMin) / displayRange) * chartHeight;
     };
 
@@ -251,33 +251,31 @@ const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount, active
         ctx.shadowColor = nPattern.type === 'BUY' ? 'rgba(16, 185, 129, 0.8)' : 'rgba(239, 68, 68, 0.8)';
       }
       
+      // Pre-map points to indices to avoid repeated findIndex calls
+      const pointsWithIndices = nPattern.points.map((p: any) => {
+        const cIdx = data.findIndex(c => c.time === p.time);
+        return { ...p, candleIndex: cIdx };
+      });
+      
       ctx.beginPath();
       let drewFirst = false;
       const lastCandleIdx = data.length - 1;
+      const lastTime = data.length > 0 ? data[lastCandleIdx].time : 0;
+      const firstTime = data.length > 0 ? data[0].time : 0;
       const candleInterval = data.length > 1 ? data[1].time - data[0].time : 60000;
 
-      // محاسبه ایندکس شروع برای همگام‌سازی با ایندکس‌های مطلق سرور
-      const sliceStart = Math.max(0, originalCandlesCount - data.length);
-
-      nPattern.points.forEach((p: any) => {
+      pointsWithIndices.forEach((p: any) => {
         let x = NaN;
         
-        // Find index by time for more stable drawing across data updates
-        const cIdx = data.findIndex(c => c.time === p.time);
-        if (cIdx !== -1) {
-          x = getX(cIdx);
+        if (p.candleIndex !== -1) {
+          x = getX(p.candleIndex);
         } else if (data.length > 0) {
-          // Fallback interpolation for points outside current range
-          const firstTime = data[0].time;
-          const lastTime = data[data.length - 1].time;
-          const candleInterval = data.length > 1 ? data[1].time - data[0].time : 60000;
-          
           if (p.time > lastTime) {
             const offset = (p.time - lastTime) / candleInterval;
             x = getX(data.length - 1 + offset);
           } else if (p.time < firstTime) {
             const offset = (p.time - firstTime) / candleInterval;
-            x = getX(offset);
+            x = getX((p.time - firstTime) / candleInterval);
           }
         }
         
@@ -299,18 +297,13 @@ const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount, active
       
       // Draw labels A, B, C, D with high visibility (Only if N-Pattern strategy is active)
       if (nPattern && data && data.length > 0 && nPattern.points && (activeStrategy === 'N-PATTERN' || !activeStrategy)) {
-        nPattern.points.forEach((p: any) => {
-            let x = 0;
-            if (p.index !== undefined) {
-                x = getX(p.index - sliceStart);
+        pointsWithIndices.forEach((p: any) => {
+            let x = NaN;
+            if (p.candleIndex !== -1) {
+                x = getX(p.candleIndex);
             } else {
-                const cIdx = data.findIndex(c => c.time === p.time);
-                if (cIdx !== -1) {
-                    x = getX(cIdx);
-                } else {
-                    let offset = (p.time - data[lastCandleIdx].time) / candleInterval;
-                    x = getX(lastCandleIdx + Math.min(Math.max(offset, -50), 50));
-                }
+                let offset = (p.time - lastTime) / candleInterval;
+                x = getX(data.length - 1 + Math.min(Math.max(offset, -50), 50));
             }
             const y = getY(p.price);
             if (Number.isNaN(x) || Number.isNaN(y)) return;
@@ -557,20 +550,20 @@ export default function App() {
                   return { ...msg.data, broker: msg.broker };
                 }
                 
-                // Merge candles to maintain history while receiving updates
+                // Merge candles more efficiently using a Map
                 const newCandles = msg.data.candles || [];
-                const merged = [...(prev.candles || [])];
+                const mergedMap = new Map();
                 
-                newCandles.forEach((nc: any) => {
-                  const idx = merged.findIndex(c => c.time === nc.time);
-                  if (idx !== -1) {
-                    merged[idx] = nc;
-                  } else {
-                    merged.push(nc);
-                  }
-                });
+                // Add existing candles to map
+                if (prev.candles) {
+                  prev.candles.forEach((c: any) => mergedMap.set(c.time, c));
+                }
                 
-                merged.sort((a, b) => a.time - b.time);
+                // Overwrite with new candles
+                newCandles.forEach((nc: any) => mergedMap.set(nc.time, nc));
+                
+                // Convert back to sorted array
+                const merged = Array.from(mergedMap.values()).sort((a, b) => a.time - b.time);
                 
                 // Keep last 3000 candles in memory for the UI
                 const finalCandles = merged.slice(-3000);

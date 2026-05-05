@@ -56,10 +56,18 @@ async function startServer() {
             if (engine && ws.readyState === WebSocket.OPEN) {
                 const state = engine.getState();
                 
-                // OPTIMIZATION: Limit candles sent to client to 2000 for UI performance
-                // Full history stays on server for backtesting
-                if (state.candles && state.candles.length > 2000) {
-                    state.candles = state.candles.slice(-2000);
+                // DATA CONSERVATION: 
+                // Only send full history (last 2000 candles) during INIT.
+                // Regular UPDATES only send the most recent candles (last 5).
+                if (state.candles) {
+                    if (type === 'INIT') {
+                        if (state.candles.length > 2000) {
+                            state.candles = state.candles.slice(-2000);
+                        }
+                    } else {
+                        // For heartbeats, only send the latest candles to save bandwidth
+                        state.candles = state.candles.slice(-5);
+                    }
                 }
 
                 ws.send(JSON.stringify({ 
