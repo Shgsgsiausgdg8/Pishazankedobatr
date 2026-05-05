@@ -160,7 +160,8 @@ export class AutoTrader {
         if (!this.config.autoRiskFree || !this.livePrice || this.openOrders.length === 0) return;
 
         for (const order of this.openOrders) {
-            const isBuy = order.side === 1;
+            const sideVal = String(order.side).toLowerCase();
+            const isBuy = sideVal === '1' || sideVal === 'buy';
             const entry = order.price;
             const current = this.livePrice;
 
@@ -188,20 +189,28 @@ export class AutoTrader {
         const signal = this.orderSignals[orderIdStr];
         if (!signal) return;
 
-        const isBuy = order.side === 1;
+        const sideVal = String(order.side).toLowerCase();
+        const isBuy = sideVal === '1' || sideVal === 'buy';
         const current = this.livePrice;
         const entry = parseFloat(order.price);
         const currentProgress = this.orderTpProgress[orderIdStr] || 0;
 
-        // Possible targets in order: TP1, TP2, TP3, TP4, TP5, TP6, TP7
-        const targets = [signal.tp1, signal.tp2, signal.tp3, signal.tp4, signal.tp5, signal.tp6, signal.tp7].filter(t => !!t) as number[];
+        // Possible targets in order: extract and sanitize
+        let rawTargets = [signal.tp1, signal.tp2, signal.tp3, signal.tp4, signal.tp5, signal.tp6, signal.tp7].filter(t => !!t && !isNaN(t as number)) as number[];
         
+        let validTargets: number[] = [];
+        if (isBuy) {
+            validTargets = rawTargets.filter(t => t > entry).sort((a,b) => a - b);
+        } else {
+            validTargets = rawTargets.filter(t => t < entry).sort((a,b) => b - a);
+        }
+
         let newProgress = currentProgress;
         let targetToMoveTo: number | null = null;
 
-        for (let i = 0; i < targets.length; i++) {
+        for (let i = 0; i < validTargets.length; i++) {
             const targetLevel = i + 1;
-            const targetPrice = targets[i];
+            const targetPrice = validTargets[i];
             const hit = isBuy ? (current >= targetPrice - 0.05) : (current <= targetPrice + 0.05);
 
             if (targetLevel <= currentProgress) continue;
@@ -217,7 +226,7 @@ export class AutoTrader {
                 if (targetLevel === 1) {
                     targetToMoveTo = entry;
                 } else {
-                    targetToMoveTo = targets[i - 1]; // Previous TP
+                    targetToMoveTo = validTargets[i - 1]; // Previous TP
                 }
             }
         }
@@ -247,7 +256,8 @@ export class AutoTrader {
         const currentSl = parseFloat(currentSlStr);
         
         if (!isNaN(currentSl) && currentSl !== 0) {
-            const isBuy = order.side === 1;
+            const sideVal = String(order.side).toLowerCase();
+            const isBuy = sideVal === '1' || sideVal === 'buy';
             const isMovingBack = isBuy ? (parseFloat(newSl) < currentSl) : (parseFloat(newSl) > currentSl);
             if (isMovingBack) {
                 console.log(`[AutoTrader] Skip SL Move for ${orderIdStr}: new SL ${newSl} would be worse than current ${currentSl}`);
@@ -297,7 +307,8 @@ export class AutoTrader {
             if (!limits) continue;
             if (this.closingOrders.has(order.id)) continue;
 
-            const isBuy = order.side === 1;
+            const sideVal = String(order.side).toLowerCase();
+            const isBuy = sideVal === '1' || sideVal === 'buy';
             const current = this.livePrice;
 
             let shouldClose = false;
