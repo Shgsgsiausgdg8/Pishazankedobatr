@@ -101,16 +101,17 @@ export class FarazGoldEngine {
                 try {
                     const data = JSON.parse(text);
                     if (Array.isArray(data) && data.length > 0) {
-                        const chunk = data.map((b) => ({
-                            time: b.time > 20000000000 ? b.time : b.time * 1000,
-                            open: parseFloat(b.open || b.close),
-                            high: parseFloat(b.high || b.close),
-                            low: parseFloat(b.low || b.close),
-                            close: parseFloat(b.close)
-                        }));
-                        
-                        allCandles = [...chunk, ...allCandles];
-                        to = Math.floor(chunk[0].time / 1000) - 1;
+                        // Optimization: Use unshift/push instead of spread for performance
+                        data.forEach((b: any) => {
+                            allCandles.push({
+                                time: b.time > 20000000000 ? b.time : b.time * 1000,
+                                open: parseFloat(b.open || b.close),
+                                high: parseFloat(b.high || b.close),
+                                low: parseFloat(b.low || b.close),
+                                close: parseFloat(b.close)
+                            });
+                        });
+                        to = Math.floor(data[0].time / 1000) - 1;
                     } else {
                         break;
                     }
@@ -120,8 +121,13 @@ export class FarazGoldEngine {
             }
 
             if (allCandles.length > 0) {
+                // Hard limit candles to 15,000 to prevent OOM
                 allCandles.sort((a: any, b: any) => a.time - b.time);
                 allCandles = allCandles.filter((c: any, i: number, arr: any[]) => i === 0 || c.time !== arr[i-1].time);
+                
+                if (allCandles.length > 15000) {
+                    allCandles = allCandles.slice(-15000);
+                }
                 
                 this.candles = allCandles;
                 try {
@@ -382,7 +388,7 @@ export class FarazGoldEngine {
                 const newCandle = { time: candleTime, open: newPrice, high: newPrice, low: newPrice, close: newPrice };
                 this.candles.push(newCandle);
                 this.candles.sort((a, b) => a.time - b.time);
-                if (this.candles.length > 50000) this.candles.shift();
+                if (this.candles.length > 25000) this.candles.shift();
             }
             this.lastCandleTime = Math.max(this.lastCandleTime, candleTime);
         } else {

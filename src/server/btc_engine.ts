@@ -125,13 +125,21 @@ export class BtcEngine {
                 const r = data.result ? data.result : data;
                 
                 if (r && r.t && Array.isArray(r.t) && r.t.length > 0) {
-                    const chunk = r.t.map((t: number, i: number) => ({
-                        time: t > 20000000000 ? t : t * 1000,
-                        open: parseFloat(r.o[i]),
-                        high: parseFloat(r.h[i]),
-                        low: parseFloat(r.l[i]),
-                        close: parseFloat(r.c[i])
-                    })).filter((c: any) => !isNaN(c.close));
+                    // Optimization: Use separate array for mapping and avoid spread if possible
+                    const chunk: any[] = [];
+                    for (let j = 0; j < r.t.length; j++) {
+                        const t = r.t[j];
+                        const close = parseFloat(r.c[j]);
+                        if (!isNaN(close)) {
+                            chunk.push({
+                                time: t > 20000000000 ? t : t * 1000,
+                                open: parseFloat(r.o[j]),
+                                high: parseFloat(r.h[j]),
+                                low: parseFloat(r.l[j]),
+                                close: close
+                            });
+                        }
+                    }
 
                     if (chunk.length === 0) break;
 
@@ -149,6 +157,11 @@ export class BtcEngine {
                 // Remove duplicates
                 allCandles = allCandles.filter((c: any, i: number, arr: any[]) => i === 0 || c.time !== arr[i-1].time);
                 
+                // Hard limit to 15,000 to prevent OOM
+                if (allCandles.length > 15000) {
+                    allCandles = allCandles.slice(-15000);
+                }
+
                 this.candles = allCandles;
                 try {
                     const fs = await import('fs');
@@ -236,7 +249,7 @@ export class BtcEngine {
             last.close = newPrice;
         } else if (this.candles.length > 0 && cTime > last.time) {
             this.candles.push({ time: cTime, open: newPrice, high: newPrice, low: newPrice, close: newPrice });
-            if (this.candles.length > 50000) this.candles.shift();
+            if (this.candles.length > 25000) this.candles.shift();
             this.detectLevels();
         }
         this.runStrategy();
@@ -266,7 +279,7 @@ export class BtcEngine {
         } else {
             this.candles.push({ time, open, high, low, close });
             this.candles.sort((a, b) => a.time - b.time);
-            if (this.candles.length > 50000) this.candles.shift();
+            if (this.candles.length > 25000) this.candles.shift();
             this.detectLevels();
         }
         this.runStrategy();

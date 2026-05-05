@@ -54,11 +54,19 @@ async function startServer() {
             }, {});
 
             if (engine && ws.readyState === WebSocket.OPEN) {
+                const state = engine.getState();
+                
+                // OPTIMIZATION: Limit candles sent to client to 2000 for UI performance
+                // Full history stays on server for backtesting
+                if (state.candles && state.candles.length > 2000) {
+                    state.candles = state.candles.slice(-2000);
+                }
+
                 ws.send(JSON.stringify({ 
                     type, 
                     broker: currentBroker, 
-                    engineStatuses, // Include all statuses
-                    data: engine.getState() 
+                    engineStatuses,
+                    data: state
                 }));
             }
         };
@@ -69,7 +77,7 @@ async function startServer() {
             if (ws.readyState === WebSocket.OPEN) {
                 sendState('UPDATE');
             }
-        }, 300); // Increased frequency for real-time feel (300ms)
+        }, 1000); // 1000ms is stable and sufficient for candle charts
 
         ws.on("message", async (message) => {
             try {
@@ -87,13 +95,14 @@ async function startServer() {
                         ws.send(JSON.stringify({ 
                             type: 'BACKTEST_LOADING', 
                             broker: currentBroker,
-                            message: 'در حال دریافت اطلاعات ۳۰ روز گذشته... لطفا کمی صبر کنید.'
+                            message: 'در حال دریافت اطلاعات ۱۵ روز گذشته... لطفا کمی صبر کنید.'
                         }));
                         try {
+                            const days = 15;
                             if (engine.fetchHistoricalCandles) {
-                                await engine.fetchHistoricalCandles(30);
+                                await engine.fetchHistoricalCandles(days);
                             } else if (engine.fetchHistory) {
-                                await engine.fetchHistory(30);
+                                await engine.fetchHistory(days);
                             }
                         } catch (e) {
                             console.error(e);
@@ -125,13 +134,14 @@ async function startServer() {
                         ws.send(JSON.stringify({ 
                             type: 'BACKTEST_LOADING', 
                             broker: currentBroker,
-                            message: 'در حال دریافت اطلاعات ۳۰ روز گذشته... لطفا کمی صبر کنید.'
+                            message: 'در حال دریافت اطلاعات ۱۵ روز گذشته... لطفا کمی صبر کنید.'
                         }));
                         try {
+                            const days = 15;
                             if (engine.fetchHistoricalCandles) {
-                                await engine.fetchHistoricalCandles(30);
+                                await engine.fetchHistoricalCandles(days);
                             } else if (engine.fetchHistory) {
-                                await engine.fetchHistory(30);
+                                await engine.fetchHistory(days);
                             }
                         } catch (e) {
                             console.error(e);

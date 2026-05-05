@@ -56,11 +56,12 @@ const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount, active
 
     const baseCandleWidth = 10;
     const candleWidth = baseCandleWidth * viewState.zoom;
-    const totalContentWidth = data.length * candleWidth;
     
     let currentOffset = viewState.offset;
     if (viewState.followLatest) {
-      currentOffset = chartWidth - totalContentWidth;
+      // Pin to the right, but allow fractional offset within the latest candle for smooth movement
+      const visibleCount = Math.ceil(chartWidth / candleWidth);
+      currentOffset = chartWidth - (data.length * candleWidth);
     }
 
     // Determine visible range
@@ -80,10 +81,14 @@ const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount, active
     const displayMax = maxPrice + yBuffer;
     const displayRange = displayMax - displayMin;
 
-    const getX = (index: number) => Math.round(currentOffset + (index * candleWidth));
+    const getX = (index: number) => {
+      // Use floor for pixel-perfect alignment
+      return Math.floor(currentOffset + (index * candleWidth));
+    };
+
     const getY = (price: number) => {
-      const y = paddingTop + chartHeight - ((price - displayMin) / displayRange) * chartHeight;
-      return y;
+      // Precision for price levels
+      return paddingTop + chartHeight - ((price - displayMin) / displayRange) * chartHeight;
     };
 
     // Clear background
@@ -98,6 +103,7 @@ const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount, active
     ctx.fillStyle = '#94a3b8';
     ctx.font = '10px JetBrains Mono';
 
+    // Horizontal Price Grid
     const gridLines = 8;
     for (let i = 0; i <= gridLines; i++) {
         const y = Math.round(paddingTop + (i / gridLines) * chartHeight);
@@ -108,6 +114,27 @@ const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount, active
 
         const priceValue = displayMax - (i / gridLines) * displayRange;
         ctx.fillText(priceValue.toLocaleString(undefined, { minimumFractionDigits: 1 }), chartWidth + 5, y + 4);
+    }
+
+    // Vertical Time Grid
+    const visibleCount = endIdx - startIdx;
+    const timeLabelsCount = 5;
+    const interval = Math.max(1, Math.floor(visibleCount / timeLabelsCount));
+    
+    for (let i = startIdx; i < endIdx; i++) {
+        if ((i - startIdx) % interval === 0) {
+            const x = getX(i);
+            const candle = data[i];
+            if (candle && x < chartWidth) {
+                ctx.beginPath();
+                ctx.moveTo(x, paddingTop);
+                ctx.lineTo(x, paddingTop + chartHeight);
+                ctx.stroke();
+                
+                const timeStr = new Date(candle.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                ctx.fillText(timeStr, x - 15, height - 10);
+            }
+        }
     }
     ctx.setLineDash([]);
 
@@ -124,7 +151,7 @@ const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount, active
         
         ctx.fillStyle = level.type === 'RESISTANCE' ? '#ef4444' : '#10b981';
         ctx.font = '8px Inter';
-        ctx.fillText(level.type === 'RESISTANCE' ? 'RES' : 'SUP', chartWidth - 25, y - 4);
+        ctx.fillText(level.price.toFixed(1), chartWidth - 35, y - 4);
       }
     });
 
@@ -149,11 +176,20 @@ const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount, active
       ctx.stroke();
 
       // Body
-      const bWidth = Math.max(1, candleWidth * 0.8);
+      const bWidth = Math.max(2, candleWidth * 0.8);
+      const isTiny = bWidth < 3;
       const bodyTop = Math.round(Math.min(openY, closeY));
       const bodyBottom = Math.round(Math.max(openY, closeY));
       const bHeight = Math.max(1, bodyBottom - bodyTop);
-      ctx.fillRect(Math.round(x - bWidth / 2), bodyTop, Math.round(bWidth), bHeight);
+      
+      if (isTiny) {
+          ctx.beginPath();
+          ctx.moveTo(x, bodyTop);
+          ctx.lineTo(x, bodyBottom);
+          ctx.stroke();
+      } else {
+          ctx.fillRect(Math.round(x - bWidth / 2), bodyTop, Math.round(bWidth), bHeight);
+      }
     });
 
     // Crosshair
@@ -224,20 +260,24 @@ const CandlestickChart = ({ data, levels, nPattern, originalCandlesCount, active
       const sliceStart = Math.max(0, originalCandlesCount - data.length);
 
       nPattern.points.forEach((p: any) => {
-        let x = 0;
+        let x = NaN;
         
-        // همگام‌سازی ایندکس با کسر کردن آفستِ اسلایس ۴۰۰ تایی
-        if (p.index !== undefined) {
-          x = getX(p.index - sliceStart);
-        } else {
-          // فال‌بک زمانی (برای اطمینان)
-          const cIdx = data.findIndex(c => c.time === p.time);
-          if (cIdx !== -1) {
-            x = getX(cIdx);
-          } else {
-            const lastCandleTime = data[lastCandleIdx].time;
-            let offset = (p.time - lastCandleTime) / candleInterval;
-            x = getX(lastCandleIdx + Math.min(Math.max(offset, -50), 50));
+        // Find index by time for more stable drawing across data updates
+        const cIdx = data.findIndex(c => c.time === p.time);
+        if (cIdx !== -1) {
+          x = getX(cIdx);
+        } else if (data.length > 0) {
+          // Fallback interpolation for points outside current range
+          const firstTime = data[0].time;
+          const lastTime = data[data.length - 1].time;
+          const candleInterval = data.length > 1 ? data[1].time - data[0].time : 60000;
+          
+          if (p.time > lastTime) {
+            const offset = (p.time - lastTime) / candleInterval;
+            x = getX(data.length - 1 + offset);
+          } else if (p.time < firstTime) {
+            const offset = (p.time - firstTime) / candleInterval;
+            x = getX(offset);
           }
         }
         
@@ -511,10 +551,38 @@ export default function App() {
           const msg = JSON.parse(e.data);
           if (msg.type === 'STATE' || msg.type === 'INIT' || msg.type === 'UPDATE') {
             if (msg.engineStatuses) setEngineStatuses(msg.engineStatuses);
-            // CRITICAL FIX: Ensure broker name is part of the data so the loading check passes
             if (msg.broker === activeBrokerRef.current) {
-              setData({ ...msg.data, broker: msg.broker });
-              // Sync Bale settings from engine ONLY if the settings modal is NOT open
+              setData((prev: any) => {
+                if (!prev || msg.type === 'INIT' || prev.broker !== msg.broker) {
+                  return { ...msg.data, broker: msg.broker };
+                }
+                
+                // Merge candles to maintain history while receiving updates
+                const newCandles = msg.data.candles || [];
+                const merged = [...(prev.candles || [])];
+                
+                newCandles.forEach((nc: any) => {
+                  const idx = merged.findIndex(c => c.time === nc.time);
+                  if (idx !== -1) {
+                    merged[idx] = nc;
+                  } else {
+                    merged.push(nc);
+                  }
+                });
+                
+                merged.sort((a, b) => a.time - b.time);
+                
+                // Keep last 3000 candles in memory for the UI
+                const finalCandles = merged.slice(-3000);
+                
+                return { 
+                  ...msg.data, 
+                  candles: finalCandles,
+                  broker: msg.broker 
+                };
+              });
+
+              // Sync settings...
               if (!showBaleSettingsRef.current) {
                 if (msg.data.baleToken) setBaleToken(msg.data.baleToken);
                 if (msg.data.baleChatId) setBaleChatId(msg.data.baleChatId);

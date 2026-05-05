@@ -172,19 +172,16 @@ export class AlphaGoldClient {
         
         const url = `${DEMO_BASE}/api/order/ounce/edit/opened/orders/${orderId}/?demo_number=${this.demoNumber}`;
         
-        // Ensure values are strings formatted with 2 decimals if they are numbers
-        const body = {
-            profit_limit: typeof profit === 'number' ? profit.toFixed(2) : String(profit),
-            loss_limit: typeof loss === 'number' ? loss.toFixed(2) : String(loss)
-        };
+        const form = new FormData();
+        form.append('loss_limit', typeof loss === 'number' ? loss.toFixed(2) : String(loss));
+        form.append('profit_limit', typeof profit === 'number' ? profit.toFixed(2) : String(profit));
 
-        console.log(`[AlphaClient] EDIT REQUEST: ${url}`);
-        console.log(`[AlphaClient] PAYLOAD:`, JSON.stringify(body));
+        console.log(`[AlphaClient] EDIT REQUEST (FormData): ${url}`);
 
         try {
-            // Logic change: Use POST instead of PUT as confirmed by user logs
-            const { data } = await axios.post(url, body, { 
-                headers: { 'Content-Type': 'application/json' } 
+            // Standard form-data post
+            const { data } = await axios.post(url, form, { 
+                headers: form.getHeaders() 
             });
             console.log(`[AlphaClient] EDIT SUCCESS:`, JSON.stringify(data));
             return data;

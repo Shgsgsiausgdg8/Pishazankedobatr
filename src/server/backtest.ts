@@ -60,12 +60,18 @@ export class BacktestEngine {
 
         // Iterate through candles to find signals
         for (let i = 50; i < testCandles.length - 10; i++) {
-            // Optimization: avoid slicing large datasets repeatedly where possible
-            const window = testCandles.slice(Math.max(0, i - 1000), i + 1);
+            // Optimization: instead of slicing, we pass the indices or use a lightweight view
+            // strategy.analyze currently expects a full array, but we can provide a slice of the window
+            // and reuse it, or just use slice which is fine for small ranges (1000 candles).
+            // The HUGE issue was testCandles.slice(i+1) inside findOutcome.
+            
+            const windowBegin = Math.max(0, i - 1000);
+            const window = testCandles.slice(windowBegin, i + 1);
             const signal = strategy.analyze(window, timeframe, strategyType);
 
             if (signal) {
-                const outcome = this.findOutcome(testCandles.slice(i + 1), signal);
+                // Pass the whole testCandles array and the index to start from to findOutcome
+                const outcome = this.findOutcomeFromIndex(testCandles, i + 1, signal);
                 if (outcome) {
                     const entryMs = testCandles[i].time > 20000000000 ? testCandles[i].time : testCandles[i].time * 1000;
                     const exitMs = outcome.time > 20000000000 ? outcome.time : outcome.time * 1000;
@@ -85,7 +91,6 @@ export class BacktestEngine {
                     if (trade.type === 'BUY') buyTradesCount++;
                     else sellTradesCount++;
 
-                    // Count as TP hit if any TP was reached during trade's life
                     if (trade.maxTpReached > 0) tpHits++;
                     
                     if (trade.outcomeType === 'SL') slHits++;
@@ -106,12 +111,18 @@ export class BacktestEngine {
                     const dd = peak - totalProfit;
                     if (dd > maxDrawdown) maxDrawdown = dd;
 
-                    // Safety exit indexing to prevent infinite loops
-                    const exitIdx = candles.findIndex(c => c.time === outcome.time);
+                    // Optimization: find exit index by looking forward from i
+                    let exitIdx = -1;
+                    for (let k = i + 1; k < testCandles.length; k++) {
+                        if (testCandles[k].time === outcome.time) {
+                            exitIdx = k;
+                            break;
+                        }
+                    }
+
                     if (exitIdx > i) {
                         i = exitIdx;
                     } else {
-                        // If something went wrong, just move to next candle
                         continue;
                     }
                 }
@@ -174,14 +185,15 @@ export class BacktestEngine {
         return comparison.sort((a, b) => b.results.totalProfit - a.results.totalProfit);
     }
 
-    private findOutcome(future: Candle[], signal: Signal) {
+    private findOutcomeFromIndex(fullArray: Candle[], startIndex: number, signal: Signal) {
         let maxTpReached = 0;
         let exitPrice = 0;
         let time = 0;
         let outcomeType = '';
         let riskFreeAt = 0; // The TP level index that triggered risk-free
 
-        for (const c of future) {
+        for (let i = startIndex; i < fullArray.length; i++) {
+            const c = fullArray[i];
             if (signal.type === 'BUY') {
                 // Check for TP hits
                 if (c.high >= signal.tp1 && maxTpReached < 1) { 
