@@ -350,7 +350,7 @@ async function startServer() {
     app.post("/api/autotrade/order/close", async (req, res) => {
         try {
             const { id } = req.body;
-            const data = await autoTrader.client.closeOrderDemo(id);
+            const data = await autoTrader.client.closeOrder(id);
             res.json(data);
         } catch (error: any) {
             res.status(500).json({ error: error.message });
@@ -360,7 +360,7 @@ async function startServer() {
     app.post("/api/autotrade/order/edit", async (req, res) => {
         try {
             const { id, tp, sl } = req.body;
-            const data = await autoTrader.client.editOrderDemo(id, sl, tp);
+            const data = await autoTrader.client.editOrder(id, sl, tp);
             res.json(data);
         } catch (error: any) {
             res.status(500).json({ error: error.message });

@@ -20,6 +20,7 @@ const AutoTradePanel = ({ onClose }: { onClose: () => void }) => {
     const [authError, setAuthError] = useState('');
 
     const [config, setConfig] = useState<any>({
+        accountMode: 'demo',
         demoNumber: '',
         isEnabled: false,
         tradeAmount: 1,
@@ -248,8 +249,11 @@ const AutoTradePanel = ({ onClose }: { onClose: () => void }) => {
                                 </div>
                                 <div>
                                     <div style={{ color: 'white', fontWeight: 'bold', fontSize: '0.95rem' }}>{userInfo.first_name ? `${userInfo.first_name} ${userInfo.last_name || ''}` : userInfo.username || userInfo.phone_number}</div>
-                                    <div style={{ color: '#10b981', fontSize: '0.75rem', marginTop: '2px' }}>
+                                    <div style={{ color: '#10b981', fontSize: '0.75rem', marginTop: '2px', display: 'flex', gap: '6px', alignItems: 'center' }}>
                                         متصل شده
+                                        <span style={{ padding: '2px 6px', borderRadius: '4px', background: config.accountMode === 'real' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(59, 130, 246, 0.2)', color: config.accountMode === 'real' ? '#34d399' : '#60a5fa' }}>
+                                            {config.accountMode === 'real' ? 'Live' : 'آزمایشی'}
+                                        </span>
                                     </div>
                                 </div>
                             </div>
@@ -276,15 +280,37 @@ const AutoTradePanel = ({ onClose }: { onClose: () => void }) => {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                         <div style={{ padding: '0 0 16px 0', borderBottom: '1px solid #334155' }}>
                             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#94a3b8', fontSize: '0.85rem', marginBottom: '8px' }}>
-                                <LockIcon /> Demo ID (آیدی حساب دمو)
+                                <UserIcon /> نوع حساب (رئال/دمو)
                             </label>
-                            <input 
-                                type="text" 
-                                value={config.demoNumber} 
-                                onChange={e => updateConfig('demoNumber', e.target.value)}
-                                placeholder="فقط در صورتی که دمو به صورت خودکار شناسایی نشد وارد کنید..."
-                                style={{ width: '100%', padding: '10px 14px', background: '#0f172a', border: '1px solid #334155', color: 'white', borderRadius: '8px', outline: 'none', fontSize: '0.9rem' }}
-                            />
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <button 
+                                    onClick={() => updateConfig('accountMode', 'demo')}
+                                    style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid', borderColor: config.accountMode === 'demo' ? '#3b82f6' : '#334155', background: config.accountMode === 'demo' ? 'rgba(59, 130, 246, 0.1)' : 'transparent', color: config.accountMode === 'demo' ? '#60a5fa' : '#94a3b8', cursor: 'pointer' }}
+                                >
+                                    حساب آموزشی (دمو)
+                                </button>
+                                <button 
+                                    onClick={() => updateConfig('accountMode', 'real')}
+                                    style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid', borderColor: config.accountMode === 'real' ? '#10b981' : '#334155', background: config.accountMode === 'real' ? 'rgba(16, 185, 129, 0.1)' : 'transparent', color: config.accountMode === 'real' ? '#34d399' : '#94a3b8', cursor: 'pointer' }}
+                                >
+                                    حساب واقعی (Live)
+                                </button>
+                            </div>
+                            
+                            {config.accountMode === 'demo' && (
+                                <div style={{ marginTop: '16px' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#94a3b8', fontSize: '0.85rem', marginBottom: '8px' }}>
+                                        <LockIcon /> Demo ID (آیدی حساب دمو)
+                                    </label>
+                                    <input 
+                                        type="text" 
+                                        value={config.demoNumber} 
+                                        onChange={e => updateConfig('demoNumber', e.target.value)}
+                                        placeholder="فقط در صورتی که دمو به صورت خودکار شناسایی نشد وارد کنید..."
+                                        style={{ width: '100%', padding: '10px 14px', background: '#0f172a', border: '1px solid #334155', color: 'white', borderRadius: '8px', outline: 'none', fontSize: '0.9rem' }}
+                                    />
+                                </div>
+                            )}
                         </div>
 
                         <div style={{ padding: '0 0 16px 0', borderBottom: '1px solid #334155' }}>

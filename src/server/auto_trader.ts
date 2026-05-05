@@ -8,6 +8,7 @@ import WebSocket from 'ws';
 export class AutoTrader {
     client: AlphaGoldClient;
     config = {
+        accountMode: 'demo' as 'demo' | 'real',
         demoNumber: '',
         accessToken: '',
         isEnabled: false,
@@ -52,9 +53,17 @@ export class AutoTrader {
         this.loadSettings();
         this.loadVirtualLimits();
         this.loadOrderSignals();
+        this.applyAccountMode();
+        this.connectLive();
+    }
+
+    applyAccountMode() {
+        this.client.setMode(this.config.accountMode);
         if (this.config.demoNumber) {
             this.client.setDemoNumber(this.config.demoNumber);
-            this.connectLive();
+        }
+        if (this.config.accessToken) {
+            this.client.setTokens(this.config.accessToken);
         }
     }
 
@@ -111,17 +120,23 @@ export class AutoTrader {
 
     updateConfig(newConfig: Partial<typeof this.config>) {
         const wasEnabled = this.config.isEnabled;
+        const oldMode = this.config.accountMode;
         const oldDemo = this.config.demoNumber;
+        const oldToken = this.config.accessToken;
         
         this.config = { ...this.config, ...newConfig };
         this.saveSettings();
         
-        if (this.config.accessToken) {
-            this.client.setTokens(this.config.accessToken);
-        }
+        this.applyAccountMode();
 
-        if (this.config.demoNumber && this.config.demoNumber !== oldDemo) {
-            this.client.setDemoNumber(this.config.demoNumber);
+        const needsReconnect = (
+            (this.config.accountMode !== oldMode) ||
+            (this.config.accountMode === 'demo' && this.config.demoNumber !== oldDemo) ||
+            (this.config.accountMode === 'real' && this.config.accessToken !== oldToken) ||
+            (!wasEnabled && this.config.isEnabled)
+        );
+
+        if (needsReconnect) {
             this.connectLive();
         }
         
@@ -133,10 +148,14 @@ export class AutoTrader {
     connectLive() {
         if (this.ws) {
             this.ws.close();
+            this.ws = null;
         }
-        if (!this.config.demoNumber) return;
+
+        if (this.config.accountMode === 'demo' && !this.config.demoNumber) return;
+        if (this.config.accountMode === 'real' && !this.config.accessToken) return;
+
         try {
-            this.ws = this.client.connectWebSocketDemo({
+            this.ws = this.client.connectWebSocket({
                 onPrice: (p) => { 
                     this.livePrice = parseFloat(p);
                     this.checkRiskFree();
@@ -287,7 +306,7 @@ export class AutoTrader {
         } else {
             this.slMoveInFlight.add(orderIdStr);
             try {
-                await this.client.editOrderDemo(orderIdStr, newSl, currentTp);
+                await this.client.editOrder(orderIdStr, newSl, currentTp);
                 console.log(`[AutoTrader] Order ${orderIdStr} SL moved to ${newSl} via Broker (TP: ${currentTp})`);
                 
                 // Update local state ONLY on success
@@ -333,7 +352,7 @@ export class AutoTrader {
             if (shouldClose) {
                 console.log(`[AutoTrader] Virtual ${reason} hit for Order ${order.id} at price ${current}! Closing order...`);
                 this.closingOrders.add(order.id);
-                this.client.closeOrderDemo(order.id).then(() => {
+                this.client.closeOrder(order.id).then(() => {
                     console.log(`[AutoTrader] Successfully closed order ${order.id} via Virtual ${reason}.`);
                     delete this.virtualLimits[order.id];
                     this.saveVirtualLimits();
@@ -346,7 +365,9 @@ export class AutoTrader {
     }
 
     async handleSignal(signal: Signal) {
-        if (!this.config.isEnabled || !this.config.demoNumber) return;
+        if (!this.config.isEnabled) return;
+        if (this.config.accountMode === 'demo' && !this.config.demoNumber) return;
+        if (this.config.accountMode === 'real' && !this.config.accessToken) return;
         
         // Prevent double entries. Only 1 trade allowed at a time for safety
         if (this.openOrders.length > 0) {
@@ -397,7 +418,13 @@ export class AutoTrader {
             
             while (retries <= maxRetries) {
                 try {
-                    response = await this.client.openFastOrderDemo(side, amount, lossParam, profitParam);
+                    if (this.config.enableTpSl && this.config.limitMode === 'broker') {
+                        console.log(`[AutoTrader] Opening order with broker limits: SL=${lossParam}, TP=${profitParam}`);
+                        response = await this.client.openFastOrder(side, amount, lossParam, profitParam);
+                    } else {
+                        console.log(`[AutoTrader] Opening order WITHOUT limits (using virtual SL/TP loop)...`);
+                        response = await this.client.openFastOrder(side, amount, '', '');
+                    }
                     break; 
                 } catch (err: any) {
                     const isNetworkError = err.message.includes('EAI_AGAIN') || err.message.includes('ECONN') || err.message.includes('fetch failed');

@@ -29,11 +29,16 @@ export const PORTFOLIO_TYPES = {
 export class AlphaGoldClient {
     private demoNumber: string | null = null;
     private accessToken: string | null = null;
+    private mode: 'demo' | 'real' = 'demo';
 
     constructor(demoNumber?: string) {
         if (demoNumber) {
             this.demoNumber = demoNumber;
         }
+    }
+
+    setMode(mode: 'demo' | 'real') {
+        this.mode = mode;
     }
 
     setTokens(accessToken: string) {
@@ -131,13 +136,44 @@ export class AlphaGoldClient {
         return data;
     }
 
-    // ----------------------- DEMO ORDERS -----------------------
+    // ----------------------- REQUEST HELPERS -----------------------
+    private getRequestOptions(options: any = {}) {
+        const reqOptions = { ...options };
+        if (this.mode === 'real') {
+            if (!this.accessToken) throw new Error("Access token missing for real account.");
+            reqOptions.headers = {
+                ...reqOptions.headers,
+                'Authorization': `Bearer ${this.accessToken}`
+            };
+        }
+        return reqOptions;
+    }
+
+    private getRequestUrl(path: string) {
+        if (this.mode === 'real') {
+            return `${API_BASE}${path}`;
+        } else {
+            if (!this.demoNumber) throw new Error("Demo number missing.");
+            const separator = path.includes('?') ? '&' : '?';
+            return `${DEMO_BASE}${path}${separator}demo_number=${this.demoNumber}`;
+        }
+    }
+
+    getUserId(): string | null {
+        if (!this.accessToken) return null;
+        try {
+            const payload = JSON.parse(Buffer.from(this.accessToken.split('.')[1], 'base64').toString());
+            return payload.user_id || payload.sub || null;
+        } catch {
+            return null;
+        }
+    }
+
+    // ----------------------- ORDERS -----------------------
     /**
-     * باز کردن معامله سریع در محیط دمو
+     * باز کردن معامله سریع
      */
-    async openFastOrderDemo(side: number, amount: number, loss: number | string = '', profit: number | string = '') {
-        if (!this.demoNumber) throw new Error("Demo number is missing.");
-        
+    async openFastOrder(side: number, amount: number, loss: number | string = '', profit: number | string = '') {
         const form = new FormData();
         form.append('side', side);
         form.append('amount', amount);
@@ -145,33 +181,32 @@ export class AlphaGoldClient {
         form.append('loss_limit', loss);
         form.append('profit_limit', profit);
 
+        const options = this.getRequestOptions({ headers: form.getHeaders() });
         const { data } = await axios.post(
-            `${DEMO_BASE}/api/order/ounce/fast/?demo_number=${this.demoNumber}`,
+            this.getRequestUrl('/api/order/ounce/fast/'),
             form,
-            { headers: form.getHeaders() }
+            options
         );
         return data;
     }
 
     /**
-     * بستن یک سفارش باز در محیط دمو
+     * بستن یک سفارش باز
      */
-    async closeOrderDemo(orderId: string) {
-        if (!this.demoNumber) throw new Error("Demo number is missing.");
+    async closeOrder(orderId: string) {
+        const options = this.getRequestOptions();
         const { data } = await axios.get(
-            `${DEMO_BASE}/api/order/ounce/close/${orderId}/?demo_number=${this.demoNumber}`
+            this.getRequestUrl(`/api/order/ounce/close/${orderId}/`),
+            options
         );
         return data;
     }
 
     /**
-     * ویرایش حد سود و ضرر یک سفارش باز (دمو)
+     * ویرایش حد سود و ضرر یک سفارش باز
      */
-    async editOrderDemo(orderId: string, loss: number | string = '', profit: number | string = '') {
-        if (!this.demoNumber) throw new Error("Demo number is missing.");
-        
-        const url = `${DEMO_BASE}/api/order/ounce/edit/opened/orders/${orderId}/?demo_number=${this.demoNumber}`;
-        
+    async editOrder(orderId: string, loss: number | string = '', profit: number | string = '') {
+        const url = this.getRequestUrl(`/api/order/ounce/edit/opened/orders/${orderId}/`);
         const body = {
             loss_limit: typeof loss === 'number' ? loss.toFixed(2) : String(loss),
             profit_limit: typeof profit === 'number' ? profit.toFixed(2) : String(profit)
@@ -180,9 +215,8 @@ export class AlphaGoldClient {
         console.log(`[AlphaClient] EDIT REQUEST (JSON): ${url}`);
 
         try {
-            const { data } = await axios.post(url, body, { 
-                headers: { 'Content-Type': 'application/json' } 
-            });
+            const options = this.getRequestOptions({ headers: { 'Content-Type': 'application/json' } });
+            const { data } = await axios.post(url, body, options);
             console.log(`[AlphaClient] EDIT SUCCESS:`, JSON.stringify(data));
             return data;
         } catch (error: any) {
@@ -192,7 +226,7 @@ export class AlphaGoldClient {
     }
 
     // ----------------------- WEBSOCKET (LIVE DATA) -----------------------
-    connectWebSocketDemo(callbacks: {
+    connectWebSocket(callbacks: {
         onPrice?: (price: string) => void;
         onOpenOrders?: (orders: any[]) => void;
         onPortfo?: (portfo: any) => void;
@@ -202,9 +236,16 @@ export class AlphaGoldClient {
         onClose?: () => void;
         onError?: (err: Error) => void;
     }) {
-        if (!this.demoNumber) throw new Error("Demo number is missing.");
+        let wsUrl = '';
+        if (this.mode === 'real') {
+            const userId = this.getUserId();
+            if (!userId) throw new Error("Token or User ID missing for real websocket.");
+            wsUrl = `wss://api.alphagoldx.com/ounce/orders/?user_id=${userId}`;
+        } else {
+            if (!this.demoNumber) throw new Error("Demo number is missing.");
+            wsUrl = `wss://demo.alphagoldx.com/ounce/orders/?user_id=${this.demoNumber}`;
+        }
         
-        const wsUrl = `wss://demo.alphagoldx.com/ounce/orders/?user_id=${this.demoNumber}`;
         const ws = new WebSocket(wsUrl, {
             headers: {
                 'Origin': 'https://alphagoldx.com',
@@ -213,7 +254,7 @@ export class AlphaGoldClient {
         });
 
         ws.on('open', () => {
-            console.log('[AlphaGold-WS] متصل شد');
+            console.log(`[AlphaGold-WS] ${this.mode} متصل شد`);
             if (callbacks.onOpen) callbacks.onOpen();
         });
 
@@ -257,17 +298,14 @@ export class AlphaGoldClient {
 
     // ----------------------- PORTFOLIO MANAGEMENT -----------------------
     /**
-     * افزایش یا کاهش موجودی پرتفو (دمو)
+     * افزایش یا کاهش موجودی پرتفو
      */
     async adjustPortfolioBalance(amount: number) {
-        if (!this.demoNumber) throw new Error("Demo number is missing.");
+        const options = this.getRequestOptions({ headers: { 'Content-Type': 'application/json' } });
         const { data } = await axios.post(
-            `${DEMO_BASE}/api/wallet/balance/add/portfo/?demo_number=${this.demoNumber}`,
-            {
-                symbol: 1,
-                amount: amount
-            },
-            { headers: { 'Content-Type': 'application/json' } }
+            this.getRequestUrl('/api/wallet/balance/add/portfo/'),
+            { symbol: 1, amount: amount },
+            options
         );
         return data;
     }
@@ -276,13 +314,11 @@ export class AlphaGoldClient {
      * تغییر نوع پرتفو بین معمولی و کم‌ریسک
      */
     async switchPortfolioType(portfoType: 1 | 2) {
-        if (!this.demoNumber) throw new Error("Demo number is missing.");
+        const options = this.getRequestOptions({ headers: { 'Content-Type': 'application/json' } });
         const { data } = await axios.post(
-            `${DEMO_BASE}/api/wallet/portfo/type/select/?demo_number=${this.demoNumber}`,
-            {
-                portfo_type: portfoType
-            },
-            { headers: { 'Content-Type': 'application/json' } }
+            this.getRequestUrl('/api/wallet/portfo/type/select/'),
+            { portfo_type: portfoType },
+            options
         );
         return data;
     }
@@ -291,9 +327,10 @@ export class AlphaGoldClient {
      * دریافت بالانس جاری و موجودی پرتفو
      */
     async getBalance() {
-        if (!this.demoNumber) throw new Error("Demo number is missing.");
+        const options = this.getRequestOptions();
         const { data } = await axios.get(
-            `${DEMO_BASE}/api/wallet/balance/?demo_number=${this.demoNumber}`
+            this.getRequestUrl('/api/wallet/balance/'),
+            options
         );
         return data;
     }
@@ -302,9 +339,10 @@ export class AlphaGoldClient {
      * دریافت قیمت ضمانت شده
      */
     async getGuaranteePrice() {
-        if (!this.demoNumber) throw new Error("Demo number is missing.");
+        const options = this.getRequestOptions();
         const { data } = await axios.get(
-             `${DEMO_BASE}/api/wallet/balance/guarantee/price/?demo_number=${this.demoNumber}`
+             this.getRequestUrl('/api/wallet/balance/guarantee/price/'),
+             options
         );
         return data;
     }
