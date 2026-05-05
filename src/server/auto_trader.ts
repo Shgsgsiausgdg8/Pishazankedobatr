@@ -228,10 +228,19 @@ export class AutoTrader {
         }
     }
 
+    private slMoveInFlight = new Set<string>();
+
     async moveSL(order: any, newSlPrice: number, progressLevel: number) {
         const orderIdStr = String(order.id);
+        
+        if (this.slMoveInFlight.has(orderIdStr)) return; // Prevent spamming while request is pending
+
         const newSl = newSlPrice.toFixed(2);
-        const currentTp = order.profit_limit;
+        
+        let currentTp: number | string = '';
+        if (order.profit_limit !== undefined && order.profit_limit !== null && String(order.profit_limit) !== '0') {
+            currentTp = parseFloat(String(order.profit_limit)).toFixed(2);
+        }
 
         // Check if movement is valid (not moving back)
         const currentSlStr = String(order.loss_limit || '');
@@ -246,27 +255,33 @@ export class AutoTrader {
             }
         }
 
-        // Update local state first to prevent repeats
-        this.orderTpProgress[orderIdStr] = progressLevel;
-        this.saveOrderSignals();
-
         if (this.config.limitMode === 'virtual') {
+            // Update local state
+            this.orderTpProgress[orderIdStr] = progressLevel;
+            this.saveOrderSignals();
+
             if (this.virtualLimits[orderIdStr]) {
                 this.virtualLimits[orderIdStr].sl = parseFloat(newSl);
                 this.saveVirtualLimits();
                 console.log(`[AutoTrader] Virtual SL for ${orderIdStr} moved to ${newSl}`);
             } else {
-                // If not in virtualLimits, maybe it just arrived. Try mapping now
-                this.virtualLimits[orderIdStr] = { tp: parseFloat(order.profit_limit || '0'), sl: parseFloat(newSl) };
+                this.virtualLimits[orderIdStr] = { tp: parseFloat(String(currentTp || '0')), sl: parseFloat(newSl) };
                 this.saveVirtualLimits();
             }
         } else {
+            this.slMoveInFlight.add(orderIdStr);
             try {
                 await this.client.editOrderDemo(orderIdStr, newSl, currentTp);
-                console.log(`[AutoTrader] Order ${orderIdStr} SL moved to ${newSl} via Broker`);
+                console.log(`[AutoTrader] Order ${orderIdStr} SL moved to ${newSl} via Broker (TP: ${currentTp})`);
+                
+                // Update local state ONLY on success
+                this.orderTpProgress[orderIdStr] = progressLevel;
+                this.saveOrderSignals();
             } catch (e: any) {
                 console.error(`[AutoTrader] Failed to move SL for ${orderIdStr}:`, e.message);
-                // We keep it in progress so we don't spam errors
+                // On failure, don't update progress so it retries on next tick
+            } finally {
+                this.slMoveInFlight.delete(orderIdStr);
             }
         }
     }

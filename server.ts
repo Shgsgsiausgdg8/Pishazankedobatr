@@ -54,12 +54,12 @@ async function startServer() {
             }, {});
 
             if (engine && ws.readyState === WebSocket.OPEN) {
-                const state = JSON.parse(JSON.stringify(engine.getState())); // Deep clone to safe mutation
+                const state = engine.getState();
                 
-                // DATA CONSERVATION & MEMORY RESET: 
+                // DATA CONSERVATION: 
                 // 1. Only send full history (last 2000 candles) during INIT.
                 // 2. Regular UPDATES only send the most recent candles (last 5).
-                // 3. STRIP massive results and RESET after sending.
+                // 3. Strip massive backtest results from regular updates.
                 if (state.candles) {
                     if (type === 'INIT') {
                         if (state.candles.length > 2000) {
@@ -67,11 +67,9 @@ async function startServer() {
                         }
                     } else {
                         state.candles = state.candles.slice(-5);
-                        // Only send backtest if it just finished (detected by type)
-                        if (type !== 'BACKTEST_DONE') {
-                            delete state.backtestResults;
-                            delete state.trades;
-                        }
+                        // Don't send full backtest results in every heartbeat heartbeat
+                        delete (state as any).backtestResults;
+                        delete (state as any).trades;
                     }
                 }
 
@@ -81,11 +79,6 @@ async function startServer() {
                     engineStatuses,
                     data: state
                 }));
-
-                // RESET MEMORY ON SERVER: After results are sent, clear them from the actual engine
-                if (type === 'BACKTEST_DONE' && (engine as any).clearResults) {
-                    (engine as any).clearResults();
-                }
             }
         };
 

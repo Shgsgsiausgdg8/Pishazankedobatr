@@ -7,8 +7,6 @@ export class FarazGoldEngine {
     price = 0;
     timeframe = '1'; // Default to 1m
     candles: Candle[] = [];
-    backtestResults: any = null;
-    trades: any[] = [];
     levels: { type: 'SUPPORT' | 'RESISTANCE', price: number, time: number }[] = [];
     signals: Signal[] = [];
     strategy = new TradingStrategy();
@@ -547,15 +545,6 @@ export class FarazGoldEngine {
             this.ws.send(JSON.stringify({ action: 'SubAdd', subs: [`0~farazgold~mazane~gold~${this.timeframe}`] }));
         } else {
             this.connectWS();
-        }
-    }
-
-    clearResults() {
-        this.backtestResults = null;
-        this.trades = [];
-        // Hint to GC
-        if (global.gc) {
-            try { global.gc(); } catch (e) {}
         }
     }
 

@@ -7,8 +7,6 @@ export class AlphaGoldEngine {
     price = 0;
     timeframe = "1"; // minutes
     candles: Candle[] = [];
-    backtestResults: any = null;
-    trades: any[] = [];
     signals: Signal[] = [];
     levels: { type: 'SUPPORT' | 'RESISTANCE', price: number, time?: number, hits?: number, latest?: number }[] = [];
 
@@ -418,11 +416,6 @@ export class AlphaGoldEngine {
         this.signals = [];
         this.lastCandleTime = 0;
         await this.fetchHistoricalCandles();
-    }
-
-    clearResults() {
-        this.backtestResults = null;
-        this.trades = [];
     }
 
     getState() {
