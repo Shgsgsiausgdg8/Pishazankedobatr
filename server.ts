@@ -57,16 +57,19 @@ async function startServer() {
                 const state = engine.getState();
                 
                 // DATA CONSERVATION: 
-                // Only send full history (last 2000 candles) during INIT.
-                // Regular UPDATES only send the most recent candles (last 5).
+                // 1. Only send full history (last 2000 candles) during INIT.
+                // 2. Regular UPDATES only send the most recent candles (last 5).
+                // 3. Strip massive backtest results from regular updates.
                 if (state.candles) {
                     if (type === 'INIT') {
                         if (state.candles.length > 2000) {
                             state.candles = state.candles.slice(-2000);
                         }
                     } else {
-                        // For heartbeats, only send the latest candles to save bandwidth
                         state.candles = state.candles.slice(-5);
+                        // Don't send full backtest results in every heartbeat heartbeat
+                        delete (state as any).backtestResults;
+                        delete (state as any).trades;
                     }
                 }
 

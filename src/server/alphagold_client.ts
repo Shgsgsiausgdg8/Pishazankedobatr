@@ -172,16 +172,16 @@ export class AlphaGoldClient {
         
         const url = `${DEMO_BASE}/api/order/ounce/edit/opened/orders/${orderId}/?demo_number=${this.demoNumber}`;
         
-        const form = new FormData();
-        form.append('loss_limit', typeof loss === 'number' ? loss.toFixed(2) : String(loss));
-        form.append('profit_limit', typeof profit === 'number' ? profit.toFixed(2) : String(profit));
+        const body = {
+            loss_limit: typeof loss === 'number' ? loss.toFixed(2) : String(loss),
+            profit_limit: typeof profit === 'number' ? profit.toFixed(2) : String(profit)
+        };
 
-        console.log(`[AlphaClient] EDIT REQUEST (FormData): ${url}`);
+        console.log(`[AlphaClient] EDIT REQUEST (JSON): ${url}`);
 
         try {
-            // Standard form-data post
-            const { data } = await axios.post(url, form, { 
-                headers: form.getHeaders() 
+            const { data } = await axios.post(url, body, { 
+                headers: { 'Content-Type': 'application/json' } 
             });
             console.log(`[AlphaClient] EDIT SUCCESS:`, JSON.stringify(data));
             return data;
