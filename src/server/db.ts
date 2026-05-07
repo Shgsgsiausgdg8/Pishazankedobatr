@@ -13,29 +13,32 @@ try {
     db = new SQL.Database(fileBuffer);
 } catch (e) {
     db = new SQL.Database();
-    db.run(`
-        CREATE TABLE IF NOT EXISTS candles (
-            broker TEXT,
-            timeframe TEXT,
-            time INTEGER,
-            open REAL,
-            high REAL,
-            low REAL,
-            close REAL,
-            PRIMARY KEY (broker, timeframe, time)
-        );
-        CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT
-        );
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE,
-            password TEXT
-        );
-    `);
-    fs.writeFileSync(dbPath, Buffer.from(db.export()));
 }
+
+db.run(`
+    CREATE TABLE IF NOT EXISTS candles (
+        broker TEXT,
+        timeframe TEXT,
+        time INTEGER,
+        open REAL,
+        high REAL,
+        low REAL,
+        close REAL,
+        PRIMARY KEY (broker, timeframe, time)
+    );
+    CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT
+    );
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE,
+        password TEXT
+    );
+`);
+// Only save if it was just created is not strictly needed since sql.js runs in memory,
+// but we should probably save just in case it added tables.
+fs.writeFileSync(dbPath, Buffer.from(db.export()));
 
 let saveTimeout: any = null;
 

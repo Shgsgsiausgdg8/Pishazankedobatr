@@ -618,7 +618,7 @@ export default function App() {
           
           if (msg.type === 'AUTH_SUCCESS') {
             ws.send(JSON.stringify({ type: 'SET_BROKER', broker: activeBrokerRef.current }));
-          } else if (msg.type === 'AUTH_FAILED') {
+          } else if (msg.type === 'AUTH_FAILED' || msg.type === 'AUTH_REQUIRED') {
             setToken('');
             localStorage.removeItem('adminToken');
             return;

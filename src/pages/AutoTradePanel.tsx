@@ -384,6 +384,16 @@ const AutoTradePanel = ({ onClose }: { onClose: () => void }) => {
                                     style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', color: 'white', borderRadius: '8px', outline: 'none', fontSize: '0.9rem' }}
                                 />
                             </div>
+                            <div>
+                                <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.8rem', marginBottom: '8px' }}>حداکثر معاملات باز</label>
+                                <input 
+                                    type="number" 
+                                    min="1"
+                                    value={config.maxOpenTrades || 1} 
+                                    onChange={e => updateConfig('maxOpenTrades', parseInt(e.target.value, 10))}
+                                    style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', color: 'white', borderRadius: '8px', outline: 'none', fontSize: '0.9rem' }}
+                                />
+                            </div>
                             {(config.enableTpSl ?? true) && (
                                 <>
                                     <div>

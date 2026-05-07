@@ -13,6 +13,7 @@ export class AutoTrader {
         accessToken: '',
         isEnabled: false,
         tradeAmount: 1, // unit (lots)
+        maxOpenTrades: 1, // unit (number)
 
         tpMode: 'pips' as 'pips' | 'tp1' | 'tp2' | 'tp3',
         tpPips: 200,
@@ -377,9 +378,9 @@ export class AutoTrader {
         if (this.config.accountMode === 'demo' && !this.config.demoNumber) return;
         if (this.config.accountMode === 'real' && !this.config.accessToken) return;
         
-        // Prevent double entries. Only 1 trade allowed at a time for safety
-        if (this.openOrders.length > 0) {
-            console.log(`[AutoTrader] Trade ignored. Open order exists.`);
+        // Prevent double entries. Only maxOpenTrades allowed at a time for safety
+        if (this.openOrders.length >= (this.config.maxOpenTrades || 1)) {
+            console.log(`[AutoTrader] Trade ignored. Open order limit reached. Limit: ${this.config.maxOpenTrades || 1}, Current: ${this.openOrders.length}`);
             return;
         }
 

@@ -9,6 +9,8 @@ import { AlphaGoldEngine } from "./src/server/alpha_engine.js";
 import { BtcEngine } from "./src/server/btc_engine.js";
 import { AutoTrader } from "./src/server/auto_trader.js";
 import { BacktestEngine } from "./src/server/backtest.js";
+import jwt from "jsonwebtoken";
+import { getUser, createUser, getUserCount } from "./src/server/db.js";
 
 async function startServer() {
     const app = express();
@@ -44,11 +46,8 @@ async function startServer() {
     app.use(express.json());
 
     // JWT Auth
-    const jwt = require('jsonwebtoken');
     const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-faraz-bot-123';
     
-    const { getUser, createUser, getUserCount } = require('./src/server/db.js');
-
     app.post("/api/admin/setup", (req, res) => {
         const { username, password } = req.body;
         if (getUserCount() > 0) {
