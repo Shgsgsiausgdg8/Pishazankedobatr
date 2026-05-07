@@ -168,10 +168,19 @@ export class AutoTrader {
                 },
                 onPortfo: (p) => { this.portfo = p; },
                 onClosedOrders: (orders) => { this.closedOrders = orders; },
-                onAlert: (alert) => { /* ignore alerts locally */ }
+                onAlert: (alert) => { /* ignore alerts locally */ },
+                onClose: () => {
+                    console.log("[AutoTrader] Websocket closed, reconnecting in 5s...");
+                    this.ws = null;
+                    setTimeout(() => this.connectLive(), 5000);
+                },
+                onError: (err) => {
+                    console.error("[AutoTrader] Websocket error:", err.message);
+                }
             });
         } catch(e) {
             console.error("[AutoTrader] Live WS error", e);
+            setTimeout(() => this.connectLive(), 5000);
         }
     }
 

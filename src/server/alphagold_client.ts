@@ -253,13 +253,28 @@ export class AlphaGoldClient {
             }
         });
 
+        let pingInterval: NodeJS.Timeout;
+        let lastMessageTime = Date.now();
+
         ws.on('open', () => {
             console.log(`[AlphaGold-WS] ${this.mode} متصل شد`);
             if (callbacks.onOpen) callbacks.onOpen();
+
+            pingInterval = setInterval(() => {
+                if (Date.now() - lastMessageTime > 60000) {
+                    console.log(`[AlphaGold-WS] No message received in 60s, closing socket to reconnect...`);
+                    ws.close();
+                    return;
+                }
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.ping();
+                }
+            }, 30000);
         });
 
         let loggedKeys = false;
         ws.on('message', (raw) => {
+            lastMessageTime = Date.now();
             try {
                 const msg = JSON.parse(raw.toString());
                 if (!loggedKeys && Math.random() < 0.1) {
@@ -283,14 +298,16 @@ export class AlphaGoldClient {
             }
         });
 
-        ws.on('error', (err) => {
-            console.error('[AlphaGold-WS] خطا:', err.message);
-            if (callbacks.onError) callbacks.onError(err);
-        });
-
         ws.on('close', (code, reason) => {
+            clearInterval(pingInterval);
             console.log('[AlphaGold-WS] بسته شد:', code, reason.toString());
             if (callbacks.onClose) callbacks.onClose();
+        });
+
+        ws.on('error', (err) => {
+            clearInterval(pingInterval);
+            console.error('[AlphaGold-WS] خطا:', err.message);
+            if (callbacks.onError) callbacks.onError(err);
         });
 
         return ws;

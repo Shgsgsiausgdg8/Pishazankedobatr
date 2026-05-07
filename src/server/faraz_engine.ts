@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import fs from 'fs';
 import path from 'path';
 import { TradingStrategy, Signal, Candle } from './strategy.js';
+import { saveCandles, getCandles } from './db.js';
 
 export class FarazGoldEngine {
     price = 0;
@@ -41,18 +42,24 @@ export class FarazGoldEngine {
         this.loadSettings();
     }
 
+    getFullCandles() {
+        return getCandles('faraz', this.timeframe, 15000);
+    }
+
     async fetchHistory(targetDays = 2) {
         try {
-            const fs = await import('fs');
-            const path = await import('path');
-            const cacheFile = path.join(process.cwd(), `faraz_history_${this.timeframe}_${targetDays}.json`);
+            // First check if we have enough candles in SQLite
+            const cached = getCandles('faraz', this.timeframe, 2000); // Only keep recent 2000 in RAM
             
-            if (fs.existsSync(cacheFile)) {
-                const stats = fs.statSync(cacheFile);
-                if (Date.now() - stats.mtimeMs < 12 * 60 * 60 * 1000) {
-                    const cached = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+            if (cached && cached.length > 100) {
+                // If we have some data, consider if it's recent enough
+                const lastTime = cached[cached.length - 1].time;
+                if (Date.now() - lastTime < 12 * 60 * 60 * 1000) {
                     this.candles = cached;
-                    console.log(`[Engine] Loaded ${cached.length} candles from cache.`);
+                    this.lastCandleTime = lastTime;
+                    this.detectLevels();
+                    this.runStrategy();
+                    console.log(`[Engine] Loaded ${cached.length} candles from SQLite.`);
                     return;
                 }
             }
@@ -121,23 +128,22 @@ export class FarazGoldEngine {
             }
 
             if (allCandles.length > 0) {
-                // Hard limit candles to 15,000 to prevent OOM
                 allCandles.sort((a: any, b: any) => a.time - b.time);
                 allCandles = allCandles.filter((c: any, i: number, arr: any[]) => i === 0 || c.time !== arr[i-1].time);
                 
-                if (allCandles.length > 15000) {
-                    allCandles = allCandles.slice(-15000);
+                // Save EVERYTHING to SQLite
+                saveCandles('faraz', this.timeframe, allCandles);
+                
+                // Only keep last 2000 in RAM
+                if (allCandles.length > 2000) {
+                    allCandles = allCandles.slice(-2000);
                 }
                 
                 this.candles = allCandles;
-                try {
-                    const fs = await import('fs');
-                    fs.writeFileSync(cacheFile, JSON.stringify(this.candles));
-                } catch (e) {}
                 this.lastCandleTime = this.candles[this.candles.length - 1].time;
                 this.detectLevels();
-                this.runStrategy();   // اجرای استراتژی روی داده‌های تاریخی
-                console.log(`[Engine] Successfully loaded ${this.candles.length} candles.`);
+                this.runStrategy();
+                console.log(`[Engine] Successfully saved and loaded ${this.candles.length} candles in RAM.`);
             }
         } catch (e: any) {
             console.error(`[Engine] Error fetching history: ${e.message}`);
@@ -388,7 +394,8 @@ export class FarazGoldEngine {
                 const newCandle = { time: candleTime, open: newPrice, high: newPrice, low: newPrice, close: newPrice };
                 this.candles.push(newCandle);
                 this.candles.sort((a, b) => a.time - b.time);
-                if (this.candles.length > 25000) this.candles.shift();
+                // Reduce from 25000 to 2000
+                if (this.candles.length > 2000) this.candles.shift();
             }
             this.lastCandleTime = Math.max(this.lastCandleTime, candleTime);
         } else {
@@ -505,9 +512,15 @@ export class FarazGoldEngine {
         } else {
             this.candles.push({ time, open, high, low, close });
             this.candles.sort((a, b) => a.time - b.time);
-            if (this.candles.length > 50000) this.candles.shift();
+            
+            // Limit to 2000 in RAM
+            if (this.candles.length > 2000) this.candles.shift();
+            
             this.lastCandleTime = Math.max(this.lastCandleTime, time);
             this.detectLevels();
+            
+            // Periodically sync to DB (e.g. at close)
+            saveCandles('faraz', this.timeframe, [this.candles[this.candles.length - 1]]);
         }
         this.runStrategy(); 
     }

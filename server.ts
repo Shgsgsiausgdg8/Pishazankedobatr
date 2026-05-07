@@ -120,7 +120,7 @@ async function startServer() {
                         }
                     }
 
-                    const fullCandles = engine.candles || [];
+                    const fullCandles = typeof engine.getFullCandles === "function" ? engine.getFullCandles() : (engine.candles || []);
                     const state = engine.getState();
                     console.log(`[Server] Running backtest for ${currentBroker} (${command.strategyType}) with ${fullCandles.length} candles`);
                     
@@ -159,7 +159,7 @@ async function startServer() {
                         }
                     }
 
-                    const fullCandles = engine.candles || [];
+                    const fullCandles = typeof engine.getFullCandles === "function" ? engine.getFullCandles() : (engine.candles || []);
                     const state = engine.getState();
                     console.log(`[Server] Running global backtest for ${currentBroker} with ${fullCandles.length} candles`);
                     

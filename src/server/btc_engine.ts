@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import fs from 'fs';
 import path from 'path';
 import { TradingStrategy, Signal, Candle } from './strategy.js';
+import { saveCandles, getCandles } from './db.js';
 
 export class BtcEngine {
     price = 0;
@@ -73,18 +74,20 @@ export class BtcEngine {
         this.connectWS();
     }
 
+    getFullCandles() {
+        return getCandles('btc', this.timeframe, 15000);
+    }
+
     async fetchHistory(targetDays = 2) {
         try {
-            const fs = await import('fs');
-            const path = await import('path');
-            const cacheFile = path.join(process.cwd(), `btc_history_${this.timeframe}_${targetDays}.json`);
+            const cached = getCandles('btc', this.timeframe, 2000);
             
-            if (fs.existsSync(cacheFile)) {
-                const stats = fs.statSync(cacheFile);
-                if (Date.now() - stats.mtimeMs < 12 * 60 * 60 * 1000) {
-                    const cached = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+            if (cached && cached.length > 100) {
+                const lastTime = cached[cached.length - 1].time;
+                if (Date.now() - lastTime < 12 * 60 * 60 * 1000) {
                     this.candles = cached;
-                    console.log(`[BTC-Engine] Loaded ${cached.length} candles from cache.`);
+                    this.price = cached[cached.length - 1].close;
+                    console.log(`[BTC-Engine] Loaded ${cached.length} candles from SQLite.`);
                     return;
                 }
             }
@@ -157,19 +160,18 @@ export class BtcEngine {
                 // Remove duplicates
                 allCandles = allCandles.filter((c: any, i: number, arr: any[]) => i === 0 || c.time !== arr[i-1].time);
                 
-                // Hard limit to 15,000 to prevent OOM
-                if (allCandles.length > 15000) {
-                    allCandles = allCandles.slice(-15000);
+                // Save EVERYTHING to SQLite
+                saveCandles('btc', this.timeframe, allCandles);
+                
+                // Keep only last 2000 in memory
+                if (allCandles.length > 2000) {
+                    allCandles = allCandles.slice(-2000);
                 }
 
                 this.candles = allCandles;
-                try {
-                    const fs = await import('fs');
-                    fs.writeFileSync(cacheFile, JSON.stringify(this.candles));
-                } catch (e) {}
                 this.price = this.candles[this.candles.length - 1].close;
                 this.detectLevels();
-                console.log(`[BTC-Engine] Successfully loaded ${this.candles.length} history bars.`);
+                console.log(`[BTC-Engine] Successfully saved and loaded ${this.candles.length} history bars.`);
             }
         } catch (e: any) {
             console.error(`[BTC-Engine] Error fetching history: ${e.message}`);
@@ -248,9 +250,11 @@ export class BtcEngine {
             last.low = Math.min(last.low, newPrice);
             last.close = newPrice;
         } else if (this.candles.length > 0 && cTime > last.time) {
-            this.candles.push({ time: cTime, open: newPrice, high: newPrice, low: newPrice, close: newPrice });
-            if (this.candles.length > 25000) this.candles.shift();
+            const c = { time: cTime, open: newPrice, high: newPrice, low: newPrice, close: newPrice };
+            this.candles.push(c);
+            if (this.candles.length > 2000) this.candles.shift();
             this.detectLevels();
+            saveCandles('btc', this.timeframe, [c]); // Save latest
         }
         this.runStrategy();
     }
@@ -277,10 +281,12 @@ export class BtcEngine {
             existing.low = Math.min(existing.low, low);
             existing.close = close;
         } else {
-            this.candles.push({ time, open, high, low, close });
+            const c = { time, open, high, low, close };
+            this.candles.push(c);
             this.candles.sort((a, b) => a.time - b.time);
-            if (this.candles.length > 25000) this.candles.shift();
+            if (this.candles.length > 2000) this.candles.shift();
             this.detectLevels();
+            saveCandles('btc', this.timeframe, [c]); // Save latest
         }
         this.runStrategy();
     }

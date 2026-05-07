@@ -2,6 +2,7 @@ import WebSocket from "ws";
 import fs from "fs";
 import path from "path";
 import { TradingStrategy, Signal, Candle } from "./strategy.js";
+import { saveCandles, getCandles } from './db.js';
 
 export class AlphaGoldEngine {
     price = 0;
@@ -85,18 +86,22 @@ export class AlphaGoldEngine {
         setInterval(() => this.cleanupCandles(), 60000);
     }
 
+    getFullCandles() {
+        return getCandles('alpha', this.timeframe, 15000);
+    }
+
     async fetchHistoricalCandles(targetDays = 2) {
         try {
-            const fs = await import('fs');
-            const path = await import('path');
-            const cacheFile = path.join(process.cwd(), `alpha_history_${this.timeframe}_${targetDays}.json`);
+            // Check SQLite first
+            const cached = getCandles('alpha', this.timeframe, 2000);
             
-            if (fs.existsSync(cacheFile)) {
-                const stats = fs.statSync(cacheFile);
-                if (Date.now() - stats.mtimeMs < 12 * 60 * 60 * 1000) { // Cache valid for 12 hours
-                    const cached = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+            if (cached && cached.length > 100) {
+                const lastTime = cached[cached.length - 1].time;
+                if (Date.now() - lastTime < 12 * 60 * 60 * 1000) {
                     this.candles = cached;
-                    console.log(`[AlphaEngine] Loaded ${cached.length} candles from cache.`);
+                    this.lastCandleTime = lastTime;
+                    this.price = cached[cached.length - 1].close;
+                    console.log(`[AlphaEngine] Loaded ${cached.length} candles from SQLite.`);
                     return;
                 }
             }
@@ -171,22 +176,21 @@ export class AlphaGoldEngine {
                 // Remove duplicates
                 allCandles = allCandles.filter((c: any, i: number, arr: any[]) => i === 0 || c.time !== arr[i-1].time);
                 
-                // Hard limit to 15,000 to prevent OOM
-                if (allCandles.length > 15000) {
-                    allCandles = allCandles.slice(-15000);
+                // Save EVERYTHING to SQLite
+                saveCandles('alpha', this.timeframe, allCandles);
+                
+                // Only keep last 2000 in memory
+                if (allCandles.length > 2000) {
+                    allCandles = allCandles.slice(-2000);
                 }
 
                 this.candles = allCandles;
-                try {
-                    const fs = await import('fs');
-                    fs.writeFileSync(cacheFile, JSON.stringify(allCandles));
-                } catch (e) {}
 
                 const last = this.candles[this.candles.length - 1];
                 this.lastCandleTime = last.time;
                 this.price = last.close;
                 this.detectLevels();
-                console.log(`[AlphaEngine] Loaded ${this.candles.length} clean historical candles successfully.`);
+                console.log(`[AlphaEngine] Loaded ${this.candles.length} clean historical candles successfully into RAM.`);
             }
         } catch (err: any) {
             console.error("[AlphaEngine] History fetch error:", err.message);
@@ -299,10 +303,12 @@ export class AlphaGoldEngine {
     createNewCandle(time: number, price: number) {
         const c = { time, open: price, high: price, low: price, close: price };
         this.candles.push(c);
-        if (this.candles.length > 25000) this.candles.shift();
+        if (this.candles.length > 2000) this.candles.shift();
         this.lastCandleTime = time;
         this.detectLevels();
         this.runStrategy();
+        
+        saveCandles('alpha', this.timeframe, [c]); // Save latest to DB
     }
 
     detectLevels() {
@@ -455,6 +461,6 @@ export class AlphaGoldEngine {
     }
 
     cleanupCandles() {
-        if (this.candles.length > 60000) this.candles = this.candles.slice(-50000);
+        if (this.candles.length > 2000) this.candles = this.candles.slice(-2000);
     }
 }
