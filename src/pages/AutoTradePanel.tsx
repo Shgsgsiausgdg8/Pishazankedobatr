@@ -394,6 +394,47 @@ const AutoTradePanel = ({ onClose }: { onClose: () => void }) => {
                                     style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', color: 'white', borderRadius: '8px', outline: 'none', fontSize: '0.9rem' }}
                                 />
                             </div>
+                        </div>
+
+                        <div style={{ marginTop: '20px', padding: '15px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)', borderRadius: '12px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
+                                <input 
+                                    type="checkbox" 
+                                    id="enableTimeWindow"
+                                    checked={config.enableTimeWindow || false}
+                                    onChange={e => updateConfig('enableTimeWindow', e.target.checked)}
+                                    style={{ width: '18px', height: '18px', accentColor: '#3b82f6', cursor: 'pointer' }}
+                                />
+                                <label htmlFor="enableTimeWindow" style={{ color: 'white', marginRight: '10px', fontSize: '0.9rem', cursor: 'pointer', fontWeight: 500 }}>
+                                    محدودیت زمان ترید (به وقت تهران)
+                                </label>
+                            </div>
+
+                            {config.enableTimeWindow && (
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '16px' }}>
+                                    <div>
+                                        <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.8rem', marginBottom: '8px' }}>ساعت شروع</label>
+                                        <input 
+                                            type="time" 
+                                            value={config.tradeStartTime || '08:00'} 
+                                            onChange={e => updateConfig('tradeStartTime', e.target.value)}
+                                            style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', color: 'white', borderRadius: '8px', outline: 'none', fontSize: '0.9rem' }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.8rem', marginBottom: '8px' }}>ساعت پایان</label>
+                                        <input 
+                                            type="time" 
+                                            value={config.tradeEndTime || '20:00'} 
+                                            onChange={e => updateConfig('tradeEndTime', e.target.value)}
+                                            style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', color: 'white', borderRadius: '8px', outline: 'none', fontSize: '0.9rem' }}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div style={{ marginTop: '20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '16px' }}>
                             {(config.enableTpSl ?? true) && (
                                 <>
                                     <div>

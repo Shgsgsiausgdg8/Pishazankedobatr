@@ -15,6 +15,10 @@ export class AutoTrader {
         tradeAmount: 1, // unit (lots)
         maxOpenTrades: 1, // unit (number)
 
+        enableTimeWindow: false,
+        tradeStartTime: '08:00',
+        tradeEndTime: '20:00',
+
         tpMode: 'pips' as 'pips' | 'tp1' | 'tp2' | 'tp3',
         tpPips: 200,
         slMode: 'pips' as 'pips' | 'signal',
@@ -378,6 +382,37 @@ export class AutoTrader {
         if (this.config.accountMode === 'demo' && !this.config.demoNumber) return;
         if (this.config.accountMode === 'real' && !this.config.accessToken) return;
         
+        // Time window check
+        if (this.config.enableTimeWindow && this.config.tradeStartTime && this.config.tradeEndTime) {
+            const now = new Date();
+            const formatter = new Intl.DateTimeFormat('en-GB', {
+                timeZone: 'Asia/Tehran',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+            const timeStr = formatter.format(now);
+            const [nowH, nowM] = timeStr.split(':').map(Number);
+            const [startH, startM] = this.config.tradeStartTime.split(':').map(Number);
+            const [endH, endM] = this.config.tradeEndTime.split(':').map(Number);
+            
+            const nowTime = nowH * 60 + nowM;
+            const startTime = startH * 60 + startM;
+            const endTime = endH * 60 + endM;
+
+            let inWindow = false;
+            if (startTime <= endTime) {
+                inWindow = nowTime >= startTime && nowTime <= endTime;
+            } else {
+                inWindow = nowTime >= startTime || nowTime <= endTime;
+            }
+
+            if (!inWindow) {
+                console.log(`[AutoTrader] Trade ignored. Time window constraint (${this.config.tradeStartTime} - ${this.config.tradeEndTime}), current time: ${timeStr} (Tehran Time)`);
+                return;
+            }
+        }
+
         // Prevent double entries. Only maxOpenTrades allowed at a time for safety
         if (this.openOrders.length >= (this.config.maxOpenTrades || 1)) {
             console.log(`[AutoTrader] Trade ignored. Open order limit reached. Limit: ${this.config.maxOpenTrades || 1}, Current: ${this.openOrders.length}`);
