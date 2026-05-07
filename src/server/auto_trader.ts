@@ -1,12 +1,12 @@
-import fs from 'fs';
-import path from 'path';
 import { AlphaGoldClient } from './alphagold_client.js';
 import { Signal } from './strategy.js';
 import { AlphaGoldEngine } from './alpha_engine.js';
 import WebSocket from 'ws';
+import { getSetting, setSetting } from './db.js';
 
 export class AutoTrader {
     client: AlphaGoldClient;
+    // Settings
     config = {
         accountMode: 'demo' as 'demo' | 'real',
         demoNumber: '',
@@ -28,7 +28,7 @@ export class AutoTrader {
 
         portfoType: 1
     };
-    settingsFile = path.join(process.cwd(), 'autotrade_settings.json');
+
     ws: WebSocket | null = null;
     
     // State to push to UI
@@ -38,12 +38,10 @@ export class AutoTrader {
     livePrice: number = 0;
     
     // Virtual Limits tracking
-    virtualLimitsFile = path.join(process.cwd(), 'virtual_limits.json');
     virtualLimits: Record<string, {tp: number, sl: number}> = {};
 
     // Keep track of original signal for each order to move SL based on targets
     orderSignals: Record<string, Signal> = {};
-    orderSignalsFile = path.join(process.cwd(), 'order_signals.json');
 
     // Keep track of last hit TP level for each order (0=none, 1=TP1, etc.)
     orderTpProgress: Record<string, number> = {};
@@ -69,8 +67,8 @@ export class AutoTrader {
 
     loadSettings() {
         try {
-            if (fs.existsSync(this.settingsFile)) {
-                const data = JSON.parse(fs.readFileSync(this.settingsFile, 'utf8'));
+            const data = getSetting('autotrade_settings');
+            if (data) {
                 this.config = { ...this.config, ...data };
                 if (this.config.accessToken) {
                     this.client.setTokens(this.config.accessToken);
@@ -81,28 +79,29 @@ export class AutoTrader {
 
     loadVirtualLimits() {
         try {
-            if (fs.existsSync(this.virtualLimitsFile)) {
-                this.virtualLimits = JSON.parse(fs.readFileSync(this.virtualLimitsFile, 'utf8'));
+            const data = getSetting('virtual_limits');
+            if (data) {
+                this.virtualLimits = data;
             }
         } catch(e) {}
     }
 
     saveVirtualLimits() {
         try {
-            fs.writeFileSync(this.virtualLimitsFile, JSON.stringify(this.virtualLimits, null, 2));
+            setSetting('virtual_limits', this.virtualLimits);
         } catch(e) {}
     }
 
     saveSettings() {
         try {
-            fs.writeFileSync(this.settingsFile, JSON.stringify(this.config, null, 2));
+            setSetting('autotrade_settings', this.config);
         } catch(e) {}
     }
 
     loadOrderSignals() {
         try {
-            if (fs.existsSync(this.orderSignalsFile)) {
-                const data = JSON.parse(fs.readFileSync(this.orderSignalsFile, 'utf8'));
+            const data = getSetting('order_signals');
+            if (data) {
                 this.orderSignals = data.signals || {};
                 this.orderTpProgress = data.progress || {};
             }
@@ -111,10 +110,10 @@ export class AutoTrader {
 
     saveOrderSignals() {
         try {
-            fs.writeFileSync(this.orderSignalsFile, JSON.stringify({
+            setSetting('order_signals', {
                 signals: this.orderSignals,
                 progress: this.orderTpProgress
-            }, null, 2));
+            });
         } catch(e) {}
     }
 

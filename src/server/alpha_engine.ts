@@ -2,7 +2,7 @@ import WebSocket from "ws";
 import fs from "fs";
 import path from "path";
 import { TradingStrategy, Signal, Candle } from "./strategy.js";
-import { saveCandles, getCandles } from './db.js';
+import { saveCandles, getCandles, getSetting, setSetting } from './db.js';
 
 export class AlphaGoldEngine {
     price = 0;
@@ -40,8 +40,8 @@ export class AlphaGoldEngine {
 
     loadSettings() {
         try {
-            if (fs.existsSync(this.settingsFile)) {
-                const settings = JSON.parse(fs.readFileSync(this.settingsFile, 'utf8'));
+            const settings = getSetting('alpha_settings');
+            if (settings) {
                 if (settings.baleToken) this.baleToken = settings.baleToken;
                 if (settings.baleChatId) this.baleChatId = settings.baleChatId;
                 if (settings.candleConfirmations) this.candleConfirmations = settings.candleConfirmations;
@@ -64,7 +64,7 @@ export class AlphaGoldEngine {
                 liveStrategyType: this.liveStrategyType,
                 strategyConfig: (this.strategy as any).config
             };
-            fs.writeFileSync(this.settingsFile, JSON.stringify(settings, null, 2));
+            setSetting('alpha_settings', settings);
         } catch (e) {
             console.error("Error saving Alpha settings:", e);
         }

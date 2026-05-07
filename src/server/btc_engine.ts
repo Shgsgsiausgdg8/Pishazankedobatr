@@ -2,7 +2,7 @@ import WebSocket from 'ws';
 import fs from 'fs';
 import path from 'path';
 import { TradingStrategy, Signal, Candle } from './strategy.js';
-import { saveCandles, getCandles } from './db.js';
+import { saveCandles, getCandles, getSetting, setSetting } from './db.js';
 
 export class BtcEngine {
     price = 0;
@@ -38,8 +38,8 @@ export class BtcEngine {
 
     loadSettings() {
         try {
-            if (fs.existsSync(this.settingsFile)) {
-                const s = JSON.parse(fs.readFileSync(this.settingsFile, 'utf8'));
+            const s = getSetting('btc_settings');
+            if (s) {
                 if (s.baleToken) this.baleToken = s.baleToken;
                 if (s.baleChatId) this.baleChatId = s.baleChatId;
                 if (s.currentToken) this.currentToken = s.currentToken;
@@ -64,7 +64,7 @@ export class BtcEngine {
                 liveStrategyType: this.liveStrategyType,
                 strategyConfig: (this.strategy as any).config
             };
-            fs.writeFileSync(this.settingsFile, JSON.stringify(s, null, 2));
+            setSetting('btc_settings', s);
         } catch (e) {}
     }
 

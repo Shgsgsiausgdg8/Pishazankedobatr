@@ -2,7 +2,7 @@ import WebSocket from 'ws';
 import fs from 'fs';
 import path from 'path';
 import { TradingStrategy, Signal, Candle } from './strategy.js';
-import { saveCandles, getCandles } from './db.js';
+import { saveCandles, getCandles, getSetting, setSetting } from './db.js';
 
 export class FarazGoldEngine {
     price = 0;
@@ -191,8 +191,8 @@ export class FarazGoldEngine {
 
     loadSettings() {
         try {
-            if (fs.existsSync(this.settingsFile)) {
-                const settings = JSON.parse(fs.readFileSync(this.settingsFile, 'utf8'));
+            const settings = getSetting('faraz_settings');
+            if (settings) {
                 this.accessToken = settings.accessToken || null;
                 this.refreshToken = settings.refreshToken || null;
                 this.sessionId = settings.sessionId || null;
@@ -223,7 +223,7 @@ export class FarazGoldEngine {
                 liveStrategyType: this.liveStrategyType,
                 strategyConfig: (this.strategy as any).config
             };
-            fs.writeFileSync(this.settingsFile, JSON.stringify(settings, null, 2));
+            setSetting('faraz_settings', settings);
         } catch (e) {
             console.error("Error saving settings:", e);
         }

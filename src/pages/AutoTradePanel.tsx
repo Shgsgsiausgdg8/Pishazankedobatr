@@ -38,7 +38,10 @@ const AutoTradePanel = ({ onClose }: { onClose: () => void }) => {
     // Fetch user info to see if authenticated
     const fetchUser = async () => {
         try {
-            const res = await fetch('/api/autotrade/user');
+            const token = localStorage.getItem('adminToken');
+            const res = await fetch('/api/autotrade/user', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
             if (res.ok) {
                 const data = await res.json();
                 if (data && (data.phone_number || data.username || data.demo_number)) {
@@ -57,7 +60,10 @@ const AutoTradePanel = ({ onClose }: { onClose: () => void }) => {
 
     const fetchState = () => {
         if (authStep !== 'DASHBOARD') return;
-        fetch('/api/autotrade/state')
+        const token = localStorage.getItem('adminToken');
+        fetch('/api/autotrade/state', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
             .then(res => res.json())
             .then(data => {
                 setState(data);
@@ -81,17 +87,25 @@ const AutoTradePanel = ({ onClose }: { onClose: () => void }) => {
     const updateConfig = (key: string, value: any) => {
         const newConfig = { ...config, [key]: value };
         setConfig(newConfig);
+        const token = localStorage.getItem('adminToken');
         fetch('/api/autotrade/config', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
             body: JSON.stringify(newConfig)
         });
     };
 
     const closeOrder = (id: string) => {
+        const token = localStorage.getItem('adminToken');
         fetch('/api/autotrade/order/close', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
             body: JSON.stringify({ id })
         }).then(() => fetchState());
     };
@@ -101,9 +115,13 @@ const AutoTradePanel = ({ onClose }: { onClose: () => void }) => {
         setAuthLoading(true);
         setAuthError('');
         try {
+            const token = localStorage.getItem('adminToken');
             const res = await fetch('/api/autotrade/auth/request', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
                 body: JSON.stringify({phone: phone.trim()})
             });
             const data = await res.json();
@@ -126,9 +144,13 @@ const AutoTradePanel = ({ onClose }: { onClose: () => void }) => {
         setAuthLoading(true);
         setAuthError('');
         try {
+            const token = localStorage.getItem('adminToken');
             const res = await fetch('/api/autotrade/auth/confirm', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
                 body: JSON.stringify({phone: phone.trim(), code: otp.trim()})
             });
             const data = await res.json();

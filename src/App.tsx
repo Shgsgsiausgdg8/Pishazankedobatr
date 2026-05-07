@@ -1,6 +1,72 @@
 import React, { useEffect, useRef, useState } from 'react';
 import AutoTradePanel from './pages/AutoTradePanel';
 
+function LoginScreen({ onLogin }: { onLogin: (t: string) => void }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [isSetup, setIsSetup] = useState(false);
+  const [error, setError] = useState('');
+  
+  useEffect(() => {
+    fetch('/api/admin/check').then(r => r.json()).then(data => {
+      if (!data.hasAdmin) setIsSetup(true);
+    }).catch(() => {});
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    const endpoint = isSetup ? '/api/admin/setup' : '/api/admin/login';
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (isSetup) {
+          setIsSetup(false);
+          setError('حساب ادمین ساخته شد. لطفا وارد شوید.');
+        } else {
+          onLogin(data.token);
+        }
+      } else {
+        setError(data.error || 'خطایی رخ داد');
+      }
+    } catch(e) {
+      setError('خطا در ارتباط با سرور');
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-white font-[Vazirmatn]">
+      <div className="bg-slate-900 border border-slate-800 p-8 rounded-2xl w-full max-w-sm shadow-2xl">
+        <div className="flex justify-center mb-6 text-emerald-500">
+          <ActivityIcon size={40} />
+        </div>
+        <h1 className="text-2xl font-bold text-center mb-6">{isSetup ? 'راه‌اندازی ادمین' : 'ورود به پنل ربات'}</h1>
+        
+        {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-3 rounded-lg text-sm text-center mb-4">{error}</div>}
+        
+        <form onSubmit={handleSubmit} className="space-y-4" dir="rtl">
+          <div>
+            <label className="block text-sm text-slate-400 mb-1">نام کاربری</label>
+            <input type="text" value={username} onChange={e => setUsername(e.target.value)} required className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:border-emerald-500 transition-colors" />
+          </div>
+          <div>
+            <label className="block text-sm text-slate-400 mb-1">رمز عبور</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:border-emerald-500 transition-colors" />
+          </div>
+          <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2 rounded-lg transition-colors mt-2">
+            {isSetup ? 'ثبت و ادامه' : 'ورود'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // --- Icons (SVG) ---
 const ActivityIcon = ({ size = 24 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
@@ -521,19 +587,26 @@ export default function App() {
   const [isGlobalTesting, setIsGlobalTesting] = useState(false);
   const [backtestLoadingMsg, setBacktestLoadingMsg] = useState<string | null>(null);
 
+  const [token, setToken] = useState(localStorage.getItem('adminToken') || '');
+
+  const handleLogin = (t: string) => {
+    localStorage.setItem('adminToken', t);
+    setToken(t);
+  };
+
   useEffect(() => {
     activeBrokerRef.current = activeBroker;
   }, [activeBroker]);
 
   useEffect(() => {
+    if (!token) return;
     const connect = () => {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const ws = new WebSocket(`${protocol}//${window.location.host}`);
       
       ws.onopen = () => {
         setWsConnected(true);
-        // Sync broker on reconnect
-        ws.send(JSON.stringify({ type: 'SET_BROKER', broker: activeBrokerRef.current }));
+        ws.send(JSON.stringify({ type: 'AUTH', token }));
       };
       ws.onclose = () => {
         setWsConnected(false);
@@ -542,6 +615,15 @@ export default function App() {
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
+          
+          if (msg.type === 'AUTH_SUCCESS') {
+            ws.send(JSON.stringify({ type: 'SET_BROKER', broker: activeBrokerRef.current }));
+          } else if (msg.type === 'AUTH_FAILED') {
+            setToken('');
+            localStorage.removeItem('adminToken');
+            return;
+          }
+
           if (msg.type === 'STATE' || msg.type === 'INIT' || msg.type === 'UPDATE') {
             if (msg.engineStatuses) setEngineStatuses(msg.engineStatuses);
             if (msg.broker === activeBrokerRef.current) {
@@ -679,7 +761,10 @@ export default function App() {
     try {
       await fetch('/api/auth/set-refresh-token', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ refreshToken, type: accountType })
       });
       setShowAuth(false);
@@ -698,6 +783,10 @@ export default function App() {
     { label: '15m', value: '15' },
     { label: '1h', value: '60' },
   ];
+
+  if (!token) {
+    return <LoginScreen onLogin={handleLogin} />;
+  }
 
   return (
     <div className="rtl">

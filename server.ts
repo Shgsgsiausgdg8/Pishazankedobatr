@@ -43,7 +43,56 @@ async function startServer() {
 
     app.use(express.json());
 
-    wss.on("connection", (ws) => {
+    // JWT Auth
+    const jwt = require('jsonwebtoken');
+    const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-faraz-bot-123';
+    
+    const { getUser, createUser, getUserCount } = require('./src/server/db.js');
+
+    app.post("/api/admin/setup", (req, res) => {
+        const { username, password } = req.body;
+        if (getUserCount() > 0) {
+            return res.status(403).json({ error: "Admin already setup." });
+        }
+        if (createUser(username, password)) {
+            res.json({ success: true, message: "Admin created" });
+        } else {
+            res.status(500).json({ error: "Failed to create user" });
+        }
+    });
+
+    app.get("/api/admin/check", (req, res) => {
+        res.json({ hasAdmin: getUserCount() > 0 });
+    });
+
+    app.post("/api/admin/login", (req, res) => {
+        const { username, password } = req.body;
+        const user = getUser(username);
+        if (user && user.password === password) { // basic auth (should hash ideally)
+            const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '10d' });
+            res.json({ success: true, token });
+        } else {
+            res.status(401).json({ error: "Invalid credentials" });
+        }
+    });
+
+    // Simple middleware
+    const requireAuth = (req: any, res: any, next: any) => {
+        const authHeader = req.headers.authorization;
+        if (!authHeader) return res.status(401).json({ error: "No token provided" });
+        const token = authHeader.split(' ')[1];
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            req.user = decoded;
+            next();
+        } catch (e) {
+            return res.status(401).json({ error: "Invalid token" });
+        }
+    };
+
+    wss.on("connection", (ws, req) => {
+        // We'll trust WS for now or wait for first auth message. Since UI needs WS early, we can leave it unauthenticated or check query string.
+        let isWsAuthenticated = false;
         let currentBroker = 'faraz';
 
         const sendState = (type: string) => {
@@ -82,10 +131,8 @@ async function startServer() {
             }
         };
 
-        sendState('INIT');
-        
         const interval = setInterval(() => {
-            if (ws.readyState === WebSocket.OPEN) {
+            if (ws.readyState === WebSocket.OPEN && isWsAuthenticated) {
                 sendState('UPDATE');
             }
         }, 1000); // 1000ms is stable and sufficient for candle charts
@@ -93,6 +140,24 @@ async function startServer() {
         ws.on("message", async (message) => {
             try {
                 const command = JSON.parse(message.toString());
+
+                if (command.type === 'AUTH') {
+                    try {
+                        jwt.verify(command.token, JWT_SECRET);
+                        isWsAuthenticated = true;
+                        ws.send(JSON.stringify({ type: 'AUTH_SUCCESS' }));
+                        sendState('INIT'); // sending state only after auth
+                    } catch(e) {
+                        ws.send(JSON.stringify({ type: 'AUTH_FAILED' }));
+                    }
+                    return;
+                }
+
+                if (!isWsAuthenticated) {
+                    ws.send(JSON.stringify({ type: 'AUTH_REQUIRED' }));
+                    return;
+                }
+
                 if (command.type === 'SET_BROKER') {
                     if (engines[command.broker]) {
                         currentBroker = command.broker;
@@ -246,7 +311,7 @@ async function startServer() {
         ws.on("close", () => clearInterval(interval));
     });
 
-    app.post("/api/auth/set-refresh-token", async (req, res) => {
+    app.post("/api/auth/set-refresh-token", requireAuth, async (req, res) => {
         const { refreshToken, type } = req.body;
         if (!refreshToken)
             return res.status(400).json({ error: 'Token is required' });
@@ -269,7 +334,7 @@ async function startServer() {
         }
     });
 
-    app.get("/api/autotrade/state", (req, res) => {
+    app.get("/api/autotrade/state", requireAuth, (req, res) => {
         res.json({
             config: autoTrader.config,
             portfo: autoTrader.portfo,
@@ -279,7 +344,7 @@ async function startServer() {
         });
     });
 
-    app.post("/api/autotrade/config", (req, res) => {
+    app.post("/api/autotrade/config", requireAuth, (req, res) => {
         try {
             autoTrader.updateConfig(req.body);
             res.json({ success: true });
@@ -288,7 +353,7 @@ async function startServer() {
         }
     });
 
-    app.post("/api/autotrade/auth/request", async (req, res) => {
+    app.post("/api/autotrade/auth/request", requireAuth, async (req, res) => {
         try {
             const { phone } = req.body;
             // Convert Persian/Arabic digits to English, just in case
@@ -309,7 +374,7 @@ async function startServer() {
         }
     });
 
-    app.post("/api/autotrade/auth/confirm", async (req, res) => {
+    app.post("/api/autotrade/auth/confirm", requireAuth, async (req, res) => {
         try {
             const { phone, code } = req.body;
             const englishPhone = phone.replace(/[۰-۹]/g, (d: string) => String.fromCharCode(d.charCodeAt(0) - 1728)).replace(/[٠-٩]/g, (d: string) => String.fromCharCode(d.charCodeAt(0) - 1584));
@@ -334,7 +399,7 @@ async function startServer() {
         }
     });
 
-    app.get("/api/autotrade/user", async (req, res) => {
+    app.get("/api/autotrade/user", requireAuth, async (req, res) => {
         try {
             const data = await autoTrader.client.getUserInfo();
             // Automatically set demoNumber if valid user info is retrieved
@@ -347,7 +412,7 @@ async function startServer() {
         }
     });
 
-    app.post("/api/autotrade/order/close", async (req, res) => {
+    app.post("/api/autotrade/order/close", requireAuth, async (req, res) => {
         try {
             const { id } = req.body;
             const data = await autoTrader.client.closeOrder(id);
@@ -357,7 +422,7 @@ async function startServer() {
         }
     });
 
-    app.post("/api/autotrade/order/edit", async (req, res) => {
+    app.post("/api/autotrade/order/edit", requireAuth, async (req, res) => {
         try {
             const { id, tp, sl } = req.body;
             const data = await autoTrader.client.editOrder(id, sl, tp);
