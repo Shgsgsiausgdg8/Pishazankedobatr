@@ -32,7 +32,10 @@ const AutoTradePanel = ({ onClose }: { onClose: () => void }) => {
         autoRiskFree: false,
         riskFreeMode: 'pips',
         riskFreePips: 100,
-        portfoType: 1
+        portfoType: 1,
+        baleToken: '',
+        baleChatId: '',
+        baleEnabled: false
     });
     
     // Fetch user info to see if authenticated
@@ -534,6 +537,59 @@ const AutoTradePanel = ({ onClose }: { onClose: () => void }) => {
                             )}
                         </div>
                         
+                        {/* Bale Notification Settings */}
+                        <div style={{ padding: '20px', background: 'rgba(59, 130, 246, 0.05)', border: '1px dashed rgba(59, 130, 246, 0.3)', borderRadius: '12px' }}>
+                            <h4 style={{ color: 'white', margin: '0 0 16px 0', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'space-between' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg> 
+                                    تنظیمات گزارشات بله (Bale)
+                                </div>
+                                <div 
+                                    onClick={() => updateConfig('baleEnabled', !config.baleEnabled)}
+                                    style={{ 
+                                        width: '44px', height: '22px', 
+                                        background: config.baleEnabled ? '#2563eb' : '#334155', 
+                                        borderRadius: '11px', position: 'relative', cursor: 'pointer',
+                                        transition: 'background 0.3s'
+                                    }}
+                                >
+                                    <div style={{ 
+                                        width: '16px', height: '16px', background: 'white', borderRadius: '50%',
+                                        position: 'absolute', top: '3px', 
+                                        left: config.baleEnabled ? '25px' : '3px',
+                                        transition: 'left 0.3s'
+                                    }} />
+                                </div>
+                            </h4>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                    <div>
+                                        <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.8rem', marginBottom: '6px' }}>توکن بات بله (Bale Token)</label>
+                                        <input 
+                                            type="text" 
+                                            value={config.baleToken || ''} 
+                                            onChange={e => updateConfig('baleToken', e.target.value)}
+                                            placeholder="123456...:ABC..."
+                                            style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', color: 'white', borderRadius: '8px', outline: 'none', fontSize: '0.85rem', direction: 'ltr' }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.8rem', marginBottom: '6px' }}>شناسه چت (Chat ID)</label>
+                                        <input 
+                                            type="text" 
+                                            value={config.baleChatId || ''} 
+                                            onChange={e => updateConfig('baleChatId', e.target.value)}
+                                            placeholder="654321..."
+                                            style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', color: 'white', borderRadius: '8px', outline: 'none', fontSize: '0.85rem', direction: 'ltr' }}
+                                        />
+                                    </div>
+                                </div>
+                                <div style={{ fontSize: '0.75rem', color: '#60a5fa', background: 'rgba(59, 130, 246, 0.1)', padding: '8px', borderRadius: '6px' }}>
+                                    💡 گزارشات کلی هر ۳۰ دقیقه و اعلان‌های باز/بسته شدن معامله به این آیدی ارسال می‌شود.
+                                </div>
+                            </div>
+                        </div>
+
                         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                             <button 
                                 onClick={() => updateConfig('isEnabled', !config.isEnabled)}

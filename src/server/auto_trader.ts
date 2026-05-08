@@ -3,9 +3,12 @@ import { Signal } from './strategy.js';
 import { AlphaGoldEngine } from './alpha_engine.js';
 import WebSocket from 'ws';
 import { getSetting, setSetting } from './db.js';
+import { Messenger, ReportStats } from './messenger.js';
 
 export class AutoTrader {
     client: AlphaGoldClient;
+    messenger: Messenger;
+
     // Settings
     config = {
         accountMode: 'demo' as 'demo' | 'real',
@@ -24,14 +27,19 @@ export class AutoTrader {
         slMode: 'pips' as 'pips' | 'signal',
         slPips: 200,
         
-        enableTpSl: true, // <-- added
-        limitMode: 'virtual' as 'broker' | 'virtual', // <-- added
+        enableTpSl: true, 
+        limitMode: 'virtual' as 'broker' | 'virtual',
 
         autoRiskFree: false,
         riskFreeMode: 'pips' as 'pips' | 'targets',
         riskFreePips: 100,
 
-        portfoType: 1
+        portfoType: 1,
+
+        // Bale Notification Settings
+        baleToken: '',
+        baleChatId: '',
+        baleEnabled: false
     };
 
     ws: WebSocket | null = null;
@@ -51,13 +59,48 @@ export class AutoTrader {
     // Keep track of last hit TP level for each order (0=none, 1=TP1, etc.)
     orderTpProgress: Record<string, number> = {};
 
+    // Bale message IDs for replies
+    baleOpenMessageIds: Record<string, number> = {};
+
+    // Notification states
+    notifiedOpenOrders = new Set<string>();
+    notifiedClosedOrders = new Set<string>();
+
+    // Report tracking
+    reportStats: ReportStats = {
+        totalTrades: 0,
+        winTrades: 0,
+        lossTrades: 0,
+        totalProfit: 0,
+        broker: 'آلفا گلد'
+    };
+
     constructor() {
         this.client = new AlphaGoldClient();
+        this.messenger = new Messenger();
         this.loadSettings();
         this.loadVirtualLimits();
         this.loadOrderSignals();
         this.applyAccountMode();
         this.connectLive();
+        this.startPeriodicReport();
+    }
+
+    startPeriodicReport() {
+        // Send report every 30 minutes
+        setInterval(() => {
+            if (this.config.isEnabled && this.config.baleEnabled && (this.reportStats.totalTrades > 0)) {
+                this.messenger.sendPeriodicReport(this.reportStats, this.config.accountMode);
+                // Reset stats for next 30 min
+                this.reportStats = {
+                    totalTrades: 0,
+                    winTrades: 0,
+                    lossTrades: 0,
+                    totalProfit: 0,
+                    broker: 'آلفا گلد'
+                };
+            }
+        }, 30 * 60 * 1000);
     }
 
     applyAccountMode() {
@@ -68,6 +111,7 @@ export class AutoTrader {
         if (this.config.accessToken) {
             this.client.setTokens(this.config.accessToken);
         }
+        this.messenger.updateConfig(this.config.baleToken, this.config.baleChatId);
     }
 
     loadSettings() {
@@ -109,6 +153,7 @@ export class AutoTrader {
             if (data) {
                 this.orderSignals = data.signals || {};
                 this.orderTpProgress = data.progress || {};
+                this.baleOpenMessageIds = data.baleIds || {};
             }
         } catch(e) {}
     }
@@ -117,7 +162,8 @@ export class AutoTrader {
         try {
             setSetting('order_signals', {
                 signals: this.orderSignals,
-                progress: this.orderTpProgress
+                progress: this.orderTpProgress,
+                baleIds: this.baleOpenMessageIds
             });
         } catch(e) {}
     }
@@ -169,9 +215,55 @@ export class AutoTrader {
                     this.openOrders = orders; 
                     this.checkRiskFree(); // Also check when orders change
                     this.checkVirtualLimits();
+                    
+                    // Notification for new open orders
+                    for (const order of orders) {
+                        const id = String(order.id);
+                        if (!this.notifiedOpenOrders.has(id)) {
+                            if (this.config.baleEnabled) {
+                                const signal = this.orderSignals[id];
+                                const replyToSignalId = (signal as any)?.baleMessageId;
+                                
+                                this.messenger.sendTradeOpen(order, this.config.accountMode, replyToSignalId)
+                                    .then(msgId => {
+                                        if (msgId) {
+                                            this.baleOpenMessageIds[id] = msgId;
+                                            this.saveOrderSignals();
+                                        }
+                                    });
+                            }
+                            this.notifiedOpenOrders.add(id);
+                        }
+                    }
                 },
                 onPortfo: (p) => { this.portfo = p; },
-                onClosedOrders: (orders) => { this.closedOrders = orders; },
+                onClosedOrders: (orders) => { 
+                    this.closedOrders = orders; 
+                    
+                    // Notification for newly closed orders
+                    for (const order of orders) {
+                        const id = String(order.id);
+                        if (!this.notifiedClosedOrders.has(id)) {
+                            const profit = parseFloat(order.profit || 0);
+                            const reason = this.virtualLimits[id] ? 'Virtual' : 'Broker';
+                            
+                            if (this.config.baleEnabled) {
+                                const replyToOpenId = this.baleOpenMessageIds[id];
+                                this.messenger.sendTradeClose(order, reason, profit, this.config.accountMode, replyToOpenId);
+                            }
+                            
+                            this.notifiedClosedOrders.add(id);
+                            delete this.baleOpenMessageIds[id];
+                            this.saveOrderSignals();
+                            
+                            // Stats for 30m report
+                            this.reportStats.totalTrades++;
+                            this.reportStats.totalProfit += profit;
+                            if (profit >= 0) this.reportStats.winTrades++;
+                            else this.reportStats.lossTrades++;
+                        }
+                    }
+                },
                 onAlert: (alert) => { /* ignore alerts locally */ },
                 onClose: () => {
                     console.log("[AutoTrader] Websocket closed, reconnecting in 5s...");
@@ -316,6 +408,11 @@ export class AutoTrader {
                 this.virtualLimits[orderIdStr] = { tp: parseFloat(String(currentTp || '0')), sl: parseFloat(newSl) };
                 this.saveVirtualLimits();
             }
+
+            // Send notification
+            if (this.config.baleEnabled) {
+                this.messenger.sendSLUpdate(order, newSl, progressLevel, this.baleOpenMessageIds[orderIdStr]);
+            }
         } else {
             this.slMoveInFlight.add(orderIdStr);
             try {
@@ -325,6 +422,11 @@ export class AutoTrader {
                 // Update local state ONLY on success
                 this.orderTpProgress[orderIdStr] = progressLevel;
                 this.saveOrderSignals();
+
+                // Send notification
+                if (this.config.baleEnabled) {
+                    this.messenger.sendSLUpdate(order, newSl, progressLevel, this.baleOpenMessageIds[orderIdStr]);
+                }
             } catch (e: any) {
                 console.error(`[AutoTrader] Failed to move SL for ${orderIdStr}:`, e.message);
                 // On failure, don't update progress so it retries on next tick
@@ -367,6 +469,11 @@ export class AutoTrader {
                 this.closingOrders.add(order.id);
                 this.client.closeOrder(order.id).then(() => {
                     console.log(`[AutoTrader] Successfully closed order ${order.id} via Virtual ${reason}.`);
+                    
+                    // We don't notify here because it will appear in closedOrders list from WS
+                    // thus avoiding double notification. 
+                    // But we can mark the reason if we want.
+                    
                     delete this.virtualLimits[order.id];
                     this.saveVirtualLimits();
                 }).catch(e => {
@@ -377,10 +484,15 @@ export class AutoTrader {
         }
     }
 
-    async handleSignal(signal: Signal) {
+    async handleSignal(signal: Signal, baleMessageId?: number) {
         if (!this.config.isEnabled) return;
         if (this.config.accountMode === 'demo' && !this.config.demoNumber) return;
         if (this.config.accountMode === 'real' && !this.config.accessToken) return;
+        
+        // Save mapping of signal to message ID for future replies
+        if (baleMessageId) {
+            (signal as any).baleMessageId = baleMessageId;
+        }
         
         // Time window check
         if (this.config.enableTimeWindow && this.config.tradeStartTime && this.config.tradeEndTime) {

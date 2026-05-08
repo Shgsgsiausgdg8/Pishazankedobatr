@@ -2,13 +2,14 @@ import WebSocket from "ws";
 import fs from "fs";
 import path from "path";
 import { TradingStrategy, Signal, Candle } from "./strategy.js";
-import { saveCandles, getCandles, getSetting, setSetting } from './db.js';
+import { saveCandles, getCandles, getSetting, setSetting, getCandleCount } from './db.js';
 
 export class AlphaGoldEngine {
     price = 0;
     timeframe = "1"; // minutes
     candles: Candle[] = [];
     signals: Signal[] = [];
+    signalBaleIds = new Map<Signal, number>();
     levels: { type: 'SUPPORT' | 'RESISTANCE', price: number, time?: number, hits?: number, latest?: number }[] = [];
 
     ws: WebSocket | null = null;
@@ -87,110 +88,76 @@ export class AlphaGoldEngine {
     }
 
     getFullCandles() {
-        return getCandles('alpha', this.timeframe, 15000);
+        return getCandles('alpha', this.timeframe, 5000);
     }
 
     async fetchHistoricalCandles(targetDays = 2) {
         try {
-            // Check SQLite first
-            const cached = getCandles('alpha', this.timeframe, 2000);
+            const resolution = this.timeframe || '1';
+            const targetTotalCandles = Math.floor((targetDays * 24 * 60) / (parseInt(resolution) || 1));
             
-            if (cached && cached.length > 100) {
-                const lastTime = cached[cached.length - 1].time;
-                if (Date.now() - lastTime < 12 * 60 * 60 * 1000) {
+            // 1. Check SQLite
+            const existingCount = getCandleCount('alpha', resolution);
+            
+            if (existingCount >= targetTotalCandles) {
+                const cached = getCandles('alpha', resolution, 2000);
+                if (cached && cached.length > 100) {
                     this.candles = cached;
-                    this.lastCandleTime = lastTime;
+                    this.lastCandleTime = cached[cached.length - 1].time;
                     this.price = cached[cached.length - 1].close;
-                    console.log(`[AlphaEngine] Loaded ${cached.length} candles from SQLite.`);
+                    console.log(`[AlphaEngine] Loaded ${cached.length} candles from DB cache.`);
                     return;
                 }
             }
 
-            const resolution = this.timeframe;
             let toTs = Math.floor(Date.now() / 1000);
             const limit = 2000;
-            const targetTotalCandles = Math.floor((targetDays * 24 * 60) / parseInt(resolution));
+            let totalFetched = 0;
             
-            let allCandles: any[] = [];
-            
-            console.log(`[AlphaEngine] Starting deep history fetch for ${targetDays} days (${targetTotalCandles} candles)...`);
+            console.log(`[AlphaEngine] Deep history fetch: ${targetDays} days (${targetTotalCandles} bars)...`);
 
             for (let i = 0; i < Math.ceil(targetTotalCandles / limit); i++) {
-                const fromTs = toTs - (limit * parseInt(resolution) * 60);
+                const fromTs = toTs - (limit * (parseInt(resolution) || 1) * 60);
+                const baseUrl = "https://chrt.alphagoldx.com";
+                const url = `${baseUrl}/api/data/histoday/?e=ALPHAGOLDX&fsym=XAU&tsym=USD&toTs=${toTs}&fromTs=${fromTs}&resolution=${resolution}&limit=${limit}`;
 
-                // Try different variants of the API
-                const apiVariants = [
-                    `https://chrt.alphagoldx.com/api/data/histoday/?e=ALPHAGOLDX&fsym=XAU&tsym=USD&toTs=${toTs}&fromTs=${fromTs}&resolution=${resolution}&limit=${limit}`,
-                    `https://light.alphagoldx.com/api/data/histoday/?e=ALPHAGOLDX&fsym=XAU&tsym=USD&toTs=${toTs}&fromTs=${fromTs}&resolution=${resolution}&limit=${limit}`
-                ];
-
-                let json: any = null;
-                for (const url of apiVariants) {
-                    try {
-                        const res = await fetch(url, {
-                            headers: {
-                                "accept": "application/json, text/plain, */*",
-                                "origin": "https://light.alphagoldx.com",
-                                "referer": "https://light.alphagoldx.com/",
-                                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                            }
-                        });
-                        
-                        const text = await res.text();
-                        if (text.startsWith('{')) {
-                            json = JSON.parse(text);
-                            if (json.Data) break;
-                        }
-                    } catch (e) { }
-                }
+                const res = await fetch(url, {
+                    headers: {
+                        "accept": "application/json, text/plain, */*",
+                        "user-agent": "Mozilla/5.0"
+                    }
+                });
                 
-                if (json && json.Data && Array.isArray(json.Data)) {
-                    // Optimization: Use push/unshift instead of spread
-                    const chunk: any[] = [];
-                    json.Data.forEach((item: any) => {
-                        const price = parseFloat(item.close);
-                        if (price > 1000 && price < 10000) {
-                            chunk.push({
-                                time: item.time > 20000000000 ? item.time : item.time * 1000,
-                                open: parseFloat(item.open),
-                                high: parseFloat(item.high),
-                                low: parseFloat(item.low),
-                                close: price
-                            });
-                        }
-                    });
+                if (!res.ok) break;
+                const json: any = await res.json();
+                
+                if (json && json.Data && Array.isArray(json.Data) && json.Data.length > 0) {
+                    const chunk = json.Data.map((item: any) => ({
+                        time: item.time > 20000000000 ? item.time : item.time * 1000,
+                        open: parseFloat(item.open),
+                        high: parseFloat(item.high),
+                        low: parseFloat(item.low),
+                        close: parseFloat(item.close)
+                    })).filter((c: any) => c.close > 1000);
                         
-                    if (chunk.length === 0) break; // no more data
+                    if (chunk.length === 0) break;
                     
-                    allCandles = [...chunk, ...allCandles];
-                    toTs = Math.floor(chunk[0].time / 1000) - 1; // move backwards
+                    saveCandles('alpha', resolution, chunk);
+                    totalFetched += chunk.length;
+                    toTs = Math.floor(chunk[0].time / 1000) - 1;
+                    if (json.Data.length < limit) break;
                 } else {
-                    break; // Request failed, stop fetching older data
+                    break;
                 }
             }
 
-            if (allCandles.length > 0) {
-                // sort chronologically just in case
-                allCandles.sort((a: any, b: any) => a.time - b.time);
-                
-                // Remove duplicates
-                allCandles = allCandles.filter((c: any, i: number, arr: any[]) => i === 0 || c.time !== arr[i-1].time);
-                
-                // Save EVERYTHING to SQLite
-                saveCandles('alpha', this.timeframe, allCandles);
-                
-                // Only keep last 2000 in memory
-                if (allCandles.length > 2000) {
-                    allCandles = allCandles.slice(-2000);
-                }
-
-                this.candles = allCandles;
-
-                const last = this.candles[this.candles.length - 1];
-                this.lastCandleTime = last.time;
-                this.price = last.close;
+            const finalCache = getCandles('alpha', resolution, 2000);
+            if (finalCache.length > 0) {
+                this.candles = finalCache;
+                this.lastCandleTime = this.candles[this.candles.length - 1].time;
+                this.price = this.candles[this.candles.length - 1].close;
                 this.detectLevels();
-                console.log(`[AlphaEngine] Loaded ${this.candles.length} clean historical candles successfully into RAM.`);
+                console.log(`[AlphaEngine] Backfill complete. Total in DB: ${getCandleCount('alpha', resolution)}`);
             }
         } catch (err: any) {
             console.error("[AlphaEngine] History fetch error:", err.message);
@@ -338,7 +305,7 @@ export class AlphaGoldEngine {
         return sum / period;
     }
 
-    private async sendBaleNotification(signal: Signal) {
+    private async sendBaleNotification(signal: Signal): Promise<number | null> {
         const botToken = this.baleToken;
         const chatId = this.baleChatId;
         const url = `https://tapi.bale.ai/bot${botToken}/sendMessage`;
@@ -381,7 +348,7 @@ export class AlphaGoldEngine {
 `;
 
         try {
-            await fetch(url, {
+            const res = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -389,7 +356,14 @@ export class AlphaGoldEngine {
                     text: message
                 })
             });
-            console.log(`[Notification-Alpha] Signal sent to Bale.`);
+            if (res.ok) {
+                const json: any = await res.json();
+                console.log(`[Notification-Alpha] Signal sent to Bale.`);
+                return json.result?.message_id || null;
+            } else {
+                console.error(`[Notification-Alpha] Bale response error: ${res.statusText}`);
+                return null;
+            }
         } catch (error: any) {
             const isNetworkError = error.message.includes('EAI_AGAIN') || error.message.includes('fetch failed');
             if (isNetworkError) {
@@ -397,10 +371,11 @@ export class AlphaGoldEngine {
             } else {
                 console.error(`[Notification-Alpha] Failed to send to Bale:`, error.message);
             }
+            return null;
         }
     }
 
-    runStrategy() {
+    async runStrategy() {
         const sig = this.strategy.analyze(this.candles, this.timeframe, this.liveStrategyType, this.candleConfirmations);
         if (!sig) return;
         const last = this.signals[0];
@@ -408,9 +383,12 @@ export class AlphaGoldEngine {
             this.signals.unshift(sig);
             if (this.signals.length > 20) this.signals.pop();
             
-            // ارسال به بله
-            this.sendBaleNotification(sig);
-            if (this.onSignalCallback) this.onSignalCallback(sig);
+            // ارسال به بله و ذخیره آیدی پیام
+            const msgId = await this.sendBaleNotification(sig);
+            if (msgId) {
+                this.signalBaleIds.set(sig, msgId);
+            }
+            if (this.onSignalCallback) this.onSignalCallback(sig, msgId || undefined);
         }
     }
 
@@ -455,8 +433,8 @@ export class AlphaGoldEngine {
         this.saveSettings();
     }
 
-    onSignalCallback: ((signal: Signal) => void) | null = null;
-    onSignal(callback: (signal: Signal) => void) {
+    onSignalCallback: ((signal: Signal, baleMessageId?: number) => void) | null = null;
+    onSignal(callback: (signal: Signal, baleMessageId?: number) => void) {
         this.onSignalCallback = callback;
     }
 

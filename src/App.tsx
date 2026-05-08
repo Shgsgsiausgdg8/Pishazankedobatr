@@ -582,6 +582,7 @@ export default function App() {
 
   const [backtestResults, setBacktestResults] = useState<any>(null);
   const [globalResults, setGlobalResults] = useState<any[] | null>(null);
+  const [backtestDuration, setBacktestDuration] = useState<string>('15');
   const [selectedStrategy, setSelectedStrategy] = useState('N-PATTERN');
   const [isBacktesting, setIsBacktesting] = useState(false);
   const [isGlobalTesting, setIsGlobalTesting] = useState(false);
@@ -697,7 +698,8 @@ export default function App() {
     setBacktestResults(null);
     wsRef.current.send(JSON.stringify({ 
       type: 'RUN_BACKTEST', 
-      strategyType: selectedStrategy 
+      strategyType: selectedStrategy,
+      duration: backtestDuration
     }));
   };
 
@@ -707,7 +709,10 @@ export default function App() {
     setBacktestLoadingMsg(null);
     setGlobalResults(null);
     setBacktestResults(null);
-    wsRef.current.send(JSON.stringify({ type: 'RUN_GLOBAL_BACKTEST' }));
+    wsRef.current.send(JSON.stringify({ 
+      type: 'RUN_GLOBAL_BACKTEST',
+      duration: backtestDuration
+    }));
   };
 
   const setLiveStrategy = (strat: string) => {
@@ -1269,6 +1274,21 @@ export default function App() {
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', width: '100%', sm: 'auto' } as any}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '0.75rem', color: '#94a3b8' }}>بازه زمانی:</label>
+                  <select 
+                    value={backtestDuration}
+                    onChange={(e) => setBacktestDuration(e.target.value)}
+                    style={{ padding: '12px', borderRadius: '10px', background: '#0f172a', border: '1px solid #10b981', color: '#10b981', fontSize: '0.85rem', fontWeight: 'bold', height: '48px', minWidth: '110px' }}
+                  >
+                    <option value="7">۷ روز</option>
+                    <option value="15">۱۵ روز</option>
+                    <option value="30">۱ ماه</option>
+                    <option value="60">۲ ماه</option>
+                    <option value="90">۳ ماه</option>
+                    <option value="180">۶ ماه</option>
+                  </select>
+                </div>
                 <button 
                   onClick={runBacktest} 
                   disabled={isBacktesting || isGlobalTesting}

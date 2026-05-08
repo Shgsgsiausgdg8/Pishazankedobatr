@@ -36,9 +36,6 @@ db.run(`
         password TEXT
     );
 `);
-// Only save if it was just created is not strictly needed since sql.js runs in memory,
-// but we should probably save just in case it added tables.
-fs.writeFileSync(dbPath, Buffer.from(db.export()));
 
 let saveTimeout: any = null;
 
@@ -55,92 +52,6 @@ function scheduleSave() {
 }
 
 /**
- * Saves or updates a setting in the database.
- */
-export function setSetting(key: string, value: any) {
-    try {
-        db.run("BEGIN TRANSACTION;");
-        const stmt = db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)");
-        stmt.run([key, JSON.stringify(value)]);
-        stmt.free();
-        db.run("COMMIT;");
-        scheduleSave();
-    } catch (e) {
-        console.error(`[DB] Error saving setting ${key}:`, e);
-    }
-}
-
-/**
- * Loads a setting from the database.
- */
-export function getSetting(key: string): any {
-    try {
-        const stmt = db.prepare("SELECT value FROM settings WHERE key = ?");
-        stmt.bind([key]);
-        let result = null;
-        if (stmt.step()) {
-            const row = stmt.getAsObject();
-            if (row.value) {
-                result = JSON.parse(row.value as string);
-            }
-        }
-        stmt.free();
-        return result;
-    } catch (e) {
-        console.error(`[DB] Error loading setting ${key}:`, e);
-        return null;
-    }
-}
-
-/**
- * User management functions
- */
-export function getUser(username: string): any {
-    try {
-        const stmt = db.prepare("SELECT * FROM users WHERE username = ?");
-        stmt.bind([username]);
-        let result = null;
-        if (stmt.step()) {
-            result = stmt.getAsObject();
-        }
-        stmt.free();
-        return result;
-    } catch(e) {
-        return null;
-    }
-}
-
-export function createUser(username: string, passwordHash: string): boolean {
-    try {
-        db.run("BEGIN TRANSACTION;");
-        const stmt = db.prepare("INSERT INTO users (username, password) VALUES (?, ?)");
-        stmt.run([username, passwordHash]);
-        stmt.free();
-        db.run("COMMIT;");
-        scheduleSave();
-        return true;
-    } catch(e) {
-        db.run("ROLLBACK;");
-        return false;
-    }
-}
-
-export function getUserCount(): number {
-    try {
-        const stmt = db.prepare("SELECT COUNT(*) as c FROM users");
-        let result = 0;
-        if (stmt.step()) {
-            result = stmt.getAsObject().c as number;
-        }
-        stmt.free();
-        return result;
-    } catch(e) {
-        return 0;
-    }
-}
-
-
-/**
  * Saves multiple candles into the SQLite database for a specific broker and timeframe.
  */
 export function saveCandles(broker: string, timeframe: string, candles: any[]) {
@@ -151,7 +62,7 @@ export function saveCandles(broker: string, timeframe: string, candles: any[]) {
         INSERT OR REPLACE INTO candles (broker, timeframe, time, open, high, low, close)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
-
+    
     try {
         for (const item of candles) {
             stmt.run([broker, timeframe, item.time, item.open, item.high, item.low, item.close]);
@@ -162,6 +73,24 @@ export function saveCandles(broker: string, timeframe: string, candles: any[]) {
         stmt.free();
         db.run("COMMIT;");
         scheduleSave();
+    }
+}
+
+/**
+ * Returns the count of candles for a specific broker and timeframe.
+ */
+export function getCandleCount(broker: string, timeframe: string): number {
+    try {
+        const stmt = db.prepare("SELECT COUNT(*) as c FROM candles WHERE broker = ? AND timeframe = ?");
+        stmt.bind([broker, timeframe]);
+        let result = 0;
+        if (stmt.step()) {
+            result = stmt.getAsObject().c as number;
+        }
+        stmt.free();
+        return result;
+    } catch (e) {
+        return 0;
     }
 }
 
@@ -181,16 +110,120 @@ export function getCandles(broker: string, timeframe: string, limit: number = 20
         
         const rows = [];
         while (stmt.step()) {
-            rows.push(stmt.getAsObject());
+            const row = stmt.getAsObject();
+            rows.push({
+                time: row.time,
+                open: row.open,
+                high: row.high,
+                low: row.low,
+                close: row.close
+            });
         }
         stmt.free();
         
         // Reverse because we want oldest to newest for charts
         return rows.reverse();
     } catch (e) {
-        console.error(`[DB] Error loading candles for ${broker}:`, e);
+        console.error("[DB] getCandles error:", e);
         return [];
     }
 }
+
+export function pruneDatabase() {
+    try {
+        // Simple pruning
+        db.run(`
+            DELETE FROM candles 
+            WHERE (broker, timeframe, time) NOT IN (
+                SELECT broker, timeframe, time 
+                FROM candles 
+                ORDER BY time DESC 
+                LIMIT 500000
+            )
+        `);
+        scheduleSave();
+        console.log("[DB] Pruning complete.");
+    } catch (e) {
+        console.error("[DB] Pruning error:", e);
+    }
+}
+
+export function createUser(username: string, passwordHash: string): boolean {
+    try {
+        db.run("BEGIN TRANSACTION;");
+        const stmt = db.prepare("INSERT INTO users (username, password) VALUES (?, ?)");
+        stmt.run([username, passwordHash]);
+        stmt.free();
+        db.run("COMMIT;");
+        scheduleSave();
+        return true;
+    } catch (e) {
+        db.run("ROLLBACK;");
+        return false;
+    }
+}
+
+export function getUser(username: string) {
+    try {
+        const stmt = db.prepare("SELECT * FROM users WHERE username = ?");
+        stmt.bind([username]);
+        let result = null;
+        if (stmt.step()) {
+            result = stmt.getAsObject();
+        }
+        stmt.free();
+        return result;
+    } catch (e) {
+        return null;
+    }
+}
+
+export function getUserCount(): number {
+    try {
+        const stmt = db.prepare("SELECT COUNT(*) as c FROM users");
+        let result = 0;
+        if (stmt.step()) {
+            result = stmt.getAsObject().c as number;
+        }
+        stmt.free();
+        return result;
+    } catch(e) {
+        return 0;
+    }
+}
+
+export function setSetting(key: string, value: any) {
+    try {
+        db.run("BEGIN TRANSACTION;");
+        const stmt = db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)");
+        stmt.run([key, JSON.stringify(value)]);
+        stmt.free();
+        db.run("COMMIT;");
+        scheduleSave();
+    } catch (e) {
+        console.error("[DB] setSetting error:", e);
+    }
+}
+
+export function getSetting(key: string): any {
+    try {
+        const stmt = db.prepare("SELECT value FROM settings WHERE key = ?");
+        stmt.bind([key]);
+        let result = null;
+        if (stmt.step()) {
+            const row = stmt.getAsObject();
+            if (row.value) {
+                result = JSON.parse(row.value as string);
+            }
+        }
+        stmt.free();
+        return result;
+    } catch (e) {
+        return null;
+    }
+}
+
+setTimeout(pruneDatabase, 5000);
+setInterval(pruneDatabase, 24 * 60 * 60 * 1000);
 
 export default db;

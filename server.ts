@@ -10,7 +10,7 @@ import { BtcEngine } from "./src/server/btc_engine.js";
 import { AutoTrader } from "./src/server/auto_trader.js";
 import { BacktestEngine } from "./src/server/backtest.js";
 import jwt from "jsonwebtoken";
-import { getUser, createUser, getUserCount } from "./src/server/db.js";
+import { getUser, createUser, getUserCount, getCandleCount, getCandles } from "./src/server/db.js";
 
 async function startServer() {
     const app = express();
@@ -32,7 +32,7 @@ async function startServer() {
     const alphaEngine = new AlphaGoldEngine();
     const btcEngine = new BtcEngine();
     
-    alphaEngine.onSignal((sig) => autoTrader.handleSignal(sig));
+    alphaEngine.onSignal((sig, msgId) => autoTrader.handleSignal(sig, msgId));
     btcEngine.start(); // Start history & websocket for BTC
     
     const engines: Record<string, any> = {
@@ -66,7 +66,7 @@ async function startServer() {
 
     app.post("/api/admin/login", (req, res) => {
         const { username, password } = req.body;
-        const user = getUser(username);
+        const user: any = getUser(username);
         if (user && user.password === password) { // basic auth (should hash ideally)
             const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '10d' });
             res.json({ success: true, token });
@@ -165,28 +165,35 @@ async function startServer() {
                     }
                 } else if (command.type === 'RUN_BACKTEST') {
                     const engine = engines[currentBroker] as any;
+                    const durationDays = command.duration ? parseInt(command.duration) : 15;
+                    const resolution = engine.timeframe || '1';
+                    const targetCount = Math.floor((durationDays * 24 * 60) / (parseInt(resolution) || 1));
                     
-                    if (engine.candles && engine.candles.length < 5000) {
+                    const existingCount = getCandleCount(currentBroker, resolution);
+                    
+                    if (existingCount < targetCount * 0.9) {
                         ws.send(JSON.stringify({ 
                             type: 'BACKTEST_LOADING', 
                             broker: currentBroker,
-                            message: 'در حال دریافت اطلاعات ۱۵ روز گذشته... لطفا کمی صبر کنید.'
+                            message: `در حال دریافت اطلاعات ${durationDays} روز گذشته از سرور... لطفا کمی صبر کنید.`
                         }));
                         try {
-                            const days = 15;
                             if (engine.fetchHistoricalCandles) {
-                                await engine.fetchHistoricalCandles(days);
+                                await engine.fetchHistoricalCandles(durationDays);
                             } else if (engine.fetchHistory) {
-                                await engine.fetchHistory(days);
+                                await engine.fetchHistory(durationDays);
                             }
                         } catch (e) {
                             console.error(e);
                         }
                     }
 
-                    const fullCandles = typeof engine.getFullCandles === "function" ? engine.getFullCandles() : (engine.candles || []);
+                    // For backtesting, we fetch a MUCH larger set from DB (capped at 300k to prevent OOM)
+                    const backtestLimit = Math.min(300000, targetCount);
+                    const fullCandles = getCandles(currentBroker, resolution, backtestLimit);
                     const state = engine.getState();
-                    console.log(`[Server] Running backtest for ${currentBroker} (${command.strategyType}) with ${fullCandles.length} candles`);
+                    
+                    console.log(`[Server] Running backtest for ${currentBroker} (${command.strategyType}) with ${fullCandles.length} candles (Target: ${durationDays} days)`);
                     
                     if (fullCandles.length < 60) {
                         ws.send(JSON.stringify({ 
@@ -204,27 +211,33 @@ async function startServer() {
                     }
                 } else if (command.type === 'RUN_GLOBAL_BACKTEST') {
                     const engine = engines[currentBroker] as any;
+                    const durationDays = command.duration ? parseInt(command.duration) : 15;
+                    const resolution = engine.timeframe || '1';
+                    const targetCount = Math.floor((durationDays * 24 * 60) / (parseInt(resolution) || 1));
                     
-                    if (engine.candles && engine.candles.length < 5000) {
+                    const existingCount = getCandleCount(currentBroker, resolution);
+                    
+                    if (existingCount < targetCount * 0.9) {
                         ws.send(JSON.stringify({ 
                             type: 'BACKTEST_LOADING', 
                             broker: currentBroker,
-                            message: 'در حال دریافت اطلاعات ۱۵ روز گذشته... لطفا کمی صبر کنید.'
+                            message: `در حال دریافت اطلاعات ${durationDays} روز گذشته از سرور (برای آنالیز کلی)...`
                         }));
                         try {
-                            const days = 15;
                             if (engine.fetchHistoricalCandles) {
-                                await engine.fetchHistoricalCandles(days);
+                                await engine.fetchHistoricalCandles(durationDays);
                             } else if (engine.fetchHistory) {
-                                await engine.fetchHistory(days);
+                                await engine.fetchHistory(durationDays);
                             }
                         } catch (e) {
                             console.error(e);
                         }
                     }
 
-                    const fullCandles = typeof engine.getFullCandles === "function" ? engine.getFullCandles() : (engine.candles || []);
+                    const backtestLimit = Math.min(300000, targetCount);
+                    const fullCandles = getCandles(currentBroker, resolution, backtestLimit);
                     const state = engine.getState();
+                    
                     console.log(`[Server] Running global backtest for ${currentBroker} with ${fullCandles.length} candles`);
                     
                     if (fullCandles.length < 60) {

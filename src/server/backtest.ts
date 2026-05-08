@@ -37,9 +37,8 @@ export class BacktestEngine {
             strategy.updateConfig(config);
         }
 
-        // --- CRITICAL FIX: Limit candles to prevent OOM ---
-        const maxProcess = 5000;
-        const testCandles = candles.slice(-maxProcess);
+        // --- CRITICAL FIX: The limit is now passed from the server fetch ---
+        const testCandles = candles;
         
         const trades = [];
         let buyTradesCount = 0;

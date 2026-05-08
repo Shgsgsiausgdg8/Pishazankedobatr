@@ -2,7 +2,7 @@ import WebSocket from 'ws';
 import fs from 'fs';
 import path from 'path';
 import { TradingStrategy, Signal, Candle } from './strategy.js';
-import { saveCandles, getCandles, getSetting, setSetting } from './db.js';
+import { saveCandles, getCandles, getSetting, setSetting, getCandleCount } from './db.js';
 
 export class BtcEngine {
     price = 0;
@@ -75,31 +75,33 @@ export class BtcEngine {
     }
 
     getFullCandles() {
-        return getCandles('btc', this.timeframe, 15000);
+        return getCandles('btc', this.timeframe, 5000);
     }
 
     async fetchHistory(targetDays = 2) {
         try {
-            const cached = getCandles('btc', this.timeframe, 2000);
+            const resolution = this.timeframe || '1';
+            const targetTotalCandles = Math.floor((targetDays * 24 * 60) / (parseInt(resolution) || 1));
             
-            if (cached && cached.length > 100) {
-                const lastTime = cached[cached.length - 1].time;
-                if (Date.now() - lastTime < 12 * 60 * 60 * 1000) {
+            // Check SQLite first
+            const existingCount = getCandleCount('btc', resolution);
+            
+            if (existingCount >= targetTotalCandles) {
+                const cached = getCandles('btc', resolution, 2000);
+                if (cached && cached.length > 100) {
                     this.candles = cached;
                     this.price = cached[cached.length - 1].close;
-                    console.log(`[BTC-Engine] Loaded ${cached.length} candles from SQLite.`);
+                    console.log(`[BTCEngine] Loaded ${cached.length} candles from DB cache.`);
                     return;
                 }
             }
 
-            const resolution = this.timeframe;
             let to = Math.floor(Date.now() / 1000);
             const barsCount = 1000;
-            const targetTotalCandles = Math.floor((targetDays * 24 * 60) / parseInt(resolution));
             const timeframeSeconds = (parseInt(resolution) || 1) * 60;
+            let totalFetched = 0;
             
-            let allCandles: any[] = [];
-            console.log(`[BTC-Engine] Starting deep history fetch for ${targetDays} days (${targetTotalCandles} candles)...`);
+            console.log(`[BTCEngine] Deep history fetch: ${targetDays} days (${targetTotalCandles} bars)...`);
 
             for (let i = 0; i < Math.ceil(targetTotalCandles / barsCount); i++) {
                 const from = to - (barsCount * timeframeSeconds); 
@@ -107,28 +109,20 @@ export class BtcEngine {
                 
                 const headers: any = {
                     'accept': 'application/json, text/plain, */*',
-                    'accept-language': 'fa-IR,fa;q=0.9,en-US;q=0.8,en;q=0.7',
-                    'origin': 'https://faraz.io',
-                    'referer': 'https://faraz.io/',
-                    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+                    'user-agent': 'Mozilla/5.0'
                 };
 
                 if (this.currentToken) {
                     headers['cookie'] = `x-access-token=${this.currentToken}; farazSession=${this.farazSession}`;
                 }
 
-                let res: Response | null = null;
-                res = await fetch(url, { headers });
-
-                if (!res || !res.ok) {
-                    break;
-                }
+                const res = await fetch(url, { headers });
+                if (!res.ok) break;
 
                 const data: any = await res.json();
                 const r = data.result ? data.result : data;
                 
                 if (r && r.t && Array.isArray(r.t) && r.t.length > 0) {
-                    // Optimization: Use separate array for mapping and avoid spread if possible
                     const chunk: any[] = [];
                     for (let j = 0; j < r.t.length; j++) {
                         const t = r.t[j];
@@ -145,36 +139,25 @@ export class BtcEngine {
                     }
 
                     if (chunk.length === 0) break;
-
-                    allCandles = [...chunk, ...allCandles];
-                    to = Math.floor(chunk[0].time / 1000) - 1; // Move backward
+                    
+                    saveCandles('btc', resolution, chunk);
+                    totalFetched += chunk.length;
+                    to = Math.floor(chunk[0].time / 1000) - 1;
+                    if (r.t.length < barsCount) break;
                 } else {
                     break;
                 }
             }
 
-            if (allCandles.length > 0) {
-                // sort chronologically
-                allCandles.sort((a: any, b: any) => a.time - b.time);
-                
-                // Remove duplicates
-                allCandles = allCandles.filter((c: any, i: number, arr: any[]) => i === 0 || c.time !== arr[i-1].time);
-                
-                // Save EVERYTHING to SQLite
-                saveCandles('btc', this.timeframe, allCandles);
-                
-                // Keep only last 2000 in memory
-                if (allCandles.length > 2000) {
-                    allCandles = allCandles.slice(-2000);
-                }
-
-                this.candles = allCandles;
+            const finalCache = getCandles('btc', resolution, 2000);
+            if (finalCache.length > 0) {
+                this.candles = finalCache;
                 this.price = this.candles[this.candles.length - 1].close;
                 this.detectLevels();
-                console.log(`[BTC-Engine] Successfully saved and loaded ${this.candles.length} history bars.`);
+                console.log(`[BTCEngine] Backfill complete. Total in DB: ${getCandleCount('btc', resolution)}`);
             }
         } catch (e: any) {
-            console.error(`[BTC-Engine] Error fetching history: ${e.message}`);
+            console.error(`[BTCEngine] Error fetching history: ${e.message}`);
         }
     }
 

@@ -2,7 +2,7 @@ import WebSocket from 'ws';
 import fs from 'fs';
 import path from 'path';
 import { TradingStrategy, Signal, Candle } from './strategy.js';
-import { saveCandles, getCandles, getSetting, setSetting } from './db.js';
+import { saveCandles, getCandles, getSetting, setSetting, getCandleCount } from './db.js';
 
 export class FarazGoldEngine {
     price = 0;
@@ -43,110 +43,88 @@ export class FarazGoldEngine {
     }
 
     getFullCandles() {
-        return getCandles('faraz', this.timeframe, 15000);
+        return getCandles('faraz', this.timeframe, 5000);
     }
 
     async fetchHistory(targetDays = 2) {
         try {
-            // First check if we have enough candles in SQLite
-            const cached = getCandles('faraz', this.timeframe, 2000); // Only keep recent 2000 in RAM
+            const resolution = this.timeframe || '1';
+            const targetTotalCandles = Math.floor((targetDays * 24 * 60) / (parseInt(resolution) || 1));
             
-            if (cached && cached.length > 100) {
-                // If we have some data, consider if it's recent enough
-                const lastTime = cached[cached.length - 1].time;
-                if (Date.now() - lastTime < 12 * 60 * 60 * 1000) {
+            // 1. Check SQLite for available candles
+            const existingCount = getCandleCount('faraz', resolution);
+            
+            // If we already have enough in DB, just load from DB into RAM (limited)
+            if (existingCount >= targetTotalCandles) {
+                const cached = getCandles('faraz', resolution, 2000); 
+                if (cached && cached.length > 100) {
                     this.candles = cached;
-                    this.lastCandleTime = lastTime;
+                    this.lastCandleTime = cached[cached.length - 1].time;
                     this.detectLevels();
                     this.runStrategy();
-                    console.log(`[Engine] Loaded ${cached.length} candles from SQLite.`);
+                    console.log(`[FarazEngine] Loaded ${cached.length} candles from DB into RAM cache.`);
                     return;
                 }
             }
 
-            const baseUrl = process.env.FARAZGOLD_BASEURL || 'https://demo.farazgold.com';
-            const resolution = this.timeframe;
+            const baseUrl = 'https://demo.farazgold.com';
             let to = Math.floor(Date.now() / 1000);
             const barsCount = 2000;
-            const targetTotalCandles = Math.floor((targetDays * 24 * 60) / parseInt(resolution));
             const timeframeSeconds = (parseInt(resolution) || 1) * 60;
-            let allCandles: any[] = [];
+            let totalFetched = 0;
 
-            console.log(`[Engine] Starting deep history fetch for ${targetDays} days (${targetTotalCandles} candles)...`);
+            console.log(`[FarazEngine] Fetching ${targetDays} days (${targetTotalCandles} bars)...`);
 
+            // Fetch in chunks to avoid overwhelming the provider and memory
             for (let i = 0; i < Math.ceil(targetTotalCandles / barsCount); i++) {
                 const from = to - (barsCount * timeframeSeconds);
                 const url = `${baseUrl}/api/room/api/get-bars/?symbol=mazane&from=${from}&to=${to}&resolution=${resolution}`;
                 
                 const headers: any = {
                     'accept': 'application/json, text/plain, */*',
-                    'accept-language': 'fa-IR,fa;q=0.9,en-US;q=0.8,en;q=0.7',
-                    'cache-control': 'no-cache',
-                    'pragma': 'no-cache',
-                    'referer': `${baseUrl}/room/`,
-                    'sec-ch-ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
-                    'sec-ch-ua-mobile': '?0',
-                    'sec-ch-ua-platform': '"Windows"',
-                    'sec-fetch-dest': 'empty',
-                    'sec-fetch-mode': 'cors',
-                    'sec-fetch-site': 'same-origin',
                     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                     'X-Requested-With': 'XMLHttpRequest'
                 };
                 if (this.accessToken) headers['authorization'] = `Bearer ${this.accessToken}`;
-
-                const cookies = [];
-                if (this.sessionId) cookies.push(`sessionid=${this.sessionId}`);
-                if (this.csrfToken) cookies.push(`csrftoken=${this.csrfToken}`);
-                if (cookies.length > 0) headers['cookie'] = cookies.join('; ');
-                if (this.csrfToken) headers['X-CSRFToken'] = this.csrfToken;
+                if (this.sessionId) headers['cookie'] = `sessionid=${this.sessionId}; csrftoken=${this.csrfToken}`;
 
                 const res = await fetch(url, { headers });
-                if (!res.ok) break;
+                if (!res.ok) {
+                    console.log(`[FarazEngine] Fetch failed at chunk ${i}: ${res.status}`);
+                    break;
+                }
 
-                const text = await res.text();
-                try {
-                    const data = JSON.parse(text);
-                    if (Array.isArray(data) && data.length > 0) {
-                        // Optimization: Use unshift/push instead of spread for performance
-                        data.forEach((b: any) => {
-                            allCandles.push({
-                                time: b.time > 20000000000 ? b.time : b.time * 1000,
-                                open: parseFloat(b.open || b.close),
-                                high: parseFloat(b.high || b.close),
-                                low: parseFloat(b.low || b.close),
-                                close: parseFloat(b.close)
-                            });
-                        });
-                        to = Math.floor(data[0].time / 1000) - 1;
-                    } else {
-                        break;
-                    }
-                } catch (e) {
+                const data = await res.json();
+                if (Array.isArray(data) && data.length > 0) {
+                    const chunk = data.map((b: any) => ({
+                        time: b.time > 20000000000 ? b.time : b.time * 1000,
+                        open: parseFloat(b.open || b.close),
+                        high: parseFloat(b.high || b.close),
+                        low: parseFloat(b.low || b.close),
+                        close: parseFloat(b.close)
+                    }));
+                    
+                    saveCandles('faraz', resolution, chunk);
+                    totalFetched += chunk.length;
+                    to = Math.floor(data[0].time / 1000) - 1;
+                    
+                    if (data.length < barsCount) break; // End of history
+                } else {
                     break;
                 }
             }
 
-            if (allCandles.length > 0) {
-                allCandles.sort((a: any, b: any) => a.time - b.time);
-                allCandles = allCandles.filter((c: any, i: number, arr: any[]) => i === 0 || c.time !== arr[i-1].time);
-                
-                // Save EVERYTHING to SQLite
-                saveCandles('faraz', this.timeframe, allCandles);
-                
-                // Only keep last 2000 in RAM
-                if (allCandles.length > 2000) {
-                    allCandles = allCandles.slice(-2000);
-                }
-                
-                this.candles = allCandles;
+            // Sync RAM with latest 2000 from DB
+            const finalCache = getCandles('faraz', resolution, 2000);
+            if (finalCache.length > 0) {
+                this.candles = finalCache;
                 this.lastCandleTime = this.candles[this.candles.length - 1].time;
                 this.detectLevels();
                 this.runStrategy();
-                console.log(`[Engine] Successfully saved and loaded ${this.candles.length} candles in RAM.`);
+                console.log(`[FarazEngine] Backfill complete. Total items in DB for ${resolution}m: ${getCandleCount('faraz', resolution)}`);
             }
         } catch (e: any) {
-            console.error(`[Engine] Error fetching history: ${e.message}`);
+            console.error(`[FarazEngine] Error fetching history: ${e.message}`);
         }
     }
 
