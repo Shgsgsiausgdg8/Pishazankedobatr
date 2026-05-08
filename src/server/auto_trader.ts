@@ -254,6 +254,8 @@ export class AutoTrader {
                             
                             this.notifiedClosedOrders.add(id);
                             delete this.baleOpenMessageIds[id];
+                            delete this.orderSignals[id];
+                            delete this.orderTpProgress[id];
                             this.saveOrderSignals();
                             
                             // Stats for 30m report
@@ -345,7 +347,8 @@ export class AutoTrader {
 
             if (targetLevel <= currentProgress) continue;
 
-            console.log(`[AutoTrader] Order ${orderIdStr} check TP${targetLevel}. Price: ${current}, Target: ${targetPrice}, Hit: ${hit}`);
+            // Log removed to save memory/cpu - uncomment only for debugging
+            // console.log(`[AutoTrader] Order ${orderIdStr} check TP${targetLevel}. Price: ${current}, Target: ${targetPrice}, Hit: ${hit}`);
 
             if (hit) {
                 newProgress = targetLevel;

@@ -387,6 +387,11 @@ export class AlphaGoldEngine {
             const msgId = await this.sendBaleNotification(sig);
             if (msgId) {
                 this.signalBaleIds.set(sig, msgId);
+                // Clean up old IDs to prevent memory leak
+                if (this.signalBaleIds.size > 50) {
+                    const firstKey = this.signalBaleIds.keys().next().value;
+                    if (firstKey) this.signalBaleIds.delete(firstKey);
+                }
             }
             if (this.onSignalCallback) this.onSignalCallback(sig, msgId || undefined);
         }
