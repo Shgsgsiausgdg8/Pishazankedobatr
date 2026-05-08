@@ -352,7 +352,7 @@ export class AlphaGoldEngine {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    chat_id: parseInt(chatId),
+                    chat_id: chatId,
                     text: message
                 })
             });

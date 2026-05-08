@@ -27,7 +27,7 @@ export class Messenger {
         const url = `https://tapi.bale.ai/bot${this.token}/sendMessage`;
         try {
             const payload: any = {
-                chat_id: parseInt(this.chatId),
+                chat_id: this.chatId,
                 text: text
             };
             if (replyToId) {
@@ -56,7 +56,7 @@ export class Messenger {
         const side = String(order.side).toLowerCase() === '1' || String(order.side).toLowerCase() === 'buy' ? 'خرید (BUY) 🟢' : 'فروش (SELL) 🔴';
         const modeText = accountMode === 'real' ? 'حساب واقعی (REAL) 💰' : 'حساب دمو (DEMO) 🧪';
         const message = `
-🚀 **معامله جدید باز شد**
+ 🚀 **معامله جدید باز شد**
 
 🏦 **نوع حساب:** ${modeText}
 🔹 **نوع معامله:** ${side}
@@ -84,7 +84,6 @@ ${symbol} **معامله بسته شد**
 📈 **سود/زیان:** ${profit.toFixed(2)}
 🆔 **شناسه:** ${order.id}
 🕒 **زمان:** ${new Date().toLocaleTimeString('fa-IR')}
-
 --------------------------
 🔄 در حال تحلیل موقعیت‌های بعدی...
 `;
