@@ -524,8 +524,13 @@ export class AutoTrader {
 
     async handleSignal(signal: Signal, baleMessageId?: number) {
         if (!this.config.isEnabled) return;
-        if (this.config.accountMode === 'demo' && !this.config.demoNumber) return;
-        if (this.config.accountMode === 'real' && !this.config.accessToken) return;
+        
+        if (this.config.broker !== 'trendo') {
+            if (this.config.accountMode === 'demo' && !this.config.demoNumber) return;
+            if (this.config.accountMode === 'real' && !this.config.accessToken) return;
+        } else {
+            if (!this.config.trendoUserToken || !this.config.trendoWalletToken) return;
+        }
         
         // Save mapping of signal to message ID for future replies
         if (baleMessageId) {
