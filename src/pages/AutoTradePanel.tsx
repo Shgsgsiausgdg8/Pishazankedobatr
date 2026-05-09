@@ -20,10 +20,11 @@ const AutoTradePanel = ({ onClose }: { onClose: () => void }) => {
     const [authError, setAuthError] = useState('');
 
     const [config, setConfig] = useState<any>({
+        broker: 'alpha',
         accountMode: 'demo',
         demoNumber: '',
         isEnabled: false,
-        tradeAmount: 1,
+        tradeAmount: 0.01, // default for Trendo might be smaller
         tpMode: 'pips',
         tpPips: 200,
         slMode: 'pips',
@@ -35,7 +36,11 @@ const AutoTradePanel = ({ onClose }: { onClose: () => void }) => {
         portfoType: 1,
         baleToken: '',
         baleChatId: '',
-        baleEnabled: false
+        baleEnabled: false,
+        trendoUserId: '',
+        trendoUserToken: '',
+        trendoWalletId: '',
+        trendoWalletToken: ''
     });
     
     // Fetch user info to see if authenticated
@@ -294,6 +299,70 @@ const AutoTradePanel = ({ onClose }: { onClose: () => void }) => {
                         </div>
                         <div style={{ fontSize: '1.2rem', color: 'white', fontWeight: 'bold' }}>{Number(portfo?.balance || 0).toLocaleString()} <span style={{fontSize: '0.7rem', color: '#94a3b8'}}>تومان</span></div>
                     </div>
+                </div>
+
+                {/* Broker Selection */}
+                <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px', border: '1px solid #334155' }}>
+                    <h3 style={{ color: 'white', margin: '0 0 16px 0', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                        انتخاب کارگزار (Broker)
+                    </h3>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                        <button 
+                            onClick={() => updateConfig('broker', 'alpha')}
+                            style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid', borderColor: config.broker === 'alpha' ? '#3b82f6' : '#334155', background: config.broker === 'alpha' ? 'rgba(59, 130, 246, 0.1)' : 'transparent', color: config.broker === 'alpha' ? '#60a5fa' : '#94a3b8', cursor: 'pointer', fontWeight: 'bold' }}
+                        >
+                            Alpha Gold (آلفا گلد)
+                        </button>
+                        <button 
+                            onClick={() => updateConfig('broker', 'trendo')}
+                            style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid', borderColor: config.broker === 'trendo' ? '#c026d3' : '#334155', background: config.broker === 'trendo' ? 'rgba(192, 38, 211, 0.1)' : 'transparent', color: config.broker === 'trendo' ? '#e879f9' : '#94a3b8', cursor: 'pointer', fontWeight: 'bold' }}
+                        >
+                            Trendo (ترندو)
+                        </button>
+                    </div>
+
+                    {config.broker === 'trendo' && (
+                        <div style={{ marginTop: '20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', padding: '16px', background: 'rgba(192, 38, 211, 0.05)', borderRadius: '10px', border: '1px dashed rgba(192, 38, 211, 0.3)' }}>
+                            <div style={{ color: '#e879f9', fontSize: '0.85rem', fontWeight: 'bold', gridColumn: '1 / -1', marginBottom: '4px' }}>تنظیمات اتصال ترندو:</div>
+                            <div>
+                                <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.75rem', marginBottom: '6px' }}>User ID</label>
+                                <input 
+                                    type="text" 
+                                    value={config.trendoUserId || ''} 
+                                    onChange={e => updateConfig('trendoUserId', e.target.value)}
+                                    style={{ width: '100%', padding: '8px 12px', background: '#0f172a', border: '1px solid #334155', color: 'white', borderRadius: '6px', outline: 'none', fontSize: '0.85rem' }}
+                                />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.75rem', marginBottom: '6px' }}>Wallet ID</label>
+                                <input 
+                                    type="text" 
+                                    value={config.trendoWalletId || ''} 
+                                    onChange={e => updateConfig('trendoWalletId', e.target.value)}
+                                    style={{ width: '100%', padding: '8px 12px', background: '#0f172a', border: '1px solid #334155', color: 'white', borderRadius: '6px', outline: 'none', fontSize: '0.85rem' }}
+                                />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.75rem', marginBottom: '6px' }}>User Token</label>
+                                <input 
+                                    type="password" 
+                                    value={config.trendoUserToken || ''} 
+                                    onChange={e => updateConfig('trendoUserToken', e.target.value)}
+                                    style={{ width: '100%', padding: '8px 12px', background: '#0f172a', border: '1px solid #334155', color: 'white', borderRadius: '6px', outline: 'none', fontSize: '0.85rem' }}
+                                />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.75rem', marginBottom: '6px' }}>Wallet Token</label>
+                                <input 
+                                    type="password" 
+                                    value={config.trendoWalletToken || ''} 
+                                    onChange={e => updateConfig('trendoWalletToken', e.target.value)}
+                                    style={{ width: '100%', padding: '8px 12px', background: '#0f172a', border: '1px solid #334155', color: 'white', borderRadius: '6px', outline: 'none', fontSize: '0.85rem' }}
+                                />
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Settings Box */}

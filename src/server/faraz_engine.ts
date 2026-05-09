@@ -459,6 +459,11 @@ export class FarazGoldEngine {
                 if (this.signals.length > 4) this.signals.pop();
                 console.log(`[Strategy] New Signal: ${signal.type} at ${signal.entry}`);
                 
+                // Trigger auto trader
+                if ((this as any).onSignal) {
+                    (this as any).onSignal(signal);
+                }
+
                 // ارسال اعلان به بله
                 this.sendBaleNotification(signal);
             }

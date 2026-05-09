@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import AutoTradePanel from './pages/AutoTradePanel';
+import TrendoAutoTradePanel from './pages/TrendoAutoTradePanel';
 
 function LoginScreen({ onLogin }: { onLogin: (t: string) => void }) {
   const [username, setUsername] = useState('');
@@ -563,6 +564,7 @@ export default function App() {
 
   const [showStrategySettings, setShowStrategySettings] = useState(false);
   const [showAutoTradePanel, setShowAutoTradePanel] = useState(false);
+  const [showTrendoAutoTradePanel, setShowTrendoAutoTradePanel] = useState(false);
   const [baleToken, setBaleToken] = useState('');
   const [baleChatId, setBaleChatId] = useState('');
   const [farazToken, setFarazToken] = useState('');
@@ -900,6 +902,26 @@ export default function App() {
               }}
             >
               اتو ترید (آلفا)
+            </button>
+            <button 
+              onClick={() => setShowTrendoAutoTradePanel(true)}
+              style={{
+                background: activeBroker === 'btc' ? '#f7931a' : '#1e293b',
+                color: activeBroker === 'btc' ? 'white' : '#94a3b8',
+                border: activeBroker === 'btc' ? 'none' : '1px solid #334155',
+                borderRadius: '8px',
+                padding: '6px 12px',
+                fontSize: '0.7rem',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                whiteSpace: 'nowrap',
+                boxShadow: activeBroker === 'btc' ? '0 2px 8px rgba(247, 147, 26, 0.4)' : 'none'
+              }}
+            >
+              اتو ترید (ترندو)
             </button>
             <button 
               onClick={() => setShowBaleSettings(true)}
@@ -1769,6 +1791,7 @@ export default function App() {
       )}
 
       {showAutoTradePanel && <AutoTradePanel onClose={() => setShowAutoTradePanel(false)} />}
+      {showTrendoAutoTradePanel && <TrendoAutoTradePanel onClose={() => setShowTrendoAutoTradePanel(false)} />}
     </div>
   );
 }

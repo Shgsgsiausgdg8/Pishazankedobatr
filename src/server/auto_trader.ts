@@ -4,19 +4,27 @@ import { AlphaGoldEngine } from './alpha_engine.js';
 import WebSocket from 'ws';
 import { getSetting, setSetting } from './db.js';
 import { Messenger, ReportStats } from './messenger.js';
+import { TrendoClient } from './trendo_client.js';
 
 export class AutoTrader {
-    client: AlphaGoldClient;
+    client: any; // Can be AlphaGoldClient or TrendoClient
     messenger: Messenger;
 
     // Settings
     config = {
+        broker: 'alpha' as 'alpha' | 'trendo',
         accountMode: 'demo' as 'demo' | 'real',
         demoNumber: '',
         accessToken: '',
         isEnabled: false,
         tradeAmount: 1, // unit (lots)
         maxOpenTrades: 1, // unit (number)
+
+        // Trendo specific
+        trendoUserId: '747117',
+        trendoUserToken: '',
+        trendoWalletId: '2517091',
+        trendoWalletToken: '',
 
         enableTimeWindow: false,
         tradeStartTime: '08:00',
@@ -75,7 +83,20 @@ export class AutoTrader {
         broker: 'آلفا گلد'
     };
 
-    constructor() {
+    storageKeys = {
+        settings: 'autotrade_settings',
+        limits: 'virtual_limits',
+        signals: 'order_signals'
+    };
+
+    constructor(storageSuffix = '') {
+        if (storageSuffix) {
+            this.storageKeys = {
+                settings: `autotrade_settings_${storageSuffix}`,
+                limits: `virtual_limits_${storageSuffix}`,
+                signals: `order_signals_${storageSuffix}`
+            };
+        }
         this.client = new AlphaGoldClient();
         this.messenger = new Messenger();
         this.loadSettings();
@@ -97,7 +118,7 @@ export class AutoTrader {
                     winTrades: 0,
                     lossTrades: 0,
                     totalProfit: 0,
-                    broker: 'آلفا گلد'
+                    broker: this.config.broker || 'نامشخص'
                 };
             }
         }, 30 * 60 * 1000);
@@ -111,12 +132,21 @@ export class AutoTrader {
         if (this.config.accessToken) {
             this.client.setTokens(this.config.accessToken);
         }
+        // Trendo credentials
+        if (this.config.broker === 'trendo' && this.client.setTrendoAuth) {
+            this.client.setTrendoAuth({
+                userId: this.config.trendoUserId,
+                userToken: this.config.trendoUserToken,
+                walletId: this.config.trendoWalletId,
+                walletToken: this.config.trendoWalletToken
+            });
+        }
         this.messenger.updateConfig(this.config.baleToken, this.config.baleChatId);
     }
 
     loadSettings() {
         try {
-            const data = getSetting('autotrade_settings');
+            const data = getSetting(this.storageKeys.settings);
             if (data) {
                 this.config = { ...this.config, ...data };
                 if (this.config.accessToken) {
@@ -128,7 +158,7 @@ export class AutoTrader {
 
     loadVirtualLimits() {
         try {
-            const data = getSetting('virtual_limits');
+            const data = getSetting(this.storageKeys.limits);
             if (data) {
                 this.virtualLimits = data;
             }
@@ -137,19 +167,19 @@ export class AutoTrader {
 
     saveVirtualLimits() {
         try {
-            setSetting('virtual_limits', this.virtualLimits);
+            setSetting(this.storageKeys.limits, this.virtualLimits);
         } catch(e) {}
     }
 
     saveSettings() {
         try {
-            setSetting('autotrade_settings', this.config);
+            setSetting(this.storageKeys.settings, this.config);
         } catch(e) {}
     }
 
     loadOrderSignals() {
         try {
-            const data = getSetting('order_signals');
+            const data = getSetting(this.storageKeys.signals);
             if (data) {
                 this.orderSignals = data.signals || {};
                 this.orderTpProgress = data.progress || {};
@@ -160,7 +190,7 @@ export class AutoTrader {
 
     saveOrderSignals() {
         try {
-            setSetting('order_signals', {
+            setSetting(this.storageKeys.signals, {
                 signals: this.orderSignals,
                 progress: this.orderTpProgress,
                 baleIds: this.baleOpenMessageIds
@@ -173,10 +203,15 @@ export class AutoTrader {
         const oldMode = this.config.accountMode;
         const oldDemo = this.config.demoNumber;
         const oldToken = this.config.accessToken;
+        const oldBroker = this.config.broker;
         
         this.config = { ...this.config, ...newConfig };
         this.saveSettings();
         
+        if (this.config.broker !== oldBroker && (this as any).onConfigChange) {
+            (this as any).onConfigChange();
+        }
+
         this.applyAccountMode();
 
         const needsReconnect = (
@@ -577,12 +612,13 @@ export class AutoTrader {
             
             while (retries <= maxRetries) {
                 try {
+                    const symbolToTrade = (signal as any).symbol || (this.config.broker === 'trendo' ? 'btcusd' : 'xauusd');
                     if (this.config.enableTpSl && this.config.limitMode === 'broker') {
-                        console.log(`[AutoTrader] Opening order with broker limits: SL=${lossParam}, TP=${profitParam}`);
-                        response = await this.client.openFastOrder(side, amount, lossParam, profitParam);
+                        console.log(`[AutoTrader] Opening order with broker limits: SL=${lossParam}, TP=${profitParam}, Symbol: ${symbolToTrade}`);
+                        response = await this.client.openFastOrder(side, amount, lossParam, profitParam, symbolToTrade);
                     } else {
-                        console.log(`[AutoTrader] Opening order WITHOUT limits (using virtual SL/TP loop)...`);
-                        response = await this.client.openFastOrder(side, amount, '', '');
+                        console.log(`[AutoTrader] Opening order WITHOUT limits (using virtual SL/TP loop)... Symbol: ${symbolToTrade}`);
+                        response = await this.client.openFastOrder(side, amount, '', '', symbolToTrade);
                     }
                     break; 
                 } catch (err: any) {

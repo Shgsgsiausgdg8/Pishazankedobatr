@@ -17,6 +17,8 @@ export class BtcEngine {
     brokerName = 'بیتکوین (BTCUSDT)';
     isEnabled = true;
     
+    onSignalCallback: ((sig: Signal, msgId?: number) => void) | null = null;
+    
     // Auth & Settings
     currentToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2OGYwMDk2YzIxZjM0N2RhOTMyMzIzZTgiLCJjcmVkaXQiOjE3Nzc1MjczNjU2NTIsImFjdGl2ZSI6dHJ1ZSwicm9sZSI6ImN1c3RvbWVyIiwibGFzdFVwZGF0ZVRpbWUiOjE3Nzc1MzMxMDIzNTIsImlhdCI6MTc3NzUzMzEwMiwiZXhwIjoxNzc3NTQwMzAyfQ.2P-2g2_R15Tz30XFqD_4lYn58OitL0G9Yp1NshqI1v4";
     farazSession = "s%3AIOMPjESaRChioBmpMfZZHUbDdGaKuEQA.NuYpPcEPXmu9AFqHcx2U6RUCUfpZ%2Fd%2BmCvrmGDBuUrQ";
@@ -284,6 +286,10 @@ export class BtcEngine {
         })).slice(-30);
     }
 
+    onSignal(callback: (sig: Signal, msgId?: number) => void) {
+        this.onSignalCallback = callback;
+    }
+
     runStrategy() {
         const sig = this.strategy.analyze(this.candles, this.timeframe, this.liveStrategyType, this.candleConfirmations);
         if (!sig) return;
@@ -292,6 +298,7 @@ export class BtcEngine {
             this.signals.unshift(sig);
             if (this.signals.length > 20) this.signals.pop();
             this.sendBaleNotification(sig);
+            if (this.onSignalCallback) this.onSignalCallback(sig);
         }
     }
 

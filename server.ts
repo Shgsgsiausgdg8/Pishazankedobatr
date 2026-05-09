@@ -9,6 +9,9 @@ import { AlphaGoldEngine } from "./src/server/alpha_engine.js";
 import { BtcEngine } from "./src/server/btc_engine.js";
 import { AutoTrader } from "./src/server/auto_trader.js";
 import { BacktestEngine } from "./src/server/backtest.js";
+import { TrendoEngine } from "./src/server/trendo_engine.js";
+import { TrendoClient } from "./src/server/trendo_client.js";
+import { AlphaGoldClient } from "./src/server/alphagold_client.js";
 import jwt from "jsonwebtoken";
 import { getUser, createUser, getUserCount, getCandleCount, getCandles } from "./src/server/db.js";
 
@@ -18,7 +21,27 @@ async function startServer() {
     const PORT = 3000;
 
     const backtestEngine = new BacktestEngine();
+    const trendoEngine = new TrendoEngine();
+    const trendoClient = new TrendoClient(trendoEngine);
     const autoTrader = new AutoTrader();
+    const trendoAutoTrader = new AutoTrader('trendo');
+
+    const updateAutoTraderClient = () => {
+        // Main AutoTrader (Alpha/Trendo shared UI - legacy but kept)
+        if (autoTrader.config.broker === 'trendo') {
+            autoTrader.client = trendoClient;
+        } else {
+            autoTrader.client = new AlphaGoldClient();
+            autoTrader.applyAccountMode();
+        }
+
+        // Dedicated Trendo AutoTrader always uses Trendo
+        trendoAutoTrader.client = trendoClient;
+        trendoAutoTrader.config.broker = 'trendo';
+        trendoAutoTrader.applyAccountMode();
+    };
+    (autoTrader as any).onConfigChange = updateAutoTraderClient;
+    updateAutoTraderClient();
 
     // Prevent process crash from unhandled errors
     process.on('uncaughtException', (err) => {
@@ -33,12 +56,21 @@ async function startServer() {
     const btcEngine = new BtcEngine();
     
     alphaEngine.onSignal((sig, msgId) => autoTrader.handleSignal(sig, msgId));
+    (farazEngine as any).onSignal = (sig: any, msgId: any) => autoTrader.handleSignal(sig, msgId);
+    btcEngine.onSignal((sig, msgId) => {
+        // Send BTC signals to Trendo AutoTrader
+        (sig as any).symbol = "btcusd";
+        trendoAutoTrader.handleSignal(sig, msgId);
+    });
+    
     btcEngine.start(); // Start history & websocket for BTC
+    trendoEngine.start();
     
     const engines: Record<string, any> = {
         faraz: farazEngine,
         alpha: alphaEngine,
-        btc: btcEngine
+        btc: btcEngine,
+        trendo: trendoEngine
     };
 
     const wss = new WebSocketServer({ server });
@@ -356,10 +388,71 @@ async function startServer() {
         });
     });
 
+    app.get("/api/trendo/state", requireAuth, (req, res) => {
+        res.json({
+            config: trendoAutoTrader.config,
+            balance: trendoEngine.balance,
+            equity: trendoEngine.equity,
+            activeOrders: Object.values(trendoEngine.activeOrders),
+            livePrice: trendoEngine.prices['btcusd']?.bid || 0
+        });
+    });
+
     app.post("/api/autotrade/config", requireAuth, (req, res) => {
         try {
             autoTrader.updateConfig(req.body);
             res.json({ success: true });
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    });
+
+    app.post("/api/trendo/config", requireAuth, (req, res) => {
+        try {
+            trendoAutoTrader.updateConfig(req.body);
+            res.json({ success: true });
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    });
+
+    app.post("/api/trendo/order/close", requireAuth, async (req, res) => {
+        try {
+            const { id } = req.body;
+            await trendoEngine.closeOrderById(id);
+            res.json({ success: true });
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    });
+
+    app.post("/api/trendo/config/reset", requireAuth, (req, res) => {
+        try {
+            const defaults = {
+                isEnabled: false,
+                tradeAmount: 0.01,
+                maxOpenTrades: 1,
+                symbol: 'btcusd',
+                trendoUserId: '747117',
+                trendoUserToken: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vYXBpLnRyZW5kb2Z4LmNvbS9hcGkvdjEvdXNlci9yZWdpc3RlciIsImlhdCI6MTc3NzY4MzQ2NSwiZXhwIjo0OTMzNDQzNDY1LCJuYmYiOjE3Nzc2ODM0NjUsImp0aSI6IkY1SnJpSGhJYkJDT0pwTDciLCJzdWIiOiI3NDcxMTciLCJwcnYiOiI4N2UwYWYxZWY5ZmQxNTgxMmZkZWM5NzE1M2ExNGUwYjA0NzU0NmFhIn0.3pLf9zAkyPyxmPkbEoxvCKJYwpWt6ig2MmH_OAt6uW8',
+                trendoWalletId: '2517091',
+                trendoWalletToken: 'MQicZOHD1QAjknnX0R5f',
+                enableTpSl: true,
+                tpPips: 500,
+                slPips: 500,
+                autoRiskFree: false,
+                riskFreePips: 200,
+                enableTimeWindow: false,
+                tradeStartTime: '08:00',
+                tradeEndTime: '20:00',
+                baleToken: '',
+                baleChatId: '',
+                baleEnabled: false,
+                broker: 'trendo'
+            };
+            trendoAutoTrader.config = { ...trendoAutoTrader.config, ...defaults };
+            trendoAutoTrader.saveSettings();
+            res.json({ success: true, config: trendoAutoTrader.config });
         } catch (error: any) {
             res.status(500).json({ error: error.message });
         }
