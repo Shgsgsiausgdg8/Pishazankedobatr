@@ -116,7 +116,7 @@ export class BtcEngine {
 
             for (let i = 0; i < Math.ceil(targetTotalCandles / barsCount); i++) {
                 const from = to - (barsCount * timeframeSeconds); 
-                const url = `https://ir.faraz.io/api/customer/trading-view/history?symbolName=BTCUSDT_FUTURES&resolution=${resolution}&from=${from}&to=${to}&countback=${barsCount}&firstDataRequest=true&latest=true&adjustType=2&json=true`;
+                const url = `https://ir5.faraz.io/api/customer/trading-view/history?symbolName=INDEX_BTCUSD&resolution=${resolution}&from=${from}&to=${to}&countback=${barsCount}&firstDataRequest=true&latest=true&adjustType=2&json=true`;
                 
                 const headers: any = {
                     'accept': 'application/json, text/plain, */*',
@@ -174,7 +174,7 @@ export class BtcEngine {
 
     connectWS() {
         if (!this.isEnabled) return;
-        const url = "wss://ir.faraz.io/srv05/realtime/?EIO=4&transport=websocket";
+        const url = "wss://ir5.faraz.io/srv05/realtime/?EIO=4&transport=websocket";
         this.ws = new WebSocket(url, {
             origin: "https://faraz.io",
             referer: "https://faraz.io/",
@@ -200,9 +200,10 @@ export class BtcEngine {
             }
 
             if (msg.startsWith('40/customer,')) {
-                this.ws?.send(`42/customer,["join-room","term-room-@BTCUSDT_FUTURES"]`);
-                this.ws?.send(`42/customer,["join-room","symbol-room-@BTCUSDT_FUTURES@1D@0"]`);
-                this.ws?.send(`42/customer,["join-room","symbol-room-@BTCUSDT_FUTURES@${this.timeframe}@0"]`);
+                this.ws?.send(`43/customer,0[]`);
+                this.ws?.send(`42/customer,["join-room","term-room-@INDEX_BTCUSD"]`);
+                this.ws?.send(`42/customer,["join-room","symbol-room-@INDEX_BTCUSD@1D@0"]`);
+                this.ws?.send(`42/customer,["join-room","symbol-room-@INDEX_BTCUSD@${this.timeframe}@0"]`);
                 return;
             }
 
@@ -212,10 +213,10 @@ export class BtcEngine {
                 const jsonPart = msg.substring(commaIdx + 1);
                 try {
                     const parsed = JSON.parse(jsonPart);
-                    if (parsed[0] === `symbol-room-@BTCUSDT_FUTURES@${this.timeframe}@0`) {
+                    if (parsed[0] === `symbol-room-@INDEX_BTCUSD@${this.timeframe}@0`) {
                         const raw = parsed[1];
                         this.updateFromTick(raw);
-                    } else if (parsed[0] === 'term-room-@BTCUSDT_FUTURES') {
+                    } else if (parsed[0] === 'term-room-@INDEX_BTCUSD') {
                         const raw = parsed[1];
                         if (raw.price) {
                             this.updatePrice(parseFloat(raw.price));
@@ -392,7 +393,7 @@ export class BtcEngine {
         if (this.chartSource === 'faraz') {
             await this.fetchHistory();
             if (this.ws && this.ws.readyState === 1) { // 1 is WebSocket.OPEN
-                this.ws.send(`42/customer,["join-room","symbol-room-@BTCUSDT_FUTURES@${this.timeframe}@0"]`);
+                this.ws.send(`42/customer,["join-room","symbol-room-@INDEX_BTCUSD@${this.timeframe}@0"]`);
             }
         }
     }
