@@ -17,6 +17,7 @@ export class BtcEngine {
     brokerName = 'بیتکوین (BTCUSDT)';
     isEnabled = true;
     chartSource: 'faraz' | 'trendo' = 'faraz';
+    lastLevelsUpdate: number = 0;
     
     onSignalCallback: ((sig: Signal, msgId?: number) => void) | null = null;
     
@@ -237,19 +238,38 @@ export class BtcEngine {
         const tfMs = (parseInt(this.timeframe) || 1) * 60000;
         const cTime = Math.floor(now / tfMs) * tfMs;
 
-        const last = this.candles[this.candles.length - 1];
-        if (last && last.time === cTime) {
-            last.high = Math.max(last.high, newPrice);
-            last.low = Math.min(last.low, newPrice);
-            last.close = newPrice;
-        } else if (this.candles.length > 0 && cTime > last.time) {
+        if (this.candles.length === 0) {
             const c = { time: cTime, open: newPrice, high: newPrice, low: newPrice, close: newPrice };
             this.candles.push(c);
-            if (this.candles.length > 2000) this.candles.shift();
-            this.detectLevels();
-            saveCandles('btc', this.timeframe, [c]); // Save latest
+            return;
         }
-        this.runStrategy();
+
+        const lastIndex = this.candles.length - 1;
+        let found = false;
+        for (let i = lastIndex; i >= Math.max(0, lastIndex - 5); i--) {
+            if (this.candles[i].time === cTime) {
+                this.candles[i].high = Math.max(this.candles[i].high, newPrice);
+                this.candles[i].low = Math.min(this.candles[i].low, newPrice);
+                this.candles[i].close = newPrice;
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            if (cTime > this.candles[lastIndex].time) {
+                const c = { time: cTime, open: newPrice, high: newPrice, low: newPrice, close: newPrice };
+                this.candles.push(c);
+                if (this.candles.length > 2000) this.candles.shift();
+                saveCandles('btc', this.timeframe, [c]); // Save latest
+            }
+        }
+
+        if (!this.lastLevelsUpdate || now - this.lastLevelsUpdate > 1000) {
+            this.detectLevels();
+            this.runStrategy();
+            this.lastLevelsUpdate = now;
+        }
     }
 
     updateFromTick(tick: any) {

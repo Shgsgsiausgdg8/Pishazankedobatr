@@ -455,7 +455,7 @@ async function startServer() {
                 baleToken: '',
                 baleChatId: '',
                 baleEnabled: false,
-                broker: 'trendo'
+                broker: 'trendo' as 'trendo'
             };
             trendoAutoTrader.config = { ...trendoAutoTrader.config, ...defaults };
             trendoAutoTrader.saveSettings();
