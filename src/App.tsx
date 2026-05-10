@@ -569,6 +569,7 @@ export default function App() {
   const [baleChatId, setBaleChatId] = useState('');
   const [farazToken, setFarazToken] = useState('');
   const [farazSession, setFarazSession] = useState('');
+  const [btcChartSource, setBtcChartSource] = useState('faraz');
   const [candleConfirmations, setCandleConfirmations] = useState({
     legacy: true,
     salvation: true,
@@ -666,6 +667,7 @@ export default function App() {
                 if (msg.data.baleChatId) setBaleChatId(msg.data.baleChatId);
                 if (msg.data.currentToken) setFarazToken(msg.data.currentToken);
                 if (msg.data.farazSession) setFarazSession(msg.data.farazSession);
+                if (msg.data.chartSource) setBtcChartSource(msg.data.chartSource);
                 if (msg.data.candleConfirmations) setCandleConfirmations(msg.data.candleConfirmations);
               }
             }
@@ -756,6 +758,7 @@ export default function App() {
         baleChatId: baleChatId,
         farazToken: farazToken,
         farazSession: farazSession,
+        btcChartSource: btcChartSource,
         candleConfirmations: candleConfirmations
       }));
       setShowBaleSettings(false);
@@ -1733,6 +1736,26 @@ export default function App() {
 
               <div>
                 <h3 style={{ fontSize: '0.85rem', color: '#3b82f6', marginBottom: '8px' }}>📡 تنظیمات API بیت‌کوین (BTC)</h3>
+                <div style={{ marginBottom: '12px', display: 'flex', gap: '10px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: 'white', cursor: 'pointer' }}>
+                    <input 
+                      type="radio" 
+                      name="btcChartSource" 
+                      value="faraz" 
+                      checked={btcChartSource === 'faraz'} 
+                      onChange={() => setBtcChartSource('faraz')}
+                    /> فراز (TRBTCUSDT / Mz)
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: 'white', cursor: 'pointer' }}>
+                    <input 
+                      type="radio" 
+                      name="btcChartSource" 
+                      value="trendo" 
+                      checked={btcChartSource === 'trendo'} 
+                      onChange={() => setBtcChartSource('trendo')}
+                    /> ترندو (زنده)
+                  </label>
+                </div>
                 <div style={{ marginBottom: '8px' }}>
                   <label style={{ display: 'block', fontSize: '0.7rem', color: '#94a3b8', marginBottom: '4px' }}>x-access-token:</label>
                   <StringSettingInput 

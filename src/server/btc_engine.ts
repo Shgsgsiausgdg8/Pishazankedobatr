@@ -16,6 +16,7 @@ export class BtcEngine {
     liveStrategyType = 'N-PATTERN';
     brokerName = 'بیتکوین (BTCUSDT)';
     isEnabled = true;
+    chartSource: 'faraz' | 'trendo' = 'faraz';
     
     onSignalCallback: ((sig: Signal, msgId?: number) => void) | null = null;
     
@@ -48,6 +49,7 @@ export class BtcEngine {
                 if (s.farazSession) this.farazSession = s.farazSession;
                 if (s.candleConfirmations) this.candleConfirmations = s.candleConfirmations;
                 if (s.isEnabled !== undefined) this.isEnabled = s.isEnabled;
+                if (s.chartSource !== undefined) this.chartSource = s.chartSource;
                 if (s.liveStrategyType) this.liveStrategyType = s.liveStrategyType;
                 if (s.strategyConfig) this.strategy.updateConfig(s.strategyConfig);
             }
@@ -63,6 +65,7 @@ export class BtcEngine {
                 farazSession: this.farazSession,
                 candleConfirmations: this.candleConfirmations,
                 isEnabled: this.isEnabled,
+                chartSource: this.chartSource,
                 liveStrategyType: this.liveStrategyType,
                 strategyConfig: (this.strategy as any).config
             };
@@ -72,8 +75,13 @@ export class BtcEngine {
 
     async start() {
         if (!this.isEnabled) return;
-        await this.fetchHistory();
-        this.connectWS();
+        if (this.chartSource === 'faraz') {
+            await this.fetchHistory();
+            this.connectWS();
+        } else {
+            console.log("[BTCEngine] Started with Trendo as source. Awaiting ticks...");
+            // History might not be fetched, relying on server.ts to push trendo ticks
+        }
     }
 
     getFullCandles() {
@@ -360,10 +368,12 @@ export class BtcEngine {
         this.candles = [];
         this.levels = [];
         this.signals = [];
-        await this.fetchHistory();
         
-        if (this.ws && this.ws.readyState === 1) { // 1 is WebSocket.OPEN
-            this.ws.send(`42/customer,["join-room","symbol-room-@BTCUSDT_FUTURES@${this.timeframe}@0"]`);
+        if (this.chartSource === 'faraz') {
+            await this.fetchHistory();
+            if (this.ws && this.ws.readyState === 1) { // 1 is WebSocket.OPEN
+                this.ws.send(`42/customer,["join-room","symbol-room-@BTCUSDT_FUTURES@${this.timeframe}@0"]`);
+            }
         }
     }
 
@@ -385,8 +395,14 @@ export class BtcEngine {
             farazSession: this.farazSession,
             candleConfirmations: this.candleConfirmations,
             isEnabled: this.isEnabled,
+            chartSource: this.chartSource,
             strategyConfig: (this.strategy as any).config
         };
+    }
+
+    processTrendoTick(price: number) {
+        if (this.chartSource !== 'trendo' || !this.isEnabled) return;
+        this.updatePrice(price);
     }
 
     setStrategyConfig(config: any) {

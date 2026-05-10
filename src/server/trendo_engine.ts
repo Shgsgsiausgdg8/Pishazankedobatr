@@ -39,6 +39,7 @@ export class TrendoEngine {
     prices: Record<string, { bid: number, ask: number }> = {};
     activeSymbols: Set<string> = new Set();
     isEnabled = true;
+    onPriceUpdate: ((symbol: string, bid: number, ask: number) => void) | null = null;
 
     constructor() {
         this.loadSettings();
@@ -90,10 +91,10 @@ export class TrendoEngine {
                 const symbol = event.substring("item_price_".length);
                 try {
                     if (Array.isArray(data) && data[0]?.Ask) {
-                        this.prices[symbol] = {
-                            ask: parseFloat(data[0].Ask),
-                            bid: parseFloat(data[0].Bid)
-                        };
+                        const ask = parseFloat(data[0].Ask);
+                        const bid = parseFloat(data[0].Bid);
+                        this.prices[symbol] = { ask, bid };
+                        if (this.onPriceUpdate) this.onPriceUpdate(symbol, bid, ask);
                     }
                 } catch (e) {}
             }

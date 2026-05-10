@@ -63,6 +63,12 @@ async function startServer() {
         trendoAutoTrader.handleSignal(sig, msgId);
     });
     
+    trendoEngine.onPriceUpdate = (symbol, bid, ask) => {
+        if (symbol === 'btcusd') {
+            btcEngine.processTrendoTick(bid);
+        }
+    };
+    
     btcEngine.start(); // Start history & websocket for BTC
     trendoEngine.start();
     
@@ -328,7 +334,7 @@ async function startServer() {
                         }
                     }
                     if (command.type === 'UPDATE_SETTINGS') {
-                        const { baleToken, baleChatId, farazToken, farazSession, candleConfirmations } = command;
+                        const { baleToken, baleChatId, farazToken, farazSession, candleConfirmations, btcChartSource } = command;
                         
                         farazEngine.updateBaleConfig(baleToken, baleChatId);
                         if (candleConfirmations) (farazEngine as any).candleConfirmations = candleConfirmations;
@@ -342,8 +348,9 @@ async function startServer() {
                         if (farazToken) btcEngine.currentToken = farazToken;
                         if (farazSession) btcEngine.farazSession = farazSession;
                         if (candleConfirmations) (btcEngine as any).candleConfirmations = candleConfirmations;
+                        if (btcChartSource) btcEngine.chartSource = btcChartSource;
                         btcEngine.saveSettings();
-                        btcEngine.fetchHistory(); // Retry history with new token
+                        if (btcEngine.chartSource === 'faraz') btcEngine.fetchHistory(); // Retry history with new token
 
                         console.log(`[Server] All settings updated.`);
                     }
