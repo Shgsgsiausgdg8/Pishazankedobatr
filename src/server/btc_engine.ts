@@ -170,6 +170,7 @@ export class BtcEngine {
                 if (cached && cached.length > 100) {
                     this.candles = cached;
                     this.price = cached[cached.length - 1].close;
+                    this.detectLevels();
                     console.log(`[BTCEngine] Loaded ${cached.length} candles from DB cache.`);
                     return;
                 }

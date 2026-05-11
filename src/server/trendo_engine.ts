@@ -89,7 +89,7 @@ export class TrendoEngine {
             // Manual keep-alive ping for compatibility
             if (this.pingInterval) clearInterval(this.pingInterval);
             this.pingInterval = setInterval(() => {
-                if (this.socket?.connected) {
+                if (this.socket?.connected && this.socket?.engine) {
                     this.socket.engine.send('2');
                 }
             }, 25000);

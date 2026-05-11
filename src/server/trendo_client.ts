@@ -44,7 +44,7 @@ export class TrendoClient {
             });
 
             // Format open orders
-            const openOrders = state.activeOrders.map((o: any) => ({
+            const openOrders = Object.values(state.activeOrders).map((o: any) => ({
                 id: o.id,
                 symbol: o.symbol,
                 side: o.type === 0 ? 1 : 2, 
