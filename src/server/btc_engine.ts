@@ -36,6 +36,8 @@ export class BtcEngine {
     
     private refreshTimer: NodeJS.Timeout | null = null;
     
+    pingInterval: NodeJS.Timeout | null = null;
+    
     settingsFile = path.join(process.cwd(), 'btc_settings.json');
 
     constructor() {
@@ -140,12 +142,14 @@ export class BtcEngine {
     async start() {
         if (!this.isEnabled) return;
         this.scheduleTokenRefresh();
+        
+        // Always fetch history initially so we have past candles for calculating pivots/structures
+        await this.fetchHistory();
+        
         if (this.chartSource === 'faraz') {
-            await this.fetchHistory();
             this.connectWS();
         } else {
-            console.log("[BTCEngine] Started with Trendo as source. Awaiting ticks...");
-            // History might not be fetched, relying on server.ts to push trendo ticks
+            console.log("[BTCEngine] Started with Trendo as source. History loaded from Faraz, awaiting live ticks...");
         }
     }
 
@@ -252,6 +256,12 @@ export class BtcEngine {
 
         this.ws.on('open', () => {
             console.log("[BTC-Engine] WS Connected.");
+            // Keep-alive ping interval
+            this.pingInterval = setInterval(() => {
+                if (this.ws && this.ws.readyState === 1) {
+                    this.ws.send('2');
+                }
+            }, 25000);
         });
 
         this.ws.on('message', (data) => {
@@ -292,6 +302,7 @@ export class BtcEngine {
 
         this.ws.on('close', () => {
             console.log("[BTC-Engine] WS Closed. Reconnecting...");
+            if (this.pingInterval) clearInterval(this.pingInterval);
             setTimeout(() => this.connectWS(), 5000);
         });
     }
@@ -454,8 +465,9 @@ export class BtcEngine {
         this.levels = [];
         this.signals = [];
         
+        await this.fetchHistory();
+        
         if (this.chartSource === 'faraz') {
-            await this.fetchHistory();
             if (this.ws && this.ws.readyState === 1) { // 1 is WebSocket.OPEN
                 this.ws.send(`42/customer,["join-room","symbol-room-@INDEX_BTCUSD@${this.timeframe}@0"]`);
             }

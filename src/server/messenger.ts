@@ -52,6 +52,36 @@ export class Messenger {
         }
     }
 
+    private async sendPhoto(imageUrl: string, caption: string, replyToId?: number): Promise<number | null> {
+        if (!this.token || !this.chatId) return null;
+
+        const url = `https://tapi.bale.ai/bot${this.token}/sendPhoto`;
+        try {
+            const payload: any = {
+                chat_id: this.chatId,
+                photo: imageUrl,
+                caption: caption
+            };
+            if (replyToId) {
+                payload.reply_to_message_id = replyToId;
+            }
+
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (res.ok) {
+                const json: any = await res.json();
+                return json.result?.message_id || null;
+            } else {
+                return await this.send(caption, replyToId); // Fallback to text
+            }
+        } catch (e: any) {
+            return await this.send(caption, replyToId); // Fallback to text
+        }
+    }
+
     async sendTradeOpen(order: any, accountMode: string, replyToSignalId?: number): Promise<number | null> {
         const side = String(order.side).toLowerCase() === '1' || String(order.side).toLowerCase() === 'buy' ? 'خرید (BUY) 🟢' : 'فروش (SELL) 🔴';
         const modeText = accountMode === 'real' ? 'حساب واقعی (REAL) 💰' : 'حساب دمو (DEMO) 🧪';
@@ -90,18 +120,40 @@ ${symbol} **معامله بسته شد**
         return await this.send(message.trim(), replyToOpenId);
     }
 
-    async sendSLUpdate(order: any, newSl: string, progress: number, replyToOpenId?: number) {
+    async sendSLUpdate(order: any, newSl: string, progress: number, currentPrice: number, replyToOpenId?: number) {
         const message = `
 🛡 **آپدیت حد ضرر (Risk-Free)**
 
 🎯 **مرحله:** TP${progress} رویت شد
+💸 **قیمت فعلی:** ${currentPrice}
 🛡 **حد ضرر جدید:** ${newSl}
 🆔 **شناسه:** ${order.id}
 🕒 **زمان:** ${new Date().toLocaleTimeString('fa-IR')}
 
 ✅ معامله امن شد.
 `;
-        await this.send(message.trim(), replyToOpenId);
+        
+        let tpValue = newSl;
+        // Generate a very light quickchart showing entry, sl, and current
+        const chartConfig = {
+            type: 'line',
+            data: {
+                labels: ['Start', 'Entry', 'Current Target'],
+                datasets: [{
+                    label: 'قیمت',
+                    data: [order.price, order.price, currentPrice],
+                    borderColor: 'rgb(75, 192, 192)',
+                    fill: false
+                }, {
+                     label: 'SL جدید',
+                     data: [newSl, newSl, newSl],
+                     borderColor: 'red',
+                     borderDash: [5, 5]
+                }]
+            }
+        };
+        const encodedUrl = `https://quickchart.io/chart?w=400&h=200&c=${encodeURIComponent(JSON.stringify(chartConfig))}`;
+        await this.sendPhoto(encodedUrl, message.trim(), replyToOpenId);
     }
 
     async sendPeriodicReport(stats: ReportStats, accountMode: string) {

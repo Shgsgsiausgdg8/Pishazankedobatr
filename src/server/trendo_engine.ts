@@ -39,6 +39,7 @@ export class TrendoEngine {
     prices: Record<string, { bid: number, ask: number }> = {};
     activeSymbols: Set<string> = new Set();
     isEnabled = true;
+    pingInterval: NodeJS.Timeout | null = null;
     onPriceUpdate: ((symbol: string, bid: number, ask: number) => void) | null = null;
 
     constructor() {
@@ -84,6 +85,14 @@ export class TrendoEngine {
         this.socket.on('connect', () => {
             console.log('[Trendo] Connected to WebSocket');
             this.authenticate();
+            
+            // Manual keep-alive ping for compatibility
+            if (this.pingInterval) clearInterval(this.pingInterval);
+            this.pingInterval = setInterval(() => {
+                if (this.socket?.connected) {
+                    this.socket.engine.send('2');
+                }
+            }, 25000);
         });
 
         this.socket.onAny((event: string, data: any) => {
@@ -159,6 +168,8 @@ export class TrendoEngine {
 
         this.socket.on('disconnect', () => {
             console.log('[Trendo] Disconnected');
+            if (this.pingInterval) clearInterval(this.pingInterval);
+            this.activeSymbols.clear();
         });
 
         this.socket.on('error', (err: any) => {

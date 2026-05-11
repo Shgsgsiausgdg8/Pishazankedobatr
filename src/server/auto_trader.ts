@@ -340,7 +340,7 @@ export class AutoTrader {
             else profitPips = (entry - current) * 100;
 
             if (profitPips >= this.config.riskFreePips) {
-                this.moveSL(order, entry, 0.5); // Level 0.5 means pips mode risk free
+                this.moveSL(order, entry, 0.5, current); // Level 0.5 means pips mode risk free
             }
         }
     }
@@ -401,13 +401,13 @@ export class AutoTrader {
 
         if (targetToMoveTo !== null) {
             console.log(`[AutoTrader] STEP-RISKFREE: Order ${orderIdStr} reached TP${newProgress}. Price: ${current}. Moving SL to ${targetToMoveTo}`);
-            this.moveSL(order, targetToMoveTo, newProgress);
+            this.moveSL(order, targetToMoveTo, newProgress, current);
         }
     }
 
     private slMoveInFlight = new Set<string>();
 
-    async moveSL(order: any, newSlPrice: number, progressLevel: number) {
+    async moveSL(order: any, newSlPrice: number, progressLevel: number, currentPrice: number) {
         const orderIdStr = String(order.id);
         
         if (this.slMoveInFlight.has(orderIdStr)) return; // Prevent spamming while request is pending
@@ -449,7 +449,7 @@ export class AutoTrader {
 
             // Send notification
             if (this.config.baleEnabled) {
-                this.messenger.sendSLUpdate(order, newSl, progressLevel, this.baleOpenMessageIds[orderIdStr]);
+                this.messenger.sendSLUpdate(order, newSl, progressLevel, currentPrice, this.baleOpenMessageIds[orderIdStr]);
             }
         } else {
             this.slMoveInFlight.add(orderIdStr);
@@ -463,7 +463,7 @@ export class AutoTrader {
 
                 // Send notification
                 if (this.config.baleEnabled) {
-                    this.messenger.sendSLUpdate(order, newSl, progressLevel, this.baleOpenMessageIds[orderIdStr]);
+                    this.messenger.sendSLUpdate(order, newSl, progressLevel, currentPrice, this.baleOpenMessageIds[orderIdStr]);
                 }
             } catch (e: any) {
                 console.error(`[AutoTrader] Failed to move SL for ${orderIdStr}:`, e.message);
