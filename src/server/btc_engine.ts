@@ -34,10 +34,73 @@ export class BtcEngine {
         darkCloud: true
     };
     
+    private refreshTimer: NodeJS.Timeout | null = null;
+    
     settingsFile = path.join(process.cwd(), 'btc_settings.json');
 
     constructor() {
         this.loadSettings();
+    }
+
+    scheduleTokenRefresh() {
+        if (this.refreshTimer) {
+            clearTimeout(this.refreshTimer);
+            this.refreshTimer = null;
+        }
+        
+        if (!this.currentToken) return;
+        
+        try {
+            const parts = this.currentToken.split('.');
+            if (parts.length === 3) {
+                const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf-8'));
+                if (payload && payload.exp) {
+                    const expiresAtMs = payload.exp * 1000;
+                    const now = Date.now();
+                    const refreshTime = expiresAtMs - (5 * 60 * 1000); // 5 minutes before expiration
+                    const delay = refreshTime - now;
+                    
+                    if (delay > 0) {
+                        console.log(`[BTCEngine] Token will expire at ${new Date(expiresAtMs).toLocaleString()}. Scheduling refresh in ${Math.round(delay / 60000)} minutes.`);
+                        this.refreshTimer = setTimeout(() => {
+                            this.refreshFarazToken();
+                        }, delay);
+                    } else {
+                        console.log(`[BTCEngine] Token is already expired or close to expiration. Refreshing now.`);
+                        this.refreshFarazToken();
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("[BTCEngine] Failed to parse JWT token for refresh scheduling: ", e);
+        }
+    }
+
+    async refreshFarazToken() {
+        if (!this.currentToken || !this.farazSession) return;
+        try {
+            console.log("[BTCEngine] Attempting to refresh faraz token...");
+            const url = 'https://faraz.io/api/public/authentication/me';
+            const headers: any = {
+                'accept': 'application/json, text/plain, */*',
+                'cookie': `x-access-token=${this.currentToken}; farazSession=${this.farazSession}`
+            };
+
+            const res = await fetch(url, { headers });
+            if (res.ok) {
+                const data: any = await res.json();
+                if (data && data.token) {
+                    this.currentToken = data.token;
+                    this.saveSettings();
+                    console.log("[BTCEngine] Successfully refreshed Faraz token.");
+                    this.scheduleTokenRefresh(); // Schedule the next refresh
+                }
+            } else {
+                console.error(`[BTCEngine] Failed to refresh token: status ${res.status}`);
+            }
+        } catch (e: any) {
+            console.error(`[BTCEngine] Error refreshing Faraz token: ${e.message}`);
+        }
     }
 
     loadSettings() {
@@ -76,6 +139,7 @@ export class BtcEngine {
 
     async start() {
         if (!this.isEnabled) return;
+        this.scheduleTokenRefresh();
         if (this.chartSource === 'faraz') {
             await this.fetchHistory();
             this.connectWS();

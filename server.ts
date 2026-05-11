@@ -347,6 +347,7 @@ async function startServer() {
                         btcEngine.updateBaleConfig(baleToken, baleChatId);
                         if (farazToken) btcEngine.currentToken = farazToken;
                         if (farazSession) btcEngine.farazSession = farazSession;
+                        btcEngine.scheduleTokenRefresh();
                         if (candleConfirmations) (btcEngine as any).candleConfirmations = candleConfirmations;
                         if (btcChartSource) btcEngine.chartSource = btcChartSource;
                         btcEngine.saveSettings();
