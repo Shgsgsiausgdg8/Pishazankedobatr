@@ -176,12 +176,65 @@ export class BtcEngine {
                 }
             }
 
+            let to = Math.floor(Date.now() / 1000);
+            const barsCount = 1000;
+            const timeframeSeconds = (parseInt(resolution) || 1) * 60;
+            let totalFetched = 0;
+            
+            console.log(`[BTCEngine] Deep history fetch: ${targetDays} days (${targetTotalCandles} bars)...`);
+
+            for (let i = 0; i < Math.ceil(targetTotalCandles / barsCount); i++) {
+                const from = to - (barsCount * timeframeSeconds); 
+                const url = `https://ir5.faraz.io/api/customer/trading-view/history?symbolName=INDEX_BTCUSD&resolution=${resolution}&from=${from}&to=${to}&countback=${barsCount}&firstDataRequest=true&latest=true&adjustType=2&json=true`;
+                
+                const headers: any = {
+                    'accept': 'application/json, text/plain, */*',
+                    'user-agent': 'Mozilla/5.0'
+                };
+
+                if (this.currentToken) {
+                    headers['cookie'] = `x-access-token=${this.currentToken}; farazSession=${this.farazSession}`;
+                }
+
+                const res = await fetch(url, { headers });
+                if (!res.ok) break;
+
+                const data: any = await res.json();
+                const r = data.result ? data.result : data;
+                
+                if (r && r.t && Array.isArray(r.t) && r.t.length > 0) {
+                    const chunk: any[] = [];
+                    for (let j = 0; j < r.t.length; j++) {
+                        const t = r.t[j];
+                        const close = parseFloat(r.c[j]);
+                        if (!isNaN(close)) {
+                            chunk.push({
+                                time: t > 20000000000 ? t : t * 1000,
+                                open: parseFloat(r.o[j]),
+                                high: parseFloat(r.h[j]),
+                                low: parseFloat(r.l[j]),
+                                close: close
+                            });
+                        }
+                    }
+
+                    if (chunk.length === 0) break;
+                    
+                    saveCandles('btc', resolution, chunk);
+                    totalFetched += chunk.length;
+                    to = Math.floor(chunk[0].time / 1000) - 1;
+                    if (r.t.length < barsCount) break;
+                } else {
+                    break;
+                }
+            }
+
             const finalCache = getCandles('btc', resolution, 2000);
             if (finalCache.length > 0) {
                 this.candles = finalCache;
                 this.price = this.candles[this.candles.length - 1].close;
                 this.detectLevels();
-                console.log(`[BTCEngine] Loaded memory from cache. DB count: ${getCandleCount('btc', resolution)}`);
+                console.log(`[BTCEngine] Backfill complete. Total in DB: ${getCandleCount('btc', resolution)}`);
             }
         } catch (e: any) {
             console.error(`[BTCEngine] Error fetching history: ${e.message}`);
@@ -448,55 +501,6 @@ export class BtcEngine {
     processTrendoTick(price: number) {
         if (this.chartSource !== 'trendo' || !this.isEnabled) return;
         this.updatePrice(price);
-    }
-
-    newCandlesBuffer: any[] = [];
-    detectLevelsTimeout: NodeJS.Timeout | null = null;
-    
-    processTrendoChartCandle(candle: any) {
-        if (this.chartSource !== 'trendo' || !this.isEnabled) return;
-        if (!candle || !candle.time) return;
-
-        let time = candle.time > 20000000000 ? candle.time : candle.time * 1000;
-        let open = parseFloat(candle.open || candle.close);
-        let high = parseFloat(candle.high || candle.close);
-        let low = parseFloat(candle.low || candle.close);
-        let close = parseFloat(candle.close);
-        
-        const lastIndex = this.candles.length - 1;
-        let found = false;
-
-        for (let i = lastIndex; i >= Math.max(0, lastIndex - 20); i--) {
-            if (this.candles[i].time === time) {
-                this.candles[i].open = open;
-                this.candles[i].high = high;
-                this.candles[i].low = low;
-                this.candles[i].close = close;
-                found = true;
-                break;
-            }
-        }
-
-        if (!found) {
-            const c = { time, open, high, low, close };
-            this.candles.push(c);
-            this.candles.sort((a, b) => a.time - b.time);
-            if (this.candles.length > 2000) this.candles.shift();
-            
-            this.newCandlesBuffer.push(c);
-        }
-        
-        this.price = close;
-        
-        if (this.detectLevelsTimeout) clearTimeout(this.detectLevelsTimeout);
-        this.detectLevelsTimeout = setTimeout(() => {
-            if (this.newCandlesBuffer.length > 0) {
-                saveCandles('btc', this.timeframe, [...this.newCandlesBuffer]);
-                this.newCandlesBuffer = [];
-            }
-            this.detectLevels();
-            this.runStrategy();
-        }, 300);
     }
 
     setStrategyConfig(config: any) {

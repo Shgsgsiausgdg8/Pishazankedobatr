@@ -68,19 +68,8 @@ async function startServer() {
             btcEngine.processTrendoTick(bid);
         }
     };
-
-    trendoEngine.onChartUpdate = (symbol, timeframe, isLast, candle) => {
-        if (symbol === 'btcusd' && String(timeframe) === btcEngine.timeframe) {
-            btcEngine.processTrendoChartCandle(candle);
-        }
-    };
     
     btcEngine.start(); // Start history & websocket for BTC
-    if (btcEngine.chartSource === 'trendo') {
-        setTimeout(() => {
-            trendoEngine.subscribeChart('btcusd', parseInt(btcEngine.timeframe));
-        }, 3000); // give it some time to authenticate if needed
-    }
     trendoEngine.start();
     
     const engines: Record<string, any> = {
@@ -360,13 +349,7 @@ async function startServer() {
                         if (farazSession) btcEngine.farazSession = farazSession;
                         btcEngine.scheduleTokenRefresh();
                         if (candleConfirmations) (btcEngine as any).candleConfirmations = candleConfirmations;
-
-                        if (btcChartSource) {
-                            btcEngine.chartSource = btcChartSource;
-                            if (btcChartSource === 'trendo') {
-                                trendoEngine.subscribeChart('btcusd', parseInt(btcEngine.timeframe));
-                            }
-                        }
+                        if (btcChartSource) btcEngine.chartSource = btcChartSource;
                         btcEngine.saveSettings();
                         if (btcEngine.chartSource === 'faraz') btcEngine.fetchHistory(); // Retry history with new token
 
