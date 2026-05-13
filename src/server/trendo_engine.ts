@@ -38,13 +38,16 @@ export class TrendoEngine {
     closedOrders: any[] = [];
     prices: Record<string, { bid: number, ask: number }> = {};
     activeSymbols: Set<string> = new Set();
+    activeCharts: Map<string, number> = new Map(); // symbol -> timeframe
     isEnabled = true;
     pingInterval: NodeJS.Timeout | null = null;
     onPriceUpdate: ((symbol: string, bid: number, ask: number) => void) | null = null;
+    onChartUpdate: ((symbol: string, timeframe: number, isLast: boolean, candle: any) => void) | null = null;
 
     constructor() {
         this.loadSettings();
     }
+
 
     loadSettings() {
         const settings = getSetting('trendo_settings');
@@ -86,17 +89,40 @@ export class TrendoEngine {
             console.log('[Trendo] Connected to WebSocket');
             this.authenticate();
             
-            // Manual keep-alive ping for compatibility
+            // Raw ping/pong handler for specific Trendo server requirements
+            const engine = this.socket?.io?.engine;
+            if (engine) {
+                engine.on('message', (msg: any) => {
+                    if (msg === '2') {
+                        // Server sent ping, we send pong (3)
+                        engine.write('3');
+                    }
+                });
+            }
+
+            // Application level keep-alive (myPing / myPong)
             if (this.pingInterval) clearInterval(this.pingInterval);
             this.pingInterval = setInterval(() => {
-                if (this.socket?.connected && this.socket?.engine) {
-                    this.socket.engine.send('2');
+                if (this.socket?.connected) {
+                    this.socket.emit('myPing', Date.now());
                 }
-            }, 25000);
+            }, 20000);
         });
 
         this.socket.onAny((event: string, data: any) => {
-            if (event.startsWith("item_price_")) {
+            // console.log(`[Trendo WS EVENT] ${event}`); // too spammy maybe?
+            if (event.startsWith("chart_") && data) {
+                console.log(`[Trendo] Received chart data for ${event}, candles info:`, data?.Candle?.length, data?.candleLast ? 'has candleLast' : 'no candleLast');
+                const chartData = data;
+                if (chartData && Array.isArray(chartData.Candle) && this.onChartUpdate) {
+                    for (const c of chartData.Candle) {
+                        this.onChartUpdate(chartData.name, chartData.timeFrame, false, c);
+                    }
+                    if (chartData.candleLast) {
+                        this.onChartUpdate(chartData.name, chartData.timeFrame, true, chartData.candleLast);
+                    }
+                }
+            } else if (event.startsWith("item_price_") && !event.startsWith("item_price_spread_")) {
                 const symbol = event.substring("item_price_".length);
                 try {
                     if (Array.isArray(data) && data[0]?.Ask) {
@@ -199,6 +225,11 @@ export class TrendoEngine {
                 });
                 this.socket.emit("symbol_list", "btcusd");
                 this.ensurePriceRoom("btcusd");
+                
+                // Re-subscribe to charts if any
+                for (const [sym, tf] of this.activeCharts.entries()) {
+                    this.subscribeChart(sym, tf);
+                }
             }
         });
     }
@@ -215,6 +246,48 @@ export class TrendoEngine {
         });
 
         this.activeSymbols.add(symbol.toLowerCase());
+    }
+
+    subscribeChart(symbol: string, timeframe: number) {
+        this.activeCharts.set(symbol.toLowerCase(), timeframe);
+        if (!this.socket || !this.socket.connected) return;
+        
+        console.log(`[Trendo] Subscribing to chart for ${symbol} timeframe ${timeframe}`);
+
+        // The sequence required by Trendo
+        this.socket.emit("user_join", {
+            join: "join",
+            room: `item_price_spread_${timeframe}_${symbol.toLowerCase()}`,
+            ...this.device
+        });
+
+        this.socket.emit("user_join", {
+            join: "join",
+            room: `room_item_price_${timeframe}_${symbol.toLowerCase()}`,
+            ...this.device
+        });
+
+        this.socket.emit("user_join", {
+            join: "join",
+            room: `chart_${symbol.toLowerCase()}_${timeframe}`,
+            ...this.device
+        });
+
+        const endTime = Math.floor(Date.now() / 1000); 
+        const startTime = endTime - (1000 * timeframe * 60); // request up to 1000 candles
+        
+        this.socket.emit("start_chart", {
+            event: "start_chart",
+            symbol: symbol.toLowerCase(),
+            timeFrame: timeframe,
+            candle_time: 0,
+            isRight: false,
+            startTimeCandle: startTime,
+            endTimeCandle: endTime,
+            primary_chart_key: Math.floor(Math.random() * 1000000000), 
+            version: "V2",
+            ...this.device
+        });
     }
 
     async waitForPrice(symbol: string, timeout = 5000): Promise<boolean> {
