@@ -35,6 +35,23 @@ db.run(`
         username TEXT UNIQUE,
         password TEXT
     );
+    CREATE TABLE IF NOT EXISTS clients (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE,
+        password TEXT,
+        status TEXT
+    );
+    CREATE TABLE IF NOT EXISTS client_signals (
+        id TEXT PRIMARY KEY,
+        broker TEXT,
+        type TEXT,
+        price REAL,
+        tp REAL,
+        tp2 REAL,
+        sl REAL,
+        time INTEGER,
+        status TEXT
+    );
 `);
 
 let saveTimeout: any = null;
@@ -215,6 +232,36 @@ export function getSetting(key: string): any {
             if (row.value) {
                 result = JSON.parse(row.value as string);
             }
+        }
+        stmt.free();
+        return result;
+    } catch (e) {
+        return null;
+    }
+}
+
+export function createClient(username: string, passwordHash: string): boolean {
+    try {
+        db.run("BEGIN TRANSACTION;");
+        const stmt = db.prepare("INSERT INTO clients (username, password, status) VALUES (?, ?, 'pending')");
+        stmt.run([username, passwordHash]);
+        stmt.free();
+        db.run("COMMIT;");
+        scheduleSave();
+        return true;
+    } catch (e) {
+        db.run("ROLLBACK;");
+        return false;
+    }
+}
+
+export function getClient(username: string): any {
+    try {
+        const stmt = db.prepare("SELECT * FROM clients WHERE username = ?");
+        stmt.bind([username]);
+        let result = null;
+        if (stmt.step()) {
+            result = stmt.getAsObject();
         }
         stmt.free();
         return result;

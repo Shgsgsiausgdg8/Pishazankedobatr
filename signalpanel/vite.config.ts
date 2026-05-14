@@ -1,6 +1,5 @@
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
-import path from 'path';
 import {defineConfig} from 'vite';
 
 export default defineConfig({
@@ -8,4 +7,5 @@ export default defineConfig({
   server: {
     hmr: false,
   },
+  base: '/signalpanel/'
 });
