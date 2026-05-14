@@ -37,7 +37,7 @@ export class FarazGoldEngine {
     settingsFile = path.join(process.cwd(), 'settings.json');
     lastCandleTime = 0;
     lastLevelsUpdate = 0;
-
+    
     constructor() {
         this.loadSettings();
     }
@@ -357,34 +357,15 @@ export class FarazGoldEngine {
     updatePrice(newPrice: number) {
         if (!newPrice || isNaN(newPrice)) return;
         this.price = newPrice;
-        const now = Date.now();
-        const timeframeMs = (parseInt(this.timeframe) || 1) * 60000;
-        const candleTime = Math.floor(now / timeframeMs) * timeframeMs;
-
-        if (this.candles.length === 0 || candleTime > this.lastCandleTime) {
-            // Check if we already have a candle for this time (e.g. from processBar)
-            const existing = this.candles.find(c => c.time === candleTime);
-            if (existing) {
-                existing.close = newPrice;
-                existing.high = Math.max(existing.high, newPrice);
-                existing.low = Math.min(existing.low, newPrice);
-            } else {
-                const newCandle = { time: candleTime, open: newPrice, high: newPrice, low: newPrice, close: newPrice };
-                this.candles.push(newCandle);
-                this.candles.sort((a, b) => a.time - b.time);
-                // Reduce from 25000 to 2000
-                if (this.candles.length > 2000) this.candles.shift();
-            }
-            this.lastCandleTime = Math.max(this.lastCandleTime, candleTime);
-        } else {
+        
+        if (this.candles.length > 0) {
             const last = this.candles[this.candles.length - 1];
-            if (last && last.time === candleTime) {
-                last.high = Math.max(last.high, newPrice);
-                last.low = Math.min(last.low, newPrice);
-                last.close = newPrice;
-            }
+            last.high = Math.max(last.high, newPrice);
+            last.low = Math.min(last.low, newPrice);
+            last.close = newPrice;
         }
 
+        const now = Date.now();
         // بروزرسانی سطوح سقف و کف به صورت لحظه‌ای با تراتل 1 ثانیه
         if (!this.lastLevelsUpdate || now - this.lastLevelsUpdate > 1000) {
             this.detectLevels();
@@ -509,12 +490,12 @@ export class FarazGoldEngine {
     }
 
     detectLevels() {
-        if (this.candles.length < 50) return;
+        if (this.candles.length < 10) return; // Allow running even with fewer candles
         
         // استفاده از الگوریتم شناسایی هوشمند با حساسیت بالا برای سقف و کف لحظه‌ای
         const pivots = this.strategy.getSwingPivots(this.candles, 6, 2);
         
-        this.levels = pivots.map(p => ({
+        this.levels = pivots.map((p: any) => ({
             type: p.type === 'high' ? 'RESISTANCE' : 'SUPPORT' as 'SUPPORT' | 'RESISTANCE',
             price: p.price,
             time: p.time

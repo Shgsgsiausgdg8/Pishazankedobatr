@@ -24,8 +24,8 @@ export class BtcEngine {
     trendoOffsetApplied: boolean = false;
     
     // Auth & Settings
-    currentToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2OGYwMDk2YzIxZjM0N2RhOTMyMzIzZTgiLCJjcmVkaXQiOjE3Nzc1MjczNjU2NTIsImFjdGl2ZSI6dHJ1ZSwicm9sZSI6ImN1c3RvbWVyIiwibGFzdFVwZGF0ZVRpbWUiOjE3Nzc1MzMxMDIzNTIsImlhdCI6MTc3NzUzMzEwMiwiZXhwIjoxNzc3NTQwMzAyfQ.2P-2g2_R15Tz30XFqD_4lYn58OitL0G9Yp1NshqI1v4";
-    farazSession = "s%3AIOMPjESaRChioBmpMfZZHUbDdGaKuEQA.NuYpPcEPXmu9AFqHcx2U6RUCUfpZ%2Fd%2BmCvrmGDBuUrQ";
+    currentToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2OWVjMDg4Nzk1N2EyZjBlZTQzOTFkMjQiLCJjcmVkaXQiOjE3Nzg4NTgyMzMxMDksImFjdGl2ZSI6dHJ1ZSwicm9sZSI6ImN1c3RvbWVyIiwibGFzdFVwZGF0ZVRpbWUiOjE3Nzg3NzE4NTAwNjYsImlhdCI6MTc3ODc3MTg1MCwiZXhwIjoxNzc4Nzc5MDUwfQ.e3YSHrGw8BSMaBkRuZfWYNUCVvlxxWprOUxoOlOcTvM";
+    farazSession = "s%3AqtLAXqstFZBfc3FbaqL8tuT-l0FKkzYx.Q83hKwWdAyyYVt3BNxadSXhoIvXy%2BWZDkQ5Pr0svnkI";
     baleToken = "1892918835:dxRdPwhkUUgmFogKzLD7B8xmygvnRKq_DOA";
     baleChatId = "6211548865";
     candleConfirmations = {
@@ -326,39 +326,15 @@ export class BtcEngine {
     updatePrice(newPrice: number) {
         if (!newPrice || isNaN(newPrice)) return;
         this.price = newPrice;
+        
+        if (this.candles.length === 0) return;
+
+        const last = this.candles[this.candles.length - 1];
+        last.high = Math.max(last.high, newPrice);
+        last.low = Math.min(last.low, newPrice);
+        last.close = newPrice;
+
         const now = Date.now();
-        const tfMs = (parseInt(this.timeframe) || 1) * 60000;
-        const cTime = Math.floor(now / tfMs) * tfMs;
-
-        if (this.candles.length === 0) {
-            const c = { time: cTime, open: newPrice, high: newPrice, low: newPrice, close: newPrice };
-            this.candles.push(c);
-            return;
-        }
-
-        const lastIndex = this.candles.length - 1;
-        let found = false;
-        for (let i = lastIndex; i >= Math.max(0, lastIndex - 5); i--) {
-            if (this.candles[i].time === cTime) {
-                this.candles[i].high = Math.max(this.candles[i].high, newPrice);
-                this.candles[i].low = Math.min(this.candles[i].low, newPrice);
-                this.candles[i].close = newPrice;
-                found = true;
-                break;
-            }
-        }
-
-        if (!found) {
-            if (cTime > this.candles[lastIndex].time) {
-                const c = { time: cTime, open: newPrice, high: newPrice, low: newPrice, close: newPrice };
-                this.candles.push(c);
-                if (this.candles.length > 2000) this.candles.shift();
-                if (this.chartSource === 'faraz') {
-                    saveCandles('btc', this.timeframe, [c]); // Save latest only if authoritative
-                }
-            }
-        }
-
         if (!this.lastLevelsUpdate || now - this.lastLevelsUpdate > 1000) {
             this.detectLevels();
             this.runStrategy();
@@ -367,6 +343,7 @@ export class BtcEngine {
     }
 
     updateFromTick(tick: any) {
+        if (this.chartSource !== 'faraz') return;
         if (!tick || !tick.time) return;
         let time = tick.time > 20000000000 ? tick.time : tick.time * 1000;
         
@@ -399,7 +376,7 @@ export class BtcEngine {
     }
 
     detectLevels() {
-        if (this.candles.length < 50) return;
+        if (this.candles.length < 10) return; // Allow running even with fewer candles
         const pivots = this.strategy.getSwingPivots(this.candles, 6, 2);
         this.levels = pivots.map((p: any) => ({
             type: p.type === 'high' ? 'RESISTANCE' : 'SUPPORT',
