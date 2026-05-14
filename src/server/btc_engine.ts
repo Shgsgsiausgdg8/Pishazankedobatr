@@ -21,6 +21,8 @@ export class BtcEngine {
     
     onSignalCallback: ((sig: Signal, msgId?: number) => void) | null = null;
     
+    trendoOffsetApplied: boolean = false;
+    
     // Auth & Settings
     currentToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2OGYwMDk2YzIxZjM0N2RhOTMyMzIzZTgiLCJjcmVkaXQiOjE3Nzc1MjczNjU2NTIsImFjdGl2ZSI6dHJ1ZSwicm9sZSI6ImN1c3RvbWVyIiwibGFzdFVwZGF0ZVRpbWUiOjE3Nzc1MzMxMDIzNTIsImlhdCI6MTc3NzUzMzEwMiwiZXhwIjoxNzc3NTQwMzAyfQ.2P-2g2_R15Tz30XFqD_4lYn58OitL0G9Yp1NshqI1v4";
     farazSession = "s%3AIOMPjESaRChioBmpMfZZHUbDdGaKuEQA.NuYpPcEPXmu9AFqHcx2U6RUCUfpZ%2Fd%2BmCvrmGDBuUrQ";
@@ -164,17 +166,30 @@ export class BtcEngine {
             
             // Check SQLite first
             const existingCount = getCandleCount('btc', resolution);
+            let needsNetworkFetch = true;
             
             if (existingCount >= targetTotalCandles) {
                 const cached = getCandles('btc', resolution, 2000);
                 if (cached && cached.length > 100) {
-                    this.candles = cached;
-                    this.price = cached[cached.length - 1].close;
-                    this.detectLevels();
-                    console.log(`[BTCEngine] Loaded ${cached.length} candles from DB cache.`);
-                    return;
+                    const lastCandleTime = cached[cached.length - 1].time;
+                    const nowMs = Date.now();
+                    const ageMinutes = (nowMs - lastCandleTime) / 60000;
+                    
+                    if (ageMinutes < 5) {
+                        this.candles = cached;
+                        this.price = cached[cached.length - 1].close;
+                        this.detectLevels();
+                        console.log(`[BTCEngine] Loaded ${cached.length} candles from DB cache. Very recent. Skipping network.`);
+                        needsNetworkFetch = false;
+                        return;
+                    } else {
+                        console.log(`[BTCEngine] DB cache exists but is ${Math.round(ageMinutes)} mins old. Fetching latest from network to bridge gap...`);
+                        this.candles = cached; // load existing to have smooth transition, network fetch will append/replace
+                    }
                 }
             }
+
+            if (!needsNetworkFetch) return;
 
             let to = Math.floor(Date.now() / 1000);
             const barsCount = 1000;
@@ -338,7 +353,9 @@ export class BtcEngine {
                 const c = { time: cTime, open: newPrice, high: newPrice, low: newPrice, close: newPrice };
                 this.candles.push(c);
                 if (this.candles.length > 2000) this.candles.shift();
-                saveCandles('btc', this.timeframe, [c]); // Save latest
+                if (this.chartSource === 'faraz') {
+                    saveCandles('btc', this.timeframe, [c]); // Save latest only if authoritative
+                }
             }
         }
 
@@ -465,6 +482,7 @@ export class BtcEngine {
         this.candles = [];
         this.levels = [];
         this.signals = [];
+        this.trendoOffsetApplied = false;
         
         await this.fetchHistory();
         
@@ -500,6 +518,23 @@ export class BtcEngine {
 
     processTrendoTick(price: number) {
         if (this.chartSource !== 'trendo' || !this.isEnabled) return;
+        
+        if (!this.trendoOffsetApplied && this.candles.length > 0) {
+            const historyClose = this.candles[this.candles.length - 1].close;
+            const diff = price - historyClose;
+            
+            // Adjust all historical candles to match Trendo's pricing level
+            for (let c of this.candles) {
+                c.open += diff;
+                c.high += diff;
+                c.low += diff;
+                c.close += diff;
+            }
+            this.trendoOffsetApplied = true;
+            this.detectLevels(); 
+            console.log(`[BTCEngine] Applied Trendo offset: ${diff.toFixed(2)} to align Faraz history with Trendo live ticks.`);
+        }
+
         this.updatePrice(price);
     }
 
