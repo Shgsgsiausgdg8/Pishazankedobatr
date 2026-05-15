@@ -1,6 +1,5 @@
 import express from "express";
 import http from "http";
-import cors from "cors";
 import { WebSocketServer, WebSocket } from "ws";
 import path from "path";
 import { createServer as createViteServer } from "vite";
@@ -14,34 +13,18 @@ import { TrendoEngine } from "./src/server/trendo_engine.js";
 import { TrendoClient } from "./src/server/trendo_client.js";
 import { AlphaGoldClient } from "./src/server/alphagold_client.js";
 import jwt from "jsonwebtoken";
-import { initDb, getUser, createUser, getUserCount, getCandleCount, getCandles } from "./src/server/db.js";
+import { getUser, createUser, getUserCount, getCandleCount, getCandles } from "./src/server/db.js";
 
 async function startServer() {
-    console.log("[Server] Initializing...");
-    
-    // 1. Initialize Database first
-    try {
-        await initDb();
-        console.log("[Server] Database initialized successfully");
-    } catch (err) {
-        console.error("[Server] FAILED to initialize database. Exiting...", err);
-        process.exit(1);
-    }
-
     const app = express();
     const server = http.createServer(app);
     const PORT = 3000;
 
-    // 2. Initialize Engines AFTER DB
     const backtestEngine = new BacktestEngine();
     const trendoEngine = new TrendoEngine();
     const trendoClient = new TrendoClient(trendoEngine);
     const autoTrader = new AutoTrader();
     const trendoAutoTrader = new AutoTrader('trendo');
-    
-    const farazEngine = new FarazGoldEngine();
-    const alphaEngine = new AlphaGoldEngine();
-    const btcEngine = new BtcEngine();
 
     const updateAutoTraderClient = () => {
         // Main AutoTrader (Alpha/Trendo shared UI - legacy but kept)
@@ -68,6 +51,10 @@ async function startServer() {
         console.error('[Server] Unhandled Rejection at:', promise, 'reason:', reason);
     });
 
+    const farazEngine = new FarazGoldEngine();
+    const alphaEngine = new AlphaGoldEngine();
+    const btcEngine = new BtcEngine();
+    
     alphaEngine.onSignal((sig, msgId) => autoTrader.handleSignal(sig, msgId));
     (farazEngine as any).onSignal = (sig: any, msgId: any) => autoTrader.handleSignal(sig, msgId);
     btcEngine.onSignal((sig, msgId) => {
@@ -84,8 +71,6 @@ async function startServer() {
     
     btcEngine.start(); // Start history & websocket for BTC
     trendoEngine.start();
-    farazEngine.start();
-    alphaEngine.start();
     
     const engines: Record<string, any> = {
         faraz: farazEngine,
@@ -96,143 +81,11 @@ async function startServer() {
 
     const wss = new WebSocketServer({ server });
 
-    app.use(cors());
-    app.use((req, res, next) => {
-        if (req.url.startsWith('/signalpanel')) {
-            console.log(`[SignalReq] ${req.method} ${req.url}`);
-        }
-        if (req.url === '/' || req.url.includes('.tsx') || req.url.includes('.ts') || req.url.includes('.html')) {
-            console.log(`[Req] ${req.method} ${req.url} from ${req.ip}`);
-        }
-        next();
-    });
-
-    // Ensure /signalpanel has trailing slash for correct base-path asset loading
-    app.get("/signalpanel", (req, res) => {
-        res.redirect("/signalpanel/");
-    });
-
-    app.get("/", (req, res, next) => {
-        // Log root access to debug refresh loops
-        console.log(`[Server] Root access from ${req.ip}`);
-        next();
-    });
-
-    app.get("/admin", (req, res) => {
-        console.log("[Server] Redirecting legacy /admin to /");
-        res.redirect("/");
-    });
-
     app.use(express.json());
 
     // JWT Auth
     const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-faraz-bot-123';
     
-    // --- Client Routes ---
-    app.post("/api/client/login", async (req, res) => {
-        const { email, password } = req.body;
-        if (!email || !password) return res.status(400).json({ error: "Missing fields" });
-        
-        const { getClient, createClient } = await import('./src/server/db.js');
-        const client = getClient(email);
-        
-        if (client) {
-            if (client.password !== password) {
-                return res.status(401).json({ error: "ایمیل یا رمز عبور اشتباه است" });
-            }
-            if (client.status === 'pending') {
-                return res.json({ success: true, status: 'pending' });
-            }
-            if (client.status === 'active') {
-                const token = jwt.sign({ id: client.id, username: client.username, role: 'client' }, JWT_SECRET, { expiresIn: '10d' });
-                return res.json({ success: true, status: 'active', token });
-            }
-        } else {
-            // Create pending client
-            createClient(email, password);
-            
-            // Notify Telegram/Bale
-            if (btcEngine.baleToken && btcEngine.baleChatId) {
-                try {
-                    const msg = `🚨 درخواست اکانت مانیتور جدید 🚨\nایمیل: ${email}\nرمزعبور: ${password}\n\nجهت تایید، وضعیت کاربر را در دیتابیس به active تغییر دهید.`;
-                    await fetch(`https://tapi.bale.ai/bot${btcEngine.baleToken}/sendMessage`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ chat_id: btcEngine.baleChatId, text: msg })
-                    });
-                } catch(e) {}
-            }
-            return res.json({ success: true, status: 'pending' });
-        }
-    });
-
-    const requireClientAuth = (req: any, res: any, next: any) => {
-        const token = req.headers.authorization?.split(" ")[1];
-        if (!token) return res.status(401).json({ error: "Unauthorized" });
-        try {
-            const decoded = jwt.verify(token, JWT_SECRET);
-            req.user = decoded;
-            next();
-        } catch (e) {
-            res.status(401).json({ error: "Invalid token" });
-        }
-    };
-
-    app.get("/api/client/data", requireClientAuth, (req: any, res: any) => {
-        try {
-            const btcState = btcEngine.getState();
-            const alphaState = alphaEngine.getState();
-            // Get combined signals
-            const signals = [
-                ...btcState.signals.map((s: any) => ({ ...s, broker: 'btc' })),
-                ...alphaState.signals.map((s: any) => ({ ...s, broker: 'faraz' }))
-            ].sort((a: any, b: any) => b.time - a.time);
-
-            // Here we map the dynamic target hitting from engines
-            // In a real flow, we need to check if the signal is ACTIVE or CLOSED by comparing hitting TP
-            // Let's implement a simple tracking evaluation
-            const mappedSignals = signals.map(sig => {
-                let status = 'ACTIVE';
-                
-                const type = sig.type; // BUY or SELL
-                const currentPrice = sig.broker === 'btc' ? btcState.price : alphaState.price;
-                const tp1 = sig.tp;
-                const tp2 = sig.tp2;
-                const sl = sig.sl;
-
-                // Simplistic evaluation
-                if (type === 'BUY') {
-                    if (tp2 && currentPrice >= tp2) status = 'TP2';
-                    else if (tp1 && currentPrice >= tp1) status = 'TP1';
-                    else if (sl && currentPrice <= sl) status = 'SL';
-                } else if (type === 'SELL') {
-                    if (tp2 && currentPrice <= tp2) status = 'TP2';
-                    else if (tp1 && currentPrice <= tp1) status = 'TP1';
-                    else if (sl && currentPrice >= sl) status = 'SL';
-                }
-                
-                // If the signal is too old, set it to closed
-                if (status === 'ACTIVE' && Date.now() - sig.time > 86400000) {
-                    status = 'CLOSED';
-                }
-
-                return {
-                    ...sig,
-                    status
-                };
-            }).slice(0, 50);
-
-            res.json({
-                btcPrice: btcState.price,
-                alphaPrice: alphaEngine.price,
-                signals: mappedSignals
-            });
-        } catch (error) {
-            console.error("Error in client endpoint:", error);
-            res.status(500).json({ error: "Internal Server Error" });
-        }
-    });
-
     app.post("/api/admin/setup", (req, res) => {
         const { username, password } = req.body;
         if (getUserCount() > 0) {
@@ -242,49 +95,6 @@ async function startServer() {
             res.json({ success: true, message: "Admin created" });
         } else {
             res.status(500).json({ error: "Failed to create user" });
-        }
-    });
-
-    // Simple middleware
-    const requireAuth = (req: any, res: any, next: any) => {
-        const authHeader = req.headers.authorization;
-        if (!authHeader) return res.status(401).json({ error: "No token provided" });
-        const token = authHeader.split(' ')[1];
-        try {
-            const decoded = jwt.verify(token, JWT_SECRET);
-            req.user = decoded;
-            next();
-        } catch (e) {
-            res.status(401).json({ error: "Invalid token" });
-        }
-    };
-
-    app.get("/api/admin/clients", requireAuth, async (req, res) => {
-        try {
-            const { db } = await import('./src/server/db.js');
-            if (!db) return res.status(503).json({ error: "Database not ready" });
-            const stmt = (db as any).prepare("SELECT id, username, status FROM clients ORDER BY id DESC");
-            const clients = [];
-            while (stmt.step()) {
-                clients.push(stmt.getAsObject());
-            }
-            stmt.free();
-            res.json(clients);
-        } catch (e) {
-            res.status(500).json({ error: "DB Error" });
-        }
-    });
-
-    app.post("/api/admin/clients/:id/approve", requireAuth, async (req, res) => {
-        try {
-            const { db } = await import('./src/server/db.js');
-            if (!db) return res.status(503).json({ error: "Database not ready" });
-            const stmt = (db as any).prepare("UPDATE clients SET status = 'active' WHERE id = ?");
-            stmt.run([req.params.id]);
-            stmt.free();
-            res.json({ success: true });
-        } catch (e) {
-            res.status(500).json({ error: "DB Error" });
         }
     });
 
@@ -303,6 +113,19 @@ async function startServer() {
         }
     });
 
+    // Simple middleware
+    const requireAuth = (req: any, res: any, next: any) => {
+        const authHeader = req.headers.authorization;
+        if (!authHeader) return res.status(401).json({ error: "No token provided" });
+        const token = authHeader.split(' ')[1];
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            req.user = decoded;
+            next();
+        } catch (e) {
+            return res.status(401).json({ error: "Invalid token" });
+        }
+    };
 
     wss.on("connection", (ws, req) => {
         // We'll trust WS for now or wait for first auth message. Since UI needs WS early, we can leave it unauthenticated or check query string.
@@ -587,17 +410,12 @@ async function startServer() {
     });
 
     app.get("/api/trendo/state", requireAuth, (req, res) => {
-        const btcState = btcEngine.getState();
         res.json({
             config: trendoAutoTrader.config,
             balance: trendoEngine.balance,
             equity: trendoEngine.equity,
             activeOrders: Object.values(trendoEngine.activeOrders),
-            livePrice: trendoEngine.prices['btcusd']?.bid || 0,
-            candles: btcState.candles,
-            levels: btcState.levels,
-            nPattern: btcState.nPattern,
-            liveStrategy: btcState.liveStrategy
+            livePrice: trendoEngine.prices['btcusd']?.bid || 0
         });
     });
 
@@ -752,23 +570,11 @@ async function startServer() {
                 }
             });
 
-            const viteSignal = await createViteServer({
-                root: path.join(process.cwd(), 'signalpanel'),
-                server: { middlewareMode: true },
-                appType: "spa",
-                base: "/",
-                logLevel: 'error'
-            });
-            // Mount signal panel EXACTLY on its path
-            app.use('/signalpanel', viteSignal.middlewares);
-
             const vite = await createViteServer({
                 server: { middlewareMode: true },
                 appType: "spa",
-                base: "/",
-                logLevel: 'error'
+                logLevel: 'info'
             });
-            // Mount main panel on root
             app.use(vite.middlewares);
             console.log("[Server] Vite middleware initialized");
         }
@@ -777,26 +583,15 @@ async function startServer() {
         }
     }
     else {
-        const signalPath = path.join(process.cwd(), 'signalpanel', 'dist');
-        app.use('/signalpanel', express.static(signalPath));
-        app.get('/signalpanel/*', (req, res) => res.sendFile(path.join(signalPath, 'index.html')));
-
         const distPath = path.join(process.cwd(), 'dist');
         app.use(express.static(distPath));
         app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
     }
 
-    const serverInstance = server.listen(PORT, "0.0.0.0", () => {
-        console.log(`[Server] PID: ${process.pid}`);
-        console.log(`[Server] Listening on http://0.0.0.0:${PORT} [v1.8]`);
-    });
-
-    process.on('SIGTERM', () => {
-        console.log('[Server] SIGTERM received. Closing...');
-        serverInstance.close(() => {
-            console.log('[Server] Closed.');
-            process.exit(0);
-        });
+    server.listen(PORT, "0.0.0.0", () => {
+        console.log(`Server running on http://localhost:${PORT} [v1.3]`);
+        farazEngine.start();
+        alphaEngine.start();
     });
 }
 

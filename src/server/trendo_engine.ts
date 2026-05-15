@@ -1,14 +1,6 @@
 import ioClient from 'socket.io-client';
 const io = (ioClient as any).io || ioClient;
-import { getSetting, setSetting, saveCandles, getCandles } from './db.js';
-
-export interface Candle {
-    time: number;
-    open: number;
-    high: number;
-    low: number;
-    close: number;
-}
+import { getSetting, setSetting } from './db.js';
 
 export interface TrendoOrder {
     id: number;
@@ -47,9 +39,6 @@ export class TrendoEngine {
     prices: Record<string, { bid: number, ask: number }> = {};
     activeSymbols: Set<string> = new Set();
     isEnabled = true;
-    candles: Candle[] = [];
-    lastCandleTime = 0;
-    timeframe = "1";
     pingInterval: NodeJS.Timeout | null = null;
     onPriceUpdate: ((symbol: string, bid: number, ask: number) => void) | null = null;
 
@@ -80,10 +69,6 @@ export class TrendoEngine {
 
     start() {
         if (!this.isEnabled) return;
-        this.candles = getCandles('trendo', this.timeframe, 2000);
-        if (this.candles.length > 0) {
-            this.lastCandleTime = this.candles[this.candles.length - 1].time;
-        }
         this.connect();
     }
 
@@ -129,10 +114,6 @@ export class TrendoEngine {
                         const ask = parseFloat(data[0].Ask);
                         const bid = parseFloat(data[0].Bid);
                         this.prices[symbol] = { ask, bid };
-                        const sym = symbol.toLowerCase();
-                        if (sym === 'xauusd' || sym === 'btcusd') {
-                            this.updatePrice(bid);
-                        }
                         if (this.onPriceUpdate) this.onPriceUpdate(symbol, bid, ask);
                     }
                 } catch (e) {}
@@ -363,36 +344,6 @@ export class TrendoEngine {
         });
     }
 
-    updatePrice(price: number) {
-        if (!price || Number.isNaN(price)) return;
-        
-        const now = Date.now();
-        const tf = (parseInt(this.timeframe) || 1) * 60000;
-        const cTime = Math.floor(now / tf) * tf;
-
-        if (this.candles.length === 0) {
-            this.createNewCandle(cTime, price);
-            return;
-        }
-
-        const last = this.candles[this.candles.length - 1];
-        if (last.time === cTime) {
-            last.high = Math.max(last.high, price);
-            last.low = Math.min(last.low, price);
-            last.close = price;
-        } else if (cTime > last.time) {
-            this.createNewCandle(cTime, price);
-        }
-    }
-
-    createNewCandle(time: number, price: number) {
-        const c = { time, open: price, high: price, low: price, close: price };
-        this.candles.push(c);
-        if (this.candles.length > 2000) this.candles.shift();
-        this.lastCandleTime = time;
-        saveCandles('trendo', this.timeframe, [c]);
-    }
-
     getState() {
         return {
             broker: 'trendo',
@@ -401,7 +352,6 @@ export class TrendoEngine {
             activeOrders: Object.values(this.activeOrders),
             closedOrders: this.closedOrders,
             prices: this.prices,
-            candles: this.candles.slice(-400),
             isEnabled: this.isEnabled
         };
     }

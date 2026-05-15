@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import CandlestickChart from "../components/CandlestickChart";
 
 // --- Icons ---
 const CloseIcon = () => (
@@ -161,34 +160,6 @@ const TrendoAutoTradePanel = ({ onClose }: { onClose: () => void }) => {
           flexDirection: "column",
         }}
       >
-        {/* Real-time Chart */}
-        <div style={{ borderRadius: '16px', overflow: 'hidden', border: '1px solid #1e293b', background: '#000' }}>
-            <CandlestickChart 
-                data={state.candles || []} 
-                levels={state.levels || []} 
-                nPattern={state.nPattern}
-                height={280}
-            />
-            <div style={{ padding: '8px 12px', background: '#020617', borderTop: '1px solid #1e293b', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
-                    استراتژی فعال: <span style={{ color: '#f97316' }}>{state.liveStrategy || 'N-PATTERN'}</span>
-                </span>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                     <button 
-                        onClick={() => {
-                            const stats = `میزان وین ریت فعلی هفتاد و هشت درصد است. مجموع سود کل نهصد و پنجاه دلار.`;
-                            const msg = new SpeechSynthesisUtterance(stats);
-                            msg.lang = 'fa-IR';
-                            window.speechSynthesis.speak(msg);
-                        }}
-                        style={{ background: 'rgba(16, 185, 129, 0.1)', border: 'none', color: '#10b981', padding: '4px 8px', borderRadius: '6px', fontSize: '0.65rem', cursor: 'pointer' }}
-                     >
-                        🔊 گزارش صوتی آمار
-                     </button>
-                </div>
-            </div>
-        </div>
-
         {/* User Info & Quick Stats */}
         <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
           <div
@@ -248,62 +219,6 @@ const TrendoAutoTradePanel = ({ onClose }: { onClose: () => void }) => {
             >
               ${Number(equity || 0).toLocaleString()}
             </div>
-          </div>
-        </div>
-
-        {/* Trade Volume Calculator */}
-        <div
-          style={{
-            background: "#1e293b",
-            padding: "20px",
-            borderRadius: "12px",
-            border: "1px solid #334155",
-          }}
-        >
-          <h3 style={{ color: 'white', margin: '0 0 16px 0', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            🧮 ماشین حساب حجم معامله
-          </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '12px' }}>
-             <div>
-                <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.7rem', marginBottom: '6px' }}>درصد ریسک (%)</label>
-                <input 
-                    type="number" 
-                    defaultValue={1}
-                    id="calc_risk"
-                    style={{ width: '100%', padding: '8px', background: '#0f172a', border: '1px solid #334155', color: 'white', borderRadius: '6px' }} 
-                />
-             </div>
-             <div>
-                <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.7rem', marginBottom: '6px' }}>حد ضرر (پیپ)</label>
-                <input 
-                    type="number" 
-                    defaultValue={500}
-                    id="calc_sl" 
-                    style={{ width: '100%', padding: '8px', background: '#0f172a', border: '1px solid #334155', color: 'white', borderRadius: '6px' }} 
-                />
-             </div>
-             <div style={{ gridColumn: '1 / -1', marginTop: '8px' }}>
-                 <button 
-                    onClick={() => {
-                        const risk = parseFloat((document.getElementById('calc_risk') as HTMLInputElement).value) || 0;
-                        const sl = parseFloat((document.getElementById('calc_sl') as HTMLInputElement).value) || 0;
-                        const bal = state.balance || 0;
-                        if (sl > 0) {
-                            const vol = (bal * (risk/100)) / (sl * 0.1); 
-                            const resEl = document.getElementById('calc_result');
-                            if (resEl) resEl.innerText = vol.toFixed(2);
-                        }
-                    }}
-                    style={{ width: '100%', padding: '10px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}
-                 >
-                    محاسبه حجم پیشنهادی
-                 </button>
-             </div>
-             <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '10px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '8px' }}>
-                 <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>حجم پیشنهادی: </span>
-                 <span id="calc_result" style={{ color: '#60a5fa', fontSize: '1.2rem', fontWeight: 'bold' }}>0.00</span>
-                 <span style={{ color: '#64748b', fontSize: '0.7rem', marginLeft: '4px' }}>Lot</span>
-             </div>
           </div>
         </div>
 

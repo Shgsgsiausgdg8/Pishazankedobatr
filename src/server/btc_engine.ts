@@ -327,37 +327,14 @@ export class BtcEngine {
         if (!newPrice || isNaN(newPrice)) return;
         this.price = newPrice;
         
-        const tfMs = (parseInt(this.timeframe) || 1) * 60000;
-        const now = Date.now();
-        const candleTime = Math.floor(now / tfMs) * tfMs;
-
-        if (this.candles.length === 0) {
-            this.candles.push({
-                time: candleTime,
-                open: newPrice,
-                high: newPrice,
-                low: newPrice,
-                close: newPrice
-            });
-            return;
-        }
+        if (this.candles.length === 0) return;
 
         const last = this.candles[this.candles.length - 1];
-        if (candleTime > last.time) {
-            this.candles.push({
-                time: candleTime,
-                open: newPrice,
-                high: newPrice,
-                low: newPrice,
-                close: newPrice
-            });
-            if (this.candles.length > 2000) this.candles.shift();
-        } else {
-            last.high = Math.max(last.high, newPrice);
-            last.low = Math.min(last.low, newPrice);
-            last.close = newPrice;
-        }
+        last.high = Math.max(last.high, newPrice);
+        last.low = Math.min(last.low, newPrice);
+        last.close = newPrice;
 
+        const now = Date.now();
         if (!this.lastLevelsUpdate || now - this.lastLevelsUpdate > 1000) {
             this.detectLevels();
             this.runStrategy();
