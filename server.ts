@@ -97,6 +97,12 @@ async function startServer() {
     const wss = new WebSocketServer({ server });
 
     app.use(cors());
+    app.use((req, res, next) => {
+        if (req.url === '/' || req.url.includes('.tsx') || req.url.includes('.ts') || req.url.includes('.html')) {
+            console.log(`[Req] ${req.method} ${req.url} from ${req.ip}`);
+        }
+        next();
+    });
     app.get("/", (req, res, next) => {
         // Log root access to debug refresh loops
         console.log(`[Server] Root access from ${req.ip}`);
@@ -739,7 +745,10 @@ async function startServer() {
 
             const viteSignal = await createViteServer({
                 root: path.join(process.cwd(), 'signalpanel'),
-                server: { middlewareMode: true },
+                server: { 
+                    middlewareMode: true,
+                    hmr: { port: 3001 }
+                },
                 appType: "spa",
                 base: "/signalpanel/",
                 logLevel: 'info'
@@ -747,7 +756,10 @@ async function startServer() {
             app.use('/signalpanel', viteSignal.middlewares);
 
             const vite = await createViteServer({
-                server: { middlewareMode: true },
+                server: { 
+                    middlewareMode: true,
+                    hmr: { port: 3002 }
+                },
                 appType: "spa",
                 logLevel: 'info'
             });
