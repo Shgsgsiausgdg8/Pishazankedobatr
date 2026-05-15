@@ -98,11 +98,20 @@ async function startServer() {
 
     app.use(cors());
     app.use((req, res, next) => {
+        if (req.url.startsWith('/signalpanel')) {
+            console.log(`[SignalReq] ${req.method} ${req.url}`);
+        }
         if (req.url === '/' || req.url.includes('.tsx') || req.url.includes('.ts') || req.url.includes('.html')) {
             console.log(`[Req] ${req.method} ${req.url} from ${req.ip}`);
         }
         next();
     });
+
+    // Ensure /signalpanel has trailing slash for correct base-path asset loading
+    app.get("/signalpanel", (req, res) => {
+        res.redirect("/signalpanel/");
+    });
+
     app.get("/", (req, res, next) => {
         // Log root access to debug refresh loops
         console.log(`[Server] Root access from ${req.ip}`);
@@ -745,22 +754,29 @@ async function startServer() {
 
             const viteSignal = await createViteServer({
                 root: path.join(process.cwd(), 'signalpanel'),
-                server: { 
-                    middlewareMode: true,
-                    hmr: { port: 3001 }
-                },
+                server: { middlewareMode: true },
                 appType: "spa",
                 base: "/signalpanel/",
                 logLevel: 'info'
             });
-            app.use('/signalpanel', viteSignal.middlewares);
+            app.use(viteSignal.middlewares);
+
+            app.get('/signalpanel/', async (req, res, next) => {
+                try {
+                    const indexPath = path.join(process.cwd(), 'signalpanel', 'index.html');
+                    const html = fs.readFileSync(indexPath, 'utf-8');
+                    const transformed = await viteSignal.transformIndexHtml(req.originalUrl, html);
+                    res.status(200).set({ 'Content-Type': 'text/html' }).end(transformed);
+                } catch (e: any) {
+                    console.error("[Server] Error serving signalpanel html:", e.message);
+                    next();
+                }
+            });
 
             const vite = await createViteServer({
-                server: { 
-                    middlewareMode: true,
-                    hmr: { port: 3002 }
-                },
+                server: { middlewareMode: true },
                 appType: "spa",
+                base: "/",
                 logLevel: 'info'
             });
             app.use(vite.middlewares);
