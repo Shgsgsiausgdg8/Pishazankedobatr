@@ -210,17 +210,29 @@ export default function App() {
 
   useEffect(() => {
     if (!token) return;
+    let ws: WebSocket | null = null;
+    let timer: any = null;
+    let mounted = true;
+
     const connect = () => {
+      if (!mounted) return;
+      if (ws) { ws.onclose = null; ws.close(); }
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const ws = new WebSocket(`${protocol}//${window.location.host}`);
+      ws = new WebSocket(`${protocol}//${window.location.host}`);
       
       ws.onopen = () => {
-        setWsConnected(true);
-        ws.send(JSON.stringify({ type: 'AUTH', token }));
+        if (mounted) {
+          setWsConnected(true);
+          ws?.send(JSON.stringify({ type: 'AUTH', token }));
+        }
       };
       ws.onclose = () => {
-        setWsConnected(false);
-        setTimeout(connect, 3000);
+        if (mounted) {
+          setWsConnected(false);
+          timer = setTimeout(() => {
+            if (localStorage.getItem('adminToken')) connect();
+          }, 5000);
+        }
       };
       ws.onmessage = (e) => {
         try {

@@ -14,7 +14,7 @@ import { TrendoEngine } from "./src/server/trendo_engine.js";
 import { TrendoClient } from "./src/server/trendo_client.js";
 import { AlphaGoldClient } from "./src/server/alphagold_client.js";
 import jwt from "jsonwebtoken";
-import { getUser, createUser, getUserCount, getCandleCount, getCandles } from "./src/server/db.js";
+import { initDb, getUser, createUser, getUserCount, getCandleCount, getCandles } from "./src/server/db.js";
 
 async function startServer() {
     const app = express();
@@ -83,6 +83,17 @@ async function startServer() {
     const wss = new WebSocketServer({ server });
 
     app.use(cors());
+    app.get("/", (req, res, next) => {
+        // Log root access to debug refresh loops
+        console.log(`[Server] Root access from ${req.ip}`);
+        next();
+    });
+
+    app.get("/admin", (req, res) => {
+        console.log("[Server] Redirecting legacy /admin to /");
+        res.redirect("/");
+    });
+
     app.use(express.json());
 
     // JWT Auth
@@ -741,10 +752,25 @@ async function startServer() {
         app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
     }
 
-    server.listen(PORT, "0.0.0.0", () => {
-        console.log(`Server running on http://localhost:${PORT} [v1.3]`);
-        farazEngine.start();
-        alphaEngine.start();
+    const serverInstance = server.listen(PORT, "0.0.0.0", () => {
+        console.log(`[Server] PID: ${process.pid}`);
+        console.log(`[Server] Listening on http://0.0.0.0:${PORT} [v1.7]`);
+        
+        initDb().then(() => {
+            console.log("[Server] Database ready, starting engines...");
+            farazEngine.start();
+            alphaEngine.start();
+        }).catch(err => {
+            console.error("[Server] Critical DB Error:", err);
+        });
+    });
+
+    process.on('SIGTERM', () => {
+        console.log('[Server] SIGTERM received. Closing...');
+        serverInstance.close(() => {
+            console.log('[Server] Closed.');
+            process.exit(0);
+        });
     });
 }
 

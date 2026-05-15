@@ -2,66 +2,81 @@ import initSqlJs from 'sql.js';
 import fs from 'fs';
 import path from 'path';
 
-let db: any = null;
-
-// Initialize sql.js asynchronously
-const SQL = await initSqlJs();
+export let db: any = null;
 const dbPath = path.join(process.cwd(), 'history.sqlite');
 
-try {
-    const fileBuffer = fs.readFileSync(dbPath);
-    db = new SQL.Database(fileBuffer);
-} catch (e) {
-    db = new SQL.Database();
-}
+export async function initDb() {
+    if (db) return db;
+    const SQL = await initSqlJs();
+    
+    try {
+        if (fs.existsSync(dbPath)) {
+            const fileBuffer = fs.readFileSync(dbPath);
+            db = new SQL.Database(fileBuffer);
+        } else {
+            db = new SQL.Database();
+        }
+    } catch (e) {
+        console.error('[DB] Initialization error, falling back to in-memory:', e);
+        db = new SQL.Database();
+    }
 
-db.run(`
-    CREATE TABLE IF NOT EXISTS candles (
-        broker TEXT,
-        timeframe TEXT,
-        time INTEGER,
-        open REAL,
-        high REAL,
-        low REAL,
-        close REAL,
-        PRIMARY KEY (broker, timeframe, time)
-    );
-    CREATE TABLE IF NOT EXISTS settings (
-        key TEXT PRIMARY KEY,
-        value TEXT
-    );
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE,
-        password TEXT
-    );
-    CREATE TABLE IF NOT EXISTS clients (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE,
-        password TEXT,
-        status TEXT
-    );
-    CREATE TABLE IF NOT EXISTS client_signals (
-        id TEXT PRIMARY KEY,
-        broker TEXT,
-        type TEXT,
-        price REAL,
-        tp REAL,
-        tp2 REAL,
-        sl REAL,
-        time INTEGER,
-        status TEXT
-    );
-`);
+    db.run(`
+        CREATE TABLE IF NOT EXISTS candles (
+            broker TEXT,
+            timeframe TEXT,
+            time INTEGER,
+            open REAL,
+            high REAL,
+            low REAL,
+            close REAL,
+            PRIMARY KEY (broker, timeframe, time)
+        );
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        );
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE,
+            password TEXT
+        );
+        CREATE TABLE IF NOT EXISTS clients (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE,
+            password TEXT,
+            status TEXT
+        );
+        CREATE TABLE IF NOT EXISTS client_signals (
+            id TEXT PRIMARY KEY,
+            broker TEXT,
+            type TEXT,
+            price REAL,
+            tp REAL,
+            tp2 REAL,
+            sl REAL,
+            time INTEGER,
+            status TEXT
+        );
+    `);
+
+    setTimeout(pruneDatabase, 5000);
+    setInterval(pruneDatabase, 24 * 60 * 60 * 1000);
+    
+    return db;
+}
 
 let saveTimeout: any = null;
 
 function scheduleSave() {
+    if (!db) return;
     if (saveTimeout) clearTimeout(saveTimeout);
     saveTimeout = setTimeout(() => {
         try {
-            const data = db.export();
-            fs.writeFileSync(dbPath, Buffer.from(data));
+            if (db) {
+                const data = db.export();
+                fs.writeFileSync(dbPath, Buffer.from(data));
+            }
         } catch (e) {
             console.error('[DB] Save error:', e);
         }
@@ -72,24 +87,24 @@ function scheduleSave() {
  * Saves multiple candles into the SQLite database for a specific broker and timeframe.
  */
 export function saveCandles(broker: string, timeframe: string, candles: any[]) {
-    if (!candles || candles.length === 0) return;
-    
-    db.run("BEGIN TRANSACTION;");
-    const stmt = db.prepare(`
-        INSERT OR REPLACE INTO candles (broker, timeframe, time, open, high, low, close)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
+    if (!db || !candles || candles.length === 0) return;
     
     try {
+        db.run("BEGIN TRANSACTION;");
+        const stmt = db.prepare(`
+            INSERT OR REPLACE INTO candles (broker, timeframe, time, open, high, low, close)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
+        
         for (const item of candles) {
             stmt.run([broker, timeframe, item.time, item.open, item.high, item.low, item.close]);
         }
-    } catch (e) {
-        console.error(`[DB] Error saving candles for ${broker}:`, e);
-    } finally {
         stmt.free();
         db.run("COMMIT;");
         scheduleSave();
+    } catch (e) {
+        console.error(`[DB] Error saving candles for ${broker}:`, e);
+        try { db.run("ROLLBACK;"); } catch(re) {}
     }
 }
 
@@ -97,6 +112,7 @@ export function saveCandles(broker: string, timeframe: string, candles: any[]) {
  * Returns the count of candles for a specific broker and timeframe.
  */
 export function getCandleCount(broker: string, timeframe: string): number {
+    if (!db) return 0;
     try {
         const stmt = db.prepare("SELECT COUNT(*) as c FROM candles WHERE broker = ? AND timeframe = ?");
         stmt.bind([broker, timeframe]);
@@ -196,6 +212,7 @@ export function getUser(username: string) {
 }
 
 export function getUserCount(): number {
+    if (!db) return 0;
     try {
         const stmt = db.prepare("SELECT COUNT(*) as c FROM users");
         let result = 0;
@@ -223,6 +240,7 @@ export function setSetting(key: string, value: any) {
 }
 
 export function getSetting(key: string): any {
+    if (!db) return null;
     try {
         const stmt = db.prepare("SELECT value FROM settings WHERE key = ?");
         stmt.bind([key]);
@@ -270,7 +288,6 @@ export function getClient(username: string): any {
     }
 }
 
-setTimeout(pruneDatabase, 5000);
-setInterval(pruneDatabase, 24 * 60 * 60 * 1000);
 
-export default db;
+// Remove default export as it's not live-binding for null values
+// export default db;
