@@ -17,15 +17,31 @@ import jwt from "jsonwebtoken";
 import { initDb, getUser, createUser, getUserCount, getCandleCount, getCandles } from "./src/server/db.js";
 
 async function startServer() {
+    console.log("[Server] Initializing...");
+    
+    // 1. Initialize Database first
+    try {
+        await initDb();
+        console.log("[Server] Database initialized successfully");
+    } catch (err) {
+        console.error("[Server] FAILED to initialize database. Exiting...", err);
+        process.exit(1);
+    }
+
     const app = express();
     const server = http.createServer(app);
     const PORT = 3000;
 
+    // 2. Initialize Engines AFTER DB
     const backtestEngine = new BacktestEngine();
     const trendoEngine = new TrendoEngine();
     const trendoClient = new TrendoClient(trendoEngine);
     const autoTrader = new AutoTrader();
     const trendoAutoTrader = new AutoTrader('trendo');
+    
+    const farazEngine = new FarazGoldEngine();
+    const alphaEngine = new AlphaGoldEngine();
+    const btcEngine = new BtcEngine();
 
     const updateAutoTraderClient = () => {
         // Main AutoTrader (Alpha/Trendo shared UI - legacy but kept)
@@ -52,10 +68,6 @@ async function startServer() {
         console.error('[Server] Unhandled Rejection at:', promise, 'reason:', reason);
     });
 
-    const farazEngine = new FarazGoldEngine();
-    const alphaEngine = new AlphaGoldEngine();
-    const btcEngine = new BtcEngine();
-    
     alphaEngine.onSignal((sig, msgId) => autoTrader.handleSignal(sig, msgId));
     (farazEngine as any).onSignal = (sig: any, msgId: any) => autoTrader.handleSignal(sig, msgId);
     btcEngine.onSignal((sig, msgId) => {
@@ -72,6 +84,8 @@ async function startServer() {
     
     btcEngine.start(); // Start history & websocket for BTC
     trendoEngine.start();
+    farazEngine.start();
+    alphaEngine.start();
     
     const engines: Record<string, any> = {
         faraz: farazEngine,
@@ -232,7 +246,8 @@ async function startServer() {
 
     app.get("/api/admin/clients", requireAuth, async (req, res) => {
         try {
-            const { default: db } = await import('./src/server/db.js');
+            const { db } = await import('./src/server/db.js');
+            if (!db) return res.status(503).json({ error: "Database not ready" });
             const stmt = (db as any).prepare("SELECT id, username, status FROM clients ORDER BY id DESC");
             const clients = [];
             while (stmt.step()) {
@@ -247,7 +262,8 @@ async function startServer() {
 
     app.post("/api/admin/clients/:id/approve", requireAuth, async (req, res) => {
         try {
-            const { default: db } = await import('./src/server/db.js');
+            const { db } = await import('./src/server/db.js');
+            if (!db) return res.status(503).json({ error: "Database not ready" });
             const stmt = (db as any).prepare("UPDATE clients SET status = 'active' WHERE id = ?");
             stmt.run([req.params.id]);
             stmt.free();
@@ -754,15 +770,7 @@ async function startServer() {
 
     const serverInstance = server.listen(PORT, "0.0.0.0", () => {
         console.log(`[Server] PID: ${process.pid}`);
-        console.log(`[Server] Listening on http://0.0.0.0:${PORT} [v1.7]`);
-        
-        initDb().then(() => {
-            console.log("[Server] Database ready, starting engines...");
-            farazEngine.start();
-            alphaEngine.start();
-        }).catch(err => {
-            console.error("[Server] Critical DB Error:", err);
-        });
+        console.log(`[Server] Listening on http://0.0.0.0:${PORT} [v1.8]`);
     });
 
     process.on('SIGTERM', () => {
