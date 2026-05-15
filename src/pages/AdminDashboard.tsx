@@ -299,7 +299,7 @@ export default function App() {
 
     connect();
     return () => wsRef.current?.close();
-  }, []);
+  }, [token]);
 
   const runBacktest = () => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
