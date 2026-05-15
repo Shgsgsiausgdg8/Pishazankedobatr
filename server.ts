@@ -756,29 +756,19 @@ async function startServer() {
                 root: path.join(process.cwd(), 'signalpanel'),
                 server: { middlewareMode: true },
                 appType: "spa",
-                base: "/signalpanel/",
-                logLevel: 'info'
+                base: "/",
+                logLevel: 'error'
             });
-            app.use(viteSignal.middlewares);
-
-            app.get('/signalpanel/', async (req, res, next) => {
-                try {
-                    const indexPath = path.join(process.cwd(), 'signalpanel', 'index.html');
-                    const html = fs.readFileSync(indexPath, 'utf-8');
-                    const transformed = await viteSignal.transformIndexHtml(req.originalUrl, html);
-                    res.status(200).set({ 'Content-Type': 'text/html' }).end(transformed);
-                } catch (e: any) {
-                    console.error("[Server] Error serving signalpanel html:", e.message);
-                    next();
-                }
-            });
+            // Mount signal panel EXACTLY on its path
+            app.use('/signalpanel', viteSignal.middlewares);
 
             const vite = await createViteServer({
                 server: { middlewareMode: true },
                 appType: "spa",
                 base: "/",
-                logLevel: 'info'
+                logLevel: 'error'
             });
+            // Mount main panel on root
             app.use(vite.middlewares);
             console.log("[Server] Vite middleware initialized");
         }
