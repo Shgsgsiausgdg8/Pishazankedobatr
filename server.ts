@@ -349,20 +349,7 @@ async function startServer() {
                         if (farazSession) btcEngine.farazSession = farazSession;
                         btcEngine.scheduleTokenRefresh();
                         if (candleConfirmations) (btcEngine as any).candleConfirmations = candleConfirmations;
-                        if (btcChartSource) {
-                            if (btcChartSource !== btcEngine.chartSource) {
-                                btcEngine.chartSource = btcChartSource;
-                                if (btcChartSource === 'trendo') {
-                                    if (btcEngine.ws) {
-                                        btcEngine.ws.close();
-                                        btcEngine.ws = null;
-                                    }
-                                } else {
-                                    btcEngine.fetchHistory();
-                                    btcEngine.connectWS();
-                                }
-                            }
-                        }
+                        if (btcChartSource) btcEngine.chartSource = btcChartSource;
                         btcEngine.saveSettings();
                         if (btcEngine.chartSource === 'faraz') btcEngine.fetchHistory(); // Retry history with new token
 

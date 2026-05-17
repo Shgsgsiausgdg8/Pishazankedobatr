@@ -21,11 +21,9 @@ export class BtcEngine {
     
     onSignalCallback: ((sig: Signal, msgId?: number) => void) | null = null;
     
-    trendoOffsetApplied: boolean = false;
-    
     // Auth & Settings
-    currentToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2OWVjMDg4Nzk1N2EyZjBlZTQzOTFkMjQiLCJjcmVkaXQiOjE3Nzg4NTgyMzMxMDksImFjdGl2ZSI6dHJ1ZSwicm9sZSI6ImN1c3RvbWVyIiwibGFzdFVwZGF0ZVRpbWUiOjE3Nzg3NzE4NTAwNjYsImlhdCI6MTc3ODc3MTg1MCwiZXhwIjoxNzc4Nzc5MDUwfQ.e3YSHrGw8BSMaBkRuZfWYNUCVvlxxWprOUxoOlOcTvM";
-    farazSession = "s%3AqtLAXqstFZBfc3FbaqL8tuT-l0FKkzYx.Q83hKwWdAyyYVt3BNxadSXhoIvXy%2BWZDkQ5Pr0svnkI";
+    currentToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2OGYwMDk2YzIxZjM0N2RhOTMyMzIzZTgiLCJjcmVkaXQiOjE3Nzc1MjczNjU2NTIsImFjdGl2ZSI6dHJ1ZSwicm9sZSI6ImN1c3RvbWVyIiwibGFzdFVwZGF0ZVRpbWUiOjE3Nzc1MzMxMDIzNTIsImlhdCI6MTc3NzUzMzEwMiwiZXhwIjoxNzc3NTQwMzAyfQ.2P-2g2_R15Tz30XFqD_4lYn58OitL0G9Yp1NshqI1v4";
+    farazSession = "s%3AIOMPjESaRChioBmpMfZZHUbDdGaKuEQA.NuYpPcEPXmu9AFqHcx2U6RUCUfpZ%2Fd%2BmCvrmGDBuUrQ";
     baleToken = "1892918835:dxRdPwhkUUgmFogKzLD7B8xmygvnRKq_DOA";
     baleChatId = "6211548865";
     candleConfirmations = {
@@ -144,14 +142,12 @@ export class BtcEngine {
     async start() {
         if (!this.isEnabled) return;
         this.scheduleTokenRefresh();
-        
-        // Always fetch history initially so we have past candles for calculating pivots/structures
-        await this.fetchHistory();
-        
         if (this.chartSource === 'faraz') {
+            await this.fetchHistory();
             this.connectWS();
         } else {
-            console.log("[BTCEngine] Started with Trendo as source. History loaded from Faraz, awaiting live ticks...");
+            console.log("[BTCEngine] Started with Trendo as source. Awaiting ticks...");
+            // History might not be fetched, relying on server.ts to push trendo ticks
         }
     }
 
@@ -166,30 +162,16 @@ export class BtcEngine {
             
             // Check SQLite first
             const existingCount = getCandleCount('btc', resolution);
-            let needsNetworkFetch = true;
             
             if (existingCount >= targetTotalCandles) {
                 const cached = getCandles('btc', resolution, 2000);
                 if (cached && cached.length > 100) {
-                    const lastCandleTime = cached[cached.length - 1].time;
-                    const nowMs = Date.now();
-                    const ageMinutes = (nowMs - lastCandleTime) / 60000;
-                    
-                    if (ageMinutes < 5) {
-                        this.candles = cached;
-                        this.price = cached[cached.length - 1].close;
-                        this.detectLevels();
-                        console.log(`[BTCEngine] Loaded ${cached.length} candles from DB cache. Very recent. Skipping network.`);
-                        needsNetworkFetch = false;
-                        return;
-                    } else {
-                        console.log(`[BTCEngine] DB cache exists but is ${Math.round(ageMinutes)} mins old. Fetching latest from network to bridge gap...`);
-                        this.candles = cached; // load existing to have smooth transition, network fetch will append/replace
-                    }
+                    this.candles = cached;
+                    this.price = cached[cached.length - 1].close;
+                    console.log(`[BTCEngine] Loaded ${cached.length} candles from DB cache.`);
+                    return;
                 }
             }
-
-            if (!needsNetworkFetch) return;
 
             let to = Math.floor(Date.now() / 1000);
             const barsCount = 1000;
@@ -326,15 +308,37 @@ export class BtcEngine {
     updatePrice(newPrice: number) {
         if (!newPrice || isNaN(newPrice)) return;
         this.price = newPrice;
-        
-        if (this.candles.length === 0) return;
-
-        const last = this.candles[this.candles.length - 1];
-        last.high = Math.max(last.high, newPrice);
-        last.low = Math.min(last.low, newPrice);
-        last.close = newPrice;
-
         const now = Date.now();
+        const tfMs = (parseInt(this.timeframe) || 1) * 60000;
+        const cTime = Math.floor(now / tfMs) * tfMs;
+
+        if (this.candles.length === 0) {
+            const c = { time: cTime, open: newPrice, high: newPrice, low: newPrice, close: newPrice };
+            this.candles.push(c);
+            return;
+        }
+
+        const lastIndex = this.candles.length - 1;
+        let found = false;
+        for (let i = lastIndex; i >= Math.max(0, lastIndex - 5); i--) {
+            if (this.candles[i].time === cTime) {
+                this.candles[i].high = Math.max(this.candles[i].high, newPrice);
+                this.candles[i].low = Math.min(this.candles[i].low, newPrice);
+                this.candles[i].close = newPrice;
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            if (cTime > this.candles[lastIndex].time) {
+                const c = { time: cTime, open: newPrice, high: newPrice, low: newPrice, close: newPrice };
+                this.candles.push(c);
+                if (this.candles.length > 2000) this.candles.shift();
+                saveCandles('btc', this.timeframe, [c]); // Save latest
+            }
+        }
+
         if (!this.lastLevelsUpdate || now - this.lastLevelsUpdate > 1000) {
             this.detectLevels();
             this.runStrategy();
@@ -343,7 +347,6 @@ export class BtcEngine {
     }
 
     updateFromTick(tick: any) {
-        if (this.chartSource !== 'faraz') return;
         if (!tick || !tick.time) return;
         let time = tick.time > 20000000000 ? tick.time : tick.time * 1000;
         
@@ -376,7 +379,7 @@ export class BtcEngine {
     }
 
     detectLevels() {
-        if (this.candles.length < 10) return; // Allow running even with fewer candles
+        if (this.candles.length < 50) return;
         const pivots = this.strategy.getSwingPivots(this.candles, 6, 2);
         this.levels = pivots.map((p: any) => ({
             type: p.type === 'high' ? 'RESISTANCE' : 'SUPPORT',
@@ -459,11 +462,9 @@ export class BtcEngine {
         this.candles = [];
         this.levels = [];
         this.signals = [];
-        this.trendoOffsetApplied = false;
-        
-        await this.fetchHistory();
         
         if (this.chartSource === 'faraz') {
+            await this.fetchHistory();
             if (this.ws && this.ws.readyState === 1) { // 1 is WebSocket.OPEN
                 this.ws.send(`42/customer,["join-room","symbol-room-@INDEX_BTCUSD@${this.timeframe}@0"]`);
             }
@@ -495,23 +496,6 @@ export class BtcEngine {
 
     processTrendoTick(price: number) {
         if (this.chartSource !== 'trendo' || !this.isEnabled) return;
-        
-        if (!this.trendoOffsetApplied && this.candles.length > 0) {
-            const historyClose = this.candles[this.candles.length - 1].close;
-            const diff = price - historyClose;
-            
-            // Adjust all historical candles to match Trendo's pricing level
-            for (let c of this.candles) {
-                c.open += diff;
-                c.high += diff;
-                c.low += diff;
-                c.close += diff;
-            }
-            this.trendoOffsetApplied = true;
-            this.detectLevels(); 
-            console.log(`[BTCEngine] Applied Trendo offset: ${diff.toFixed(2)} to align Faraz history with Trendo live ticks.`);
-        }
-
         this.updatePrice(price);
     }
 

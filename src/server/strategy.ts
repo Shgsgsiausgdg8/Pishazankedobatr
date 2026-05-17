@@ -5,6 +5,8 @@
  * تارگت‌ها: ۲٪، ۳.۲٪، ۳.۸٪ - استاپ: ۲٪
  */
 
+import { BitRangeAnalyzer } from './bit_range_strategy.js';
+
 export interface Candle {
   time: number;
   open: number;
@@ -85,6 +87,13 @@ export class TradingStrategy {
         let result: any = null;
 
         switch (strategyType) {
+            case 'BIT_RANGE':
+                const bitAnalyzer = new BitRangeAnalyzer();
+                const bitResult = bitAnalyzer.analyzeBitRange(candles);
+                if (bitResult) {
+                    result = bitResult;
+                }
+                break;
             case 'FIB-38':
                 result = this.analyzeFIB38(candles);
                 break;
@@ -808,6 +817,11 @@ export class TradingStrategy {
                 tp6 = kaf - 0.45 * R;
                 tp7 = kaf - 0.71 * R;
             }
+        } else if (pattern.isBitRange) {
+            sl = pattern.sl;
+            tp1 = pattern.tp1;
+            tp2 = pattern.tp2;
+            tp3 = isBuy ? pattern.tp2 + (pattern.tp2 - pattern.tp1) : pattern.tp2 - (pattern.tp1 - pattern.tp2);
         } else if (pattern.isFIB38) {
             const range = pattern.saghf - pattern.kaf;
             if (isBuy) {

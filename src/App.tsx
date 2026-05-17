@@ -978,6 +978,7 @@ export default function App() {
                   }}
                 >
                   <option value="N-PATTERN">الگوی N (N-Pattern)</option>
+                  <option value="BIT_RANGE">بیت رنج (Bit Range)</option>
                   <option value="FIB-38">فیبوناچی ۳۸٪ (FIB-38)</option>
                   <option value="STRATEGY_3">استراتژی فراز (Fib+CRSI)</option>
                   <option value="STRATEGY_4">استراتژی چهارم (ساده)</option>
@@ -1262,6 +1263,7 @@ export default function App() {
                     style={{ flex: 2, padding: '12px', borderRadius: '10px', background: '#1e293b', color: 'white', border: '1px solid #334155', cursor: 'pointer', fontSize: '0.9rem' }}
                   >
                     <option value="N-PATTERN">الگوی N کلاسیک (N-Pattern)</option>
+                    <option value="BIT_RANGE">بیت رنج (Bit Range)</option>
                     <option value="FIB-38">فیبوناچی ۳۸٪ (Fibonacci)</option>
                     <option value="STRATEGY_3">استراتژی فراز (Fib+CRSI)</option>
                     <option value="STRATEGY_4">استراتژی چهارم (ساید)</option>

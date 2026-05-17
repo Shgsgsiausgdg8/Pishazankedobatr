@@ -85,14 +85,13 @@ export class Messenger {
     async sendTradeOpen(order: any, accountMode: string, replyToSignalId?: number): Promise<number | null> {
         const side = String(order.side).toLowerCase() === '1' || String(order.side).toLowerCase() === 'buy' ? 'خرید (BUY) 🟢' : 'فروش (SELL) 🔴';
         const modeText = accountMode === 'real' ? 'حساب واقعی (REAL) 💰' : 'حساب دمو (DEMO) 🧪';
-        const amount = order.amount || order.amount_ounce || order.size || 0;
         const message = `
  🚀 **معامله جدید باز شد**
 
 🏦 **نوع حساب:** ${modeText}
 🔹 **نوع معامله:** ${side}
 💰 **قیمت ورود:** ${order.price}
-⚖️ **حجم:** ${amount}
+⚖️ **حجم:** ${order.amount}
 🆔 **شناسه:** ${order.id}
 🕒 **زمان:** ${new Date().toLocaleTimeString('fa-IR')}
 

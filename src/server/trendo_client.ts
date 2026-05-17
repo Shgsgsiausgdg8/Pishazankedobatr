@@ -44,7 +44,7 @@ export class TrendoClient {
             });
 
             // Format open orders
-            const openOrders = Object.values(state.activeOrders).map((o: any) => ({
+            const openOrders = state.activeOrders.map((o: any) => ({
                 id: o.id,
                 symbol: o.symbol,
                 side: o.type === 0 ? 1 : 2, 
@@ -107,21 +107,10 @@ export class TrendoClient {
         const sl = loss === '' ? 0 : parseFloat(String(loss));
         const tp = profit === '' ? 0 : parseFloat(String(profit));
 
-        const currentIds = Object.keys(this.engine.activeOrders);
-
         await this.engine.openOrder(symbol, trendoType, amount, sl, tp);
         
-        // Wait up to 5 seconds for a new order to appear
-        for (let i = 0; i < 50; i++) {
-            await new Promise(r => setTimeout(r, 100));
-            const newIds = Object.keys(this.engine.activeOrders);
-            const added = newIds.find(id => !currentIds.includes(id));
-            if (added) {
-                 return { id: added, success: true };
-            }
-        }
-        
-        // Fallback
+        // Return a mock response that AutoTrader can parse to find an ID
+        // The real ID will come later via order_change event
         return { success: true };
     }
 
