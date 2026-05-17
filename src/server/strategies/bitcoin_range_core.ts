@@ -1260,6 +1260,8 @@ class TradingStrategy {
         }
 
         const trendResult = this.trendAnalyzer.analyze15MinTrend(candles15min);
+        const oldTrend = this.last15MinTrend.overall;
+        
         this.last15MinTrend = {
             overall: (trendResult as any).overall,
             strength: (trendResult as any).strength,
@@ -1269,7 +1271,9 @@ class TradingStrategy {
             details: (trendResult as any).details
         };
 
-        console.log(`📊 ${(trendResult as any).message}`);
+        if (oldTrend !== (trendResult as any).overall) {
+            console.log(`📊 ${(trendResult as any).message}`);
+        }
         return this.last15MinTrend;
     }
 
@@ -1578,7 +1582,11 @@ class TradingStrategy {
             return null;
         }
 
-        console.log(`✅ ${entryCondition.reason}`);
+        const now = Date.now();
+        if (entryCondition.canEnter && (now - (this as any).lastEntryLogTime > 60000 || !(this as any).lastEntryLogTime)) {
+             console.log(`✅ ${entryCondition.reason}`);
+             (this as any).lastEntryLogTime = now;
+        }
 
         const buyFibLevels = this.calculateFibLevelsForSignal(candles, 'BUY');
         const sellFibLevels = this.calculateFibLevelsForSignal(candles, 'SELL');
@@ -1819,7 +1827,7 @@ class TradingStrategy {
         return result;
     }
 
-    async checkSecondEntryPoint(candles, currentPrice, timeframe, multiTimeframeData) {
+    checkSecondEntryPoint(candles, currentPrice, timeframe, multiTimeframeData) {
         if (!this.pendingSecondEntry) return null;
         
         const pending = this.pendingSecondEntry;

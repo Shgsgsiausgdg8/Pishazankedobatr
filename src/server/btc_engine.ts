@@ -431,16 +431,16 @@ export class BtcEngine {
             message += `⏱ تایم فریم اصلی: 5 دقیقه\n`;
             message += `✅ تایید شده با تایم‌های ۲، ۳، ۵ دقیقه\n`;
             message += `📊 جهت: ${sig.type === 'BUY' ? 'خرید 🟢' : 'فروش 🔴'}\n`;
-            message += `💰 نقطه ورود: ${sig.entry.toLocaleString()}\n`;
+            message += `💰 نقطه ورود: ${sig.entry?.toLocaleString() || 'نامشخص'}\n`;
             
             if (result.isSecondEntry) {
                 message += `📍 **نقطه ورود دوم**\n`;
             }
             
-            message += `🛡 حد ضرر: ${sig.sl.toLocaleString()}\n`;
-            message += `🎯 TP1: ${sig.tp1.toLocaleString()}\n`;
-            message += `🎯 TP2: ${sig.tp2.toLocaleString()}\n`;
-            message += `🎯 TP3: ${sig.tp3.toLocaleString()}\n`;
+            message += `🛡 حد ضرر: ${sig.sl?.toLocaleString() || 'نامشخص'}\n`;
+            message += `🎯 TP1: ${sig.tp1?.toLocaleString() || 'نامشخص'}\n`;
+            message += `🎯 TP2: ${sig.tp2?.toLocaleString() || 'نامشخص'}\n`;
+            message += `🎯 TP3: ${sig.tp3?.toLocaleString() || 'نامشخص'}\n`;
             message += `🎯 TP4: ${sig.tp4?.toLocaleString() || '---'}\n`;
             message += `🎯 TP5: ${sig.tp5?.toLocaleString() || '---'} ⚠️ پرریسک\n\n`;
             

@@ -285,6 +285,7 @@ export class TradingStrategy {
         }
 
         return {
+            ...pattern,
             type: pattern.type,
             entry: entry,
             sl: sl,
