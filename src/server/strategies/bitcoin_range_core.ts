@@ -1,3 +1,4 @@
+import { Candle, Signal } from "../types.js";
 import axios from "axios";
 import WebSocket from 'ws';
 import fs from 'fs';
@@ -7,6 +8,7 @@ import path from 'path';
 // کلاس TrendAnalyzer - تحلیل تخصصی روند
 // ============================================================
 class TrendAnalyzer {
+    public trendStatus: any;
     constructor() {
         this.trendStatus = {
             overall: 'neutral',
@@ -32,7 +34,7 @@ class TrendAnalyzer {
             warnings: []
         };
 
-        if (!candles || candles.length < 50) {
+        if (!candles || (candles as any).length < 50) {
             results.warnings.push("⚠️ داده کافی برای تحلیل روند وجود ندارد");
             return results;
         }
@@ -70,12 +72,12 @@ class TrendAnalyzer {
             results.reasons.push(volumeResult.reason);
         }
 
-        if (multiTimeframeData && multiTimeframeData.candlesMap) {
+        if (multiTimeframeData && (multiTimeframeData as any).candlesMap) {
             const multiResult = this.analyzeMultiTimeframeTrend(multiTimeframeData);
-            if (multiResult.trend) {
-                results.reasons.push(multiResult.reason);
-                if (multiResult.trend === 'bullish') results.strength += 15;
-                else if (multiResult.trend === 'bearish') results.strength -= 15;
+            if ((multiResult as any).trend) {
+                results.reasons.push((multiResult as any).reason);
+                if ((multiResult as any).trend === 'bullish') results.strength += 15;
+                else if ((multiResult as any).trend === 'bearish') results.strength -= 15;
             }
         }
 
@@ -360,12 +362,12 @@ class TrendAnalyzer {
     }
 
     analyzeADXDirection(candles, period = 14) {
-        if (candles.length < period * 2) return { trend: null, strength: 0 };
+        if ((candles as any).length < period * 2) return { trend: null, strength: 0 };
         
         const plusDI = [];
         const minusDI = [];
         
-        for (let i = 1; i < candles.length; i++) {
+        for (let i = 1; i < (candles as any).length; i++) {
             const highDiff = candles[i].high - candles[i-1].high;
             const lowDiff = candles[i-1].low - candles[i].low;
             
@@ -474,8 +476,8 @@ class TrendAnalyzer {
         const volumes = candles.map(c => c.volume);
         const avgVolume = volumes.slice(-20).reduce((a, b) => a + b, 0) / 20;
         const lastVolume = volumes[volumes.length - 1];
-        const lastClose = candles[candles.length - 1].close;
-        const prevClose = candles[candles.length - 2].close;
+        const lastClose = candles[(candles as any).length - 1].close;
+        const prevClose = candles[(candles as any).length - 2].close;
         
         const isBullishCandle = lastClose > prevClose;
         const isVolumeHigh = lastVolume > avgVolume * 1.5;
@@ -498,15 +500,15 @@ class TrendAnalyzer {
     }
 
     analyzeMultiTimeframeTrend(multiTimeframeData) {
-        if (!multiTimeframeData || !multiTimeframeData.candlesMap) return { trend: null, reason: "" };
+        if (!multiTimeframeData || !(multiTimeframeData as any).candlesMap) return { trend: null, reason: "" };
         
         let bullishCount = 0;
         let bearishCount = 0;
         const timeframes = ['5', '15', '60'];
         
         for (const tf of timeframes) {
-            const candles = multiTimeframeData.candlesMap[tf];
-            if (!candles || candles.length < 50) continue;
+            const candles = (multiTimeframeData as any).candlesMap[tf];
+            if (!candles || (candles as any).length < 50) continue;
             
             const closes = candles.map(c => c.close);
             const ema20 = this.calculateEMA(closes, 20);
@@ -579,7 +581,7 @@ class TrendAnalyzer {
         const highs = [];
         const lows = [];
         
-        for (let i = window; i < candles.length - window; i++) {
+        for (let i = window; i < (candles as any).length - window; i++) {
             let isHigh = true;
             let isLow = true;
             
@@ -602,6 +604,7 @@ class TrendAnalyzer {
 // کلاس MarketAnalyzer - تحلیل وضعیت بازار
 // ============================================================
 class MarketAnalyzer {
+    public rangeStatus: any;
     constructor() {
         this.rangeStatus = {
             isRanging: false,
@@ -616,7 +619,7 @@ class MarketAnalyzer {
     }
 
     analyzeMarket(candles, currentPrice) {
-        if (!candles || candles.length < 50) {
+        if (!candles || (candles as any).length < 50) {
             return { isRanging: false, strength: 0, message: "داده کافی موجود نیست" };
         }
 
@@ -687,9 +690,9 @@ class MarketAnalyzer {
     }
 
     calculateATR(candles, period) {
-        if (candles.length < period + 1) return null;
+        if ((candles as any).length < period + 1) return null;
         const trueRanges = [];
-        for (let i = 1; i < candles.length; i++) {
+        for (let i = 1; i < (candles as any).length; i++) {
             const tr = Math.max(
                 candles[i].high - candles[i].low,
                 Math.abs(candles[i].high - candles[i-1].close),
@@ -709,13 +712,13 @@ class MarketAnalyzer {
     }
 
     calculateADX(candles, period) {
-        if (candles.length < period * 2) return 25;
+        if ((candles as any).length < period * 2) return 25;
         
         const plusDM = [];
         const minusDM = [];
         const tr = [];
         
-        for (let i = 1; i < candles.length; i++) {
+        for (let i = 1; i < (candles as any).length; i++) {
             const highDiff = candles[i].high - candles[i-1].high;
             const lowDiff = candles[i-1].low - candles[i].low;
             
@@ -876,6 +879,8 @@ class MarketAnalyzer {
 // کلاس DivergenceDetector - تشخیص انواع واگرایی
 // ============================================================
 class DivergenceDetector {
+    public priceSwings: any;
+    public rsiSwings: any;
     constructor() {
         this.priceSwings = [];
         this.rsiSwings = [];
@@ -883,17 +888,17 @@ class DivergenceDetector {
 
     getPriceSwings(candles, lookback = 60, window = 2) {
         const swings = [];
-        const searchDepth = Math.min(lookback, candles.length - 10);
+        const searchDepth = Math.min(lookback, (candles as any).length - 10);
         
-        for (let i = candles.length - searchDepth; i < candles.length - window; i++) {
+        for (let i = (candles as any).length - searchDepth; i < (candles as any).length - window; i++) {
             let isSwingHigh = true;
             let isSwingLow = true;
             
             for (let j = 1; j <= window; j++) {
                 if (i - j >= 0 && candles[i - j].high >= candles[i].high) isSwingHigh = false;
-                if (i + j < candles.length && candles[i + j].high >= candles[i].high) isSwingHigh = false;
+                if (i + j < (candles as any).length && candles[i + j].high >= candles[i].high) isSwingHigh = false;
                 if (i - j >= 0 && candles[i - j].low <= candles[i].low) isSwingLow = false;
-                if (i + j < candles.length && candles[i + j].low <= candles[i].low) isSwingLow = false;
+                if (i + j < (candles as any).length && candles[i + j].low <= candles[i].low) isSwingLow = false;
             }
             
             if (isSwingHigh) {
@@ -1135,7 +1140,7 @@ class DivergenceDetector {
 
     // تشخیص واگرایی در تایم 2 دقیقه برای ورود
     check2MinDivergence(candles2min, rsiValues2min) {
-        if (!candles2min || candles2min.length < 30 || !rsiValues2min || rsiValues2min.length < 30) {
+        if (!candles2min || candles2min.length < 30 || !rsiValues2min || (rsiValues2min as any).length < 30) {
             return { found: false };
         }
 
@@ -1178,6 +1183,11 @@ class DivergenceDetector {
 // کلاس TradingStrategy - استراتژی اصلی (با تایم 15 دقیقه برای روند و تایم 2 دقیقه برای ورود)
 // ============================================================
 class TradingStrategy {
+    public trendAnalyzer: any;
+    public marketAnalyzer: any;
+    public divergenceDetector: any;
+    public activeTrades: any;
+    public last15MinTrend: any;
     config = {
         fibLookback: 60,
         fibMinRange: 0.5,
@@ -1212,9 +1222,9 @@ class TradingStrategy {
     }
 
     calculateATR(candles, period = 14) {
-        if (candles.length < period + 1) return null;
+        if ((candles as any).length < period + 1) return null;
         const trueRanges = [];
-        for (let i = 1; i < candles.length; i++) {
+        for (let i = 1; i < (candles as any).length; i++) {
             const high = candles[i].high;
             const low = candles[i].low;
             const prevClose = candles[i - 1].close;
@@ -1251,15 +1261,15 @@ class TradingStrategy {
 
         const trendResult = this.trendAnalyzer.analyze15MinTrend(candles15min);
         this.last15MinTrend = {
-            overall: trendResult.overall,
-            strength: trendResult.strength,
-            direction: trendResult.direction,
-            message: trendResult.message,
+            overall: (trendResult as any).overall,
+            strength: (trendResult as any).strength,
+            direction: (trendResult as any).direction,
+            message: (trendResult as any).message,
             timestamp: now,
-            details: trendResult.details
+            details: (trendResult as any).details
         };
 
-        console.log(`📊 ${trendResult.message}`);
+        console.log(`📊 ${(trendResult as any).message}`);
         return this.last15MinTrend;
     }
 
@@ -1272,24 +1282,24 @@ class TradingStrategy {
 
         // محاسبه RSI برای تایم 2 دقیقه
         const rsiValues2min = this.calculateRSI(candles2min, this.config.rsiPeriod);
-        if (rsiValues2min.length < 30) {
+        if ((rsiValues2min as any).length < 30) {
             return { canEnter: false, reason: 'RSI تایم ۲ دقیقه قابل محاسبه نیست' };
         }
 
         // تشخیص واگرایی در تایم 2 دقیقه
         const divergenceSignal = this.divergenceDetector.check2MinDivergence(candles2min, rsiValues2min);
         
-        if (!divergenceSignal.found) {
+        if (!(divergenceSignal as any).found) {
             return { canEnter: false, reason: 'واگرایی در تایم ۲ دقیقه مشاهده نشد' };
         }
 
         // بررسی همخوانی با روند تایم 15 دقیقه
-        const currentRSI = rsiValues2min[rsiValues2min.length - 1];
+        const currentRSI = rsiValues2min[(rsiValues2min as any).length - 1];
         const lastCandle = candles2min[candles2min.length - 1];
         const currentPrice = lastCandle.close;
 
         // اگر روند تایم 15 دقیقه صعودی است و سیگنال صعودی داریم -> مجاز
-        if (trend15Min.overall === 'bullish' && divergenceSignal.direction === 'bullish') {
+        if ((trend15Min as any).overall === 'bullish' && (divergenceSignal as any).direction === 'bullish') {
             return {
                 canEnter: true,
                 signal: divergenceSignal,
@@ -1300,7 +1310,7 @@ class TradingStrategy {
         }
         
         // اگر روند تایم 15 دقیقه نزولی است و سیگنال نزولی داریم -> مجاز
-        if (trend15Min.overall === 'bearish' && divergenceSignal.direction === 'bearish') {
+        if ((trend15Min as any).overall === 'bearish' && (divergenceSignal as any).direction === 'bearish') {
             return {
                 canEnter: true,
                 signal: divergenceSignal,
@@ -1311,7 +1321,7 @@ class TradingStrategy {
         }
 
         // اگر روند خنثی است و سیگنال قوی داریم -> با احتیاط مجاز
-        if (trend15Min.overall === 'neutral' && divergenceSignal.priority === 1) {
+        if ((trend15Min as any).overall === 'neutral' && (divergenceSignal as any).priority === 1) {
             return {
                 canEnter: true,
                 signal: divergenceSignal,
@@ -1323,12 +1333,12 @@ class TradingStrategy {
 
         return {
             canEnter: false,
-            reason: `عدم همخوانی: روند تایم ۱۵ دقیقه (${trend15Min.overall}) با سیگنال تایم ۲ دقیقه (${divergenceSignal.direction})`
+            reason: `عدم همخوانی: روند تایم ۱۵ دقیقه (${(trend15Min as any).overall}) با سیگنال تایم ۲ دقیقه (${(divergenceSignal as any).direction})`
         };
     }
 
     analyze(candles, timeframe, strategyType, candleConfirmations, currentPrice, multiTimeframeData = null) {
-        if (!candles.length || candles.length < this.config.minCandles) return null;
+        if (!(candles as any).length || (candles as any).length < this.config.minCandles) return null;
 
         if (strategyType === 'FIB382_618_RSI_DIVERGENCE') {
             return this.detectFib382And618WithDivergence(candles, currentPrice, timeframe, multiTimeframeData);
@@ -1338,12 +1348,12 @@ class TradingStrategy {
     }
 
     findKeyLevels(candles) {
-        if (!candles || candles.length === 0) return { high: null, low: null };
+        if (!candles || (candles as any).length === 0) return { high: null, low: null };
         
         let highestHigh = -Infinity;
         let lowestLow = Infinity;
         
-        for (let i = 0; i < candles.length; i++) {
+        for (let i = 0; i < (candles as any).length; i++) {
             if (candles[i].high > highestHigh) {
                 highestHigh = candles[i].high;
             }
@@ -1432,7 +1442,7 @@ class TradingStrategy {
 
     getSignificantSwings(candles, minDistance = 5) {
         const swings = [];
-        const len = candles.length;
+        const len = (candles as any).length;
         const searchDepth = Math.min(60, len - 10);
         
         for (let i = len - searchDepth; i < len - minDistance; i++) {
@@ -1504,7 +1514,7 @@ class TradingStrategy {
     calculateRSIForTimeframes(candlesMap) {
         const rsiMap = {};
         for (const [tf, candles] of Object.entries(candlesMap)) {
-            if (candles && candles.length > 0) {
+            if (candles && (candles as any).length > 0) {
                 rsiMap[tf] = this.calculateRSI(candles, this.config.rsiPeriod);
             }
         }
@@ -1552,7 +1562,7 @@ class TradingStrategy {
     }
 
     detectFib382And618WithDivergence(candles, currentPrice, timeframe, multiTimeframeData = null) {
-        if (!candles || candles.length < 80) return null;
+        if (!candles || (candles as any).length < 80) return null;
 
         // 1. ابتدا روند تایم 15 دقیقه را بررسی کن
         const trend15Min = this.get15MinTrend(multiTimeframeData);
@@ -1575,7 +1585,7 @@ class TradingStrategy {
         
         if (!buyFibLevels && !sellFibLevels) return null;
 
-        const lastCandle = candles[candles.length - 1];
+        const lastCandle = candles[(candles as any).length - 1];
         const lastPrice = lastCandle.close;
 
         const rsiValues = this.calculateRSI(candles, 14);
@@ -1585,33 +1595,33 @@ class TradingStrategy {
         const trendAnalysis = this.getTrendAnalysis(candles, multiTimeframeData);
         
         // اضافه کردن روند تایم 15 دقیقه به تحلیل
-        trendAnalysis.trend15Min = {
-            overall: trend15Min.overall,
-            strength: trend15Min.strength,
-            message: trend15Min.message
+        (trendAnalysis as any).trend15Min = {
+            overall: (trend15Min as any).overall,
+            strength: (trend15Min as any).strength,
+            message: (trend15Min as any).message
         };
 
         let qualitySignal = entryCondition.signal;
 
         let isBullishSignal = false;
         let signalTypeDetected = '';
-        let signalPriority = qualitySignal.priority || 3;
+        let signalPriority = (qualitySignal as any).priority || 3;
         
-        if (qualitySignal.direction === 'bullish') {
+        if ((qualitySignal as any).direction === 'bullish') {
             isBullishSignal = true;
-            signalTypeDetected = qualitySignal.name;
-        } else if (qualitySignal.direction === 'bearish') {
+            signalTypeDetected = (qualitySignal as any).name;
+        } else if ((qualitySignal as any).direction === 'bearish') {
             isBullishSignal = false;
-            signalTypeDetected = qualitySignal.name;
+            signalTypeDetected = (qualitySignal as any).name;
         }
 
         // فیلتر بر اساس روند کلی (اختیاری - می‌توانید غیرفعال کنید)
-        // if (trendAnalysis.overall === 'bearish' && qualitySignal.direction === 'bullish') {
+        // if ((trendAnalysis as any).overall === 'bearish' && (qualitySignal as any).direction === 'bullish') {
         //     console.log("📉 روند کلی نزولی است - سیگنال خرید فیلتر شد");
         //     return null;
         // }
         // 
-        // if (trendAnalysis.overall === 'bullish' && qualitySignal.direction === 'bearish') {
+        // if ((trendAnalysis as any).overall === 'bullish' && (qualitySignal as any).direction === 'bearish') {
         //     console.log("📈 روند کلی صعودی است - سیگنال فروش فیلتر شد");
         //     return null;
         // }
@@ -1663,35 +1673,35 @@ class TradingStrategy {
         }
 
         let confidence = 70;
-        let signalStrength = qualitySignal.strength || 'moderate';
+        let signalStrength = (qualitySignal as any).strength || 'moderate';
         
         // افزایش اعتماد بر اساس همخوانی با روند تایم 15 دقیقه
-        if (trend15Min.overall === qualitySignal.direction) {
+        if ((trend15Min as any).overall === (qualitySignal as any).direction) {
             confidence += 15;
-            if (trend15Min.strength > 60) {
+            if ((trend15Min as any).strength > 60) {
                 confidence += 10;
                 signalStrength = 'very_strong';
             }
         }
         
-        if (qualitySignal.type.includes('hidden') && qualitySignal.timeframe === '15') {
+        if ((qualitySignal as any).type.includes('hidden') && (qualitySignal as any).timeframe === '15') {
             confidence = 95;
             signalStrength = 'very_strong';
-        } else if (qualitySignal.type.includes('hidden') && qualitySignal.timeframe === '10') {
+        } else if ((qualitySignal as any).type.includes('hidden') && (qualitySignal as any).timeframe === '10') {
             confidence = 90;
             signalStrength = 'strong';
-        } else if (qualitySignal.type.includes('convergence') && qualitySignal.timeframe === '15') {
+        } else if ((qualitySignal as any).type.includes('convergence') && (qualitySignal as any).timeframe === '15') {
             confidence = 85;
             signalStrength = 'strong';
-        } else if (qualitySignal.type.includes('convergence') && qualitySignal.timeframe === '10') {
+        } else if ((qualitySignal as any).type.includes('convergence') && (qualitySignal as any).timeframe === '10') {
             confidence = 80;
             signalStrength = 'moderate';
-        } else if (qualitySignal.timeframe === '2') {
+        } else if ((qualitySignal as any).timeframe === '2') {
             // سیگنال تایم 2 دقیقه با روند 15 دقیقه همخوانی دارد
             confidence = Math.min(confidence + 5, 92);
         }
 
-        if (activeLevel === 61.8 && qualitySignal.timeframe === '15') {
+        if (activeLevel === 61.8 && (qualitySignal as any).timeframe === '15') {
             confidence = Math.min(confidence + 15, 98);
         } else if (activeLevel === 61.8) {
             confidence = Math.min(confidence + 10, 95);
@@ -1769,7 +1779,7 @@ class TradingStrategy {
             strategy: 'FIB382_618_RSI_DIVERGENCE',
             activeLevel: activeLevel,
             rsi: currentRSI,
-            signalType: `${signalTypeDetected} (تایم ${qualitySignal.timeframe} دقیقه)`,
+            signalType: `${signalTypeDetected} (تایم ${(qualitySignal as any).timeframe} دقیقه)`,
             signalStrength: signalStrength,
             confidence,
             profitTP1: profitTP1.toFixed(2),
@@ -1790,18 +1800,18 @@ class TradingStrategy {
             riskReward4: `1:${rr4.toFixed(2)}`,
             riskReward5: `1:${rr5.toFixed(2)}`,
             riskReward: `1:${rr2.toFixed(2)}`,
-            hasDivergence: qualitySignal.type.includes('divergence'),
-            hasConvergence: qualitySignal.type.includes('convergence'),
+            hasDivergence: (qualitySignal as any).type.includes('divergence'),
+            hasConvergence: (qualitySignal as any).type.includes('convergence'),
             signalQuality: signalPriority === 1 ? 'عالی' : (signalPriority === 2 ? 'خوب' : 'متوسط'),
             isHighRiskTarget: true,
             isSecondEntry: isSecondEntry,
             entryMessage: entryMessage,
             trendAnalysis: {
-                overall: trendAnalysis.overall,
-                strength: Math.round(trendAnalysis.strength),
-                confidence: Math.round(trendAnalysis.confidence),
-                warnings: trendAnalysis.warnings,
-                reasons: trendAnalysis.reasons.slice(0, 3),
+                overall: (trendAnalysis as any).overall,
+                strength: Math.round((trendAnalysis as any).strength),
+                confidence: Math.round((trendAnalysis as any).confidence),
+                warnings: (trendAnalysis as any).warnings,
+                reasons: (trendAnalysis as any).reasons.slice(0, 3),
                 trend15Min: trend15Min
             }
         };
@@ -1887,8 +1897,8 @@ class TradingStrategy {
                 strategy: 'FIB382_618_RSI_DIVERGENCE',
                 activeLevel: 61.8,
                 rsi: pending.currentRSI,
-                signalType: `${pending.signalTypeDetected} (تایم ${qualitySignal.timeframe} دقیقه) - ورود دوم`,
-                signalStrength: qualitySignal.strength || 'moderate',
+                signalType: `${pending.signalTypeDetected} (تایم ${(qualitySignal as any).timeframe} دقیقه) - ورود دوم`,
+                signalStrength: (qualitySignal as any).strength || 'moderate',
                 confidence: 88,
                 profitTP1: profitTP1.toFixed(2),
                 profitTP2: profitTP2.toFixed(2),
@@ -1904,18 +1914,18 @@ class TradingStrategy {
                 riskPercent: riskPercent.toFixed(2),
                 riskReward2: `1:${rr2.toFixed(2)}`,
                 riskReward: `1:${rr2.toFixed(2)}`,
-                hasDivergence: qualitySignal.type.includes('divergence'),
-                hasConvergence: qualitySignal.type.includes('convergence'),
+                hasDivergence: (qualitySignal as any).type.includes('divergence'),
+                hasConvergence: (qualitySignal as any).type.includes('convergence'),
                 signalQuality: 'خوب',
                 isHighRiskTarget: true,
                 isSecondEntry: true,
                 entryMessage: "\n📍 **نقطه ورود دوم**\n",
                 trendAnalysis: {
-                    overall: trendAnalysis.overall,
-                    strength: Math.round(trendAnalysis.strength),
-                    confidence: Math.round(trendAnalysis.confidence),
-                    warnings: trendAnalysis.warnings,
-                    reasons: trendAnalysis.reasons.slice(0, 3)
+                    overall: (trendAnalysis as any).overall,
+                    strength: Math.round((trendAnalysis as any).strength),
+                    confidence: Math.round((trendAnalysis as any).confidence),
+                    warnings: (trendAnalysis as any).warnings,
+                    reasons: (trendAnalysis as any).reasons.slice(0, 3)
                 }
             };
             
@@ -1931,6 +1941,32 @@ class TradingStrategy {
 // کلاس ActiveTrade - مدیریت معاملات فعال
 // ============================================================
 class ActiveTrade {
+    public signalId: any;
+    public type: any;
+    public entryPrice: any;
+    public sl: any;
+    public tp1: any;
+    public tp2: any;
+    public tp3: any;
+    public tp4: any;
+    public tp5: any;
+    public entryTime: any;
+    public reachedTargets: any;
+    public targetNotificationSent: any;
+    public isCompleted: any;
+    public isStopped: any;
+    public isReentry: any;
+    public originalTradeId: any;
+    public reentryCount: any;
+    public activeLevel: any;
+    public signalType: any;
+    public pipsToTP1: any;
+    public pipsToTP2: any;
+    public pipsToTP3: any;
+    public pipsToTP4: any;
+    public pipsToTP5: any;
+    public isSecondEntry: any;
+    public tradeNumber: any;
     constructor(signal, isReentry = false, originalTradeId = null, tradeNumber = 0) {
         this.signalId = signal.time;
         this.type = signal.type;
@@ -2118,6 +2154,10 @@ class ActiveTrade {
 // کلاس MultiTimeframeDataManager - مدیریت داده‌های چند تایم فریم
 // ============================================================
 class MultiTimeframeDataManager {
+    public currentToken: any;
+    public farazSession: any;
+    public candlesCache: any;
+    public lastUpdateTime: any;
     constructor(currentToken, farazSession) {
         this.currentToken = currentToken;
         this.farazSession = farazSession;
@@ -2170,7 +2210,7 @@ class MultiTimeframeDataManager {
                     volume: r.v ? parseFloat(r.v[i]) : undefined
                 })).filter(c => !isNaN(c.close));
                 
-                if (candles.length > 5000) {
+                if ((candles as any).length > 5000) {
                     this.candlesCache[timeframe] = candles.slice(-5000);
                 } else {
                     this.candlesCache[timeframe] = candles;
@@ -2214,7 +2254,7 @@ class MultiTimeframeDataManager {
 
     getYesterdayHighLow(timeframe = '60') {
         const candles = this.candlesCache[timeframe];
-        if (!candles || candles.length === 0) return { high: null, low: null, majorHigh: null, majorLow: null, minorHigh: null, minorLow: null };
+        if (!candles || (candles as any).length === 0) return { high: null, low: null, majorHigh: null, majorLow: null, minorHigh: null, minorLow: null };
         
         const now = Date.now() / 1000;
         const oneDayAgo = now - (24 * 60 * 60);
@@ -2239,7 +2279,7 @@ class MultiTimeframeDataManager {
 
     get15MinLevels() {
         const candles = this.candlesCache['15'];
-        if (!candles || candles.length === 0) return { high: null, low: null };
+        if (!candles || (candles as any).length === 0) return { high: null, low: null };
         
         const recentCandles = candles.slice(-20);
         const high = Math.max(...recentCandles.map(c => c.high));
@@ -2253,6 +2293,19 @@ class MultiTimeframeDataManager {
 // کلاس BitcoinEngine - موتور اصلی ربات بیت‌کوین
 // ============================================================
 class BitcoinEngine {
+    public config: any;
+    // public strategy: any;
+    public dataManager: any;
+    public messenger: any;
+    // // public strategy: any;
+    // // // public strategy: any;
+    // // // // public strategy: any;
+    // // // // // public strategy: any;
+    // // // // // // public strategy: any;
+    // // // // // // // public strategy: any;
+    // // // // // // // // public strategy: any;
+    // // // // // // // // // public strategy: any;
+    // // // // // // // // // // public strategy: any;
     price = 0;
     mainTimeframe = '5';
     confirmationTimeframes = ['2', '3', '5'];
@@ -2772,57 +2825,57 @@ class BitcoinEngine {
         message += `📌 **معامله ${tradeNumberText}**\n`;
         message += `⏱ تایم فریم اصلی: ${this.mainTimeframe} دقیقه\n`;
         message += `✅ تایید شده با تایم‌های ۲، ۳، ۵ دقیقه\n`;
-        message += `📊 جهت: ${sig.type === 'BUY' ? 'خرید 🟢' : 'فروش 🔴'}\n`;
-        message += `💰 نقطه ورود اول: ${sig.entry.toLocaleString()}\n`;
+        message += `📊 جهت: ${(sig as any).type === 'BUY' ? 'خرید 🟢' : 'فروش 🔴'}\n`;
+        message += `💰 نقطه ورود اول: ${(sig as any).entry.toLocaleString()}\n`;
         
-        if (sig.isSecondEntry) {
+        if ((sig as any).isSecondEntry) {
             message += `📍 **نقطه ورود دوم**\n`;
-        } else if (sig.activeLevel === 38.2 && !sig.isSecondEntry) {
-            const fibLevels = this.strategy.calculateFibLevelsForSignal(this.candles, sig.type);
+        } else if ((sig as any).activeLevel === 38.2 && !(sig as any).isSecondEntry) {
+            const fibLevels = this.strategy.calculateFibLevelsForSignal(this.candles, (sig as any).type);
             if (fibLevels && fibLevels.fib618) {
                 message += `📍 **نقطه ورود دوم**: ${fibLevels.fib618.toLocaleString()}\n`;
             }
         }
         
-        message += `🛡 حد ضرر: ${sig.sl.toLocaleString()}\n`;
-        message += `🎯 TP1: ${sig.tp1.toLocaleString()}\n`;
-        message += `🎯 TP2: ${sig.tp2.toLocaleString()}\n`;
-        message += `🎯 TP3: ${sig.tp3.toLocaleString()}\n`;
-        message += `🎯 TP4: ${sig.tp4.toLocaleString()}\n`;
-        message += `🎯 TP5: ${sig.tp5.toLocaleString()} ⚠️ پرریسک\n\n`;
+        message += `🛡 حد ضرر: ${(sig as any).sl.toLocaleString()}\n`;
+        message += `🎯 TP1: ${(sig as any).tp1.toLocaleString()}\n`;
+        message += `🎯 TP2: ${(sig as any).tp2.toLocaleString()}\n`;
+        message += `🎯 TP3: ${(sig as any).tp3.toLocaleString()}\n`;
+        message += `🎯 TP4: ${(sig as any).tp4.toLocaleString()}\n`;
+        message += `🎯 TP5: ${(sig as any).tp5.toLocaleString()} ⚠️ پرریسک\n\n`;
         
-        if (sig.signalType) {
-            message += `🔍 نوع سیگنال: ${sig.signalType}\n`;
-            message += `📊 قدرت سیگنال: ${sig.signalStrength === 'very_strong' ? 'بسیار قوی 💪💪' : sig.signalStrength === 'strong' ? 'قوی 💪' : sig.signalStrength === 'moderate' ? 'متوسط 📊' : 'ضعیف 📉'}\n`;
+        if ((sig as any).signalType) {
+            message += `🔍 نوع سیگنال: ${(sig as any).signalType}\n`;
+            message += `📊 قدرت سیگنال: ${(sig as any).signalStrength === 'very_strong' ? 'بسیار قوی 💪💪' : (sig as any).signalStrength === 'strong' ? 'قوی 💪' : (sig as any).signalStrength === 'moderate' ? 'متوسط 📊' : 'ضعیف 📉'}\n`;
         }
         
         message += `━━━━━━━━━━━━━━━━━━━━━━\n`;
         message += `📊 **تحلیل روند:**\n`;
-        const trendEmoji = sig.trendAnalysis.overall === 'bullish' ? '📈' : 
-                          (sig.trendAnalysis.overall === 'bearish' ? '📉' : '⚖️');
-        message += `└ روند کلی: ${trendEmoji} ${sig.trendAnalysis.overall === 'bullish' ? 'صعودی' : (sig.trendAnalysis.overall === 'bearish' ? 'نزولی' : 'خنثی')}\n`;
-        message += `└ قدرت روند: ${sig.trendAnalysis.strength}%\n`;
-        message += `└ اطمینان: ${sig.trendAnalysis.confidence}%\n`;
+        const trendEmoji = (sig as any).trendAnalysis.overall === 'bullish' ? '📈' : 
+                          ((sig as any).trendAnalysis.overall === 'bearish' ? '📉' : '⚖️');
+        message += `└ روند کلی: ${trendEmoji} ${(sig as any).trendAnalysis.overall === 'bullish' ? 'صعودی' : ((sig as any).trendAnalysis.overall === 'bearish' ? 'نزولی' : 'خنثی')}\n`;
+        message += `└ قدرت روند: ${(sig as any).trendAnalysis.strength}%\n`;
+        message += `└ اطمینان: ${(sig as any).trendAnalysis.confidence}%\n`;
         
-        if (sig.trendAnalysis.trend15Min) {
-            const trend15Emoji = sig.trendAnalysis.trend15Min.overall === 'bullish' ? '📈' : 
-                               (sig.trendAnalysis.trend15Min.overall === 'bearish' ? '📉' : '⚖️');
-            message += `└ روند تایم ۱۵ دقیقه: ${trend15Emoji} ${sig.trendAnalysis.trend15Min.overall === 'bullish' ? 'صعودی' : (sig.trendAnalysis.trend15Min.overall === 'bearish' ? 'نزولی' : 'خنثی')} (${sig.trendAnalysis.trend15Min.strength}%)\n`;
+        if ((sig as any).trendAnalysis.trend15Min) {
+            const trend15Emoji = (sig as any).trendAnalysis.trend15Min.overall === 'bullish' ? '📈' : 
+                               ((sig as any).trendAnalysis.trend15Min.overall === 'bearish' ? '📉' : '⚖️');
+            message += `└ روند تایم ۱۵ دقیقه: ${trend15Emoji} ${(sig as any).trendAnalysis.trend15Min.overall === 'bullish' ? 'صعودی' : ((sig as any).trendAnalysis.trend15Min.overall === 'bearish' ? 'نزولی' : 'خنثی')} (${(sig as any).trendAnalysis.trend15Min.strength}%)\n`;
         }
         
-        if (sig.trendAnalysis.warnings && sig.trendAnalysis.warnings.length > 0) {
-            message += `└ ⚠️ ${sig.trendAnalysis.warnings[0]}\n`;
+        if ((sig as any).trendAnalysis.warnings && (sig as any).trendAnalysis.warnings.length > 0) {
+            message += `└ ⚠️ ${(sig as any).trendAnalysis.warnings[0]}\n`;
         }
         
-        if (sig.trendAnalysis.reasons && sig.trendAnalysis.reasons.length > 0) {
-            message += `└ ${sig.trendAnalysis.reasons[0]}\n`;
+        if ((sig as any).trendAnalysis.reasons && (sig as any).trendAnalysis.reasons.length > 0) {
+            message += `└ ${(sig as any).trendAnalysis.reasons[0]}\n`;
         }
         
         message += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-        message += `📐 ریسک به ریوارد TP2: ${sig.riskReward2}\n`;
-        message += `⭐ اعتبار سیگنال: ${sig.confidence}%\n`;
-        message += `🏷 کیفیت سیگنال: ${sig.signalQuality || 'متوسط'}\n\n`;
-        message += `📅 زمان: ${new Date(sig.time).toLocaleString('fa-IR')}\n\n`;
+        message += `📐 ریسک به ریوارد TP2: ${(sig as any).riskReward2}\n`;
+        message += `⭐ اعتبار سیگنال: ${(sig as any).confidence}%\n`;
+        message += `🏷 کیفیت سیگنال: ${(sig as any).signalQuality || 'متوسط'}\n\n`;
+        message += `📅 زمان: ${new Date((sig as any).time).toLocaleString('fa-IR')}\n\n`;
         message += `「 🥇 کانال سیگنال بیت‌کوین ⏱ 」\n`;
         message += `سیگنال آب شده\n`;
         message += `بیت کوین _ انس طلا_ اتریوم _ نفت\n`;
@@ -3071,11 +3124,11 @@ class BitcoinEngine {
 
     checkCandlePatternsForConfirmation(timeframe) {
         const candles = this.multiTimeframeManager.getCandles(timeframe);
-        if (candles.length < 5) return true;
+        if ((candles as any).length < 5) return true;
         
-        const lastCandle = candles[candles.length - 1];
-        const prevCandle = candles[candles.length - 2];
-        const prev2Candle = candles[candles.length - 3];
+        const lastCandle = candles[(candles as any).length - 1];
+        const prevCandle = candles[(candles as any).length - 2];
+        const prev2Candle = candles[(candles as any).length - 3];
         
         if (!lastCandle || !prevCandle) return true;
         
@@ -3169,25 +3222,25 @@ class BitcoinEngine {
         if (!sig) return;
 
         const last = this.signals[0];
-        if ((!last || Math.abs(last.time - sig.time) > 60000) && !this.pendingSignal) {
+        if ((!last || Math.abs(last.time - (sig as any).time) > 60000) && !this.pendingSignal) {
             this.signals.unshift(sig);
             if (this.signals.length > 20) this.signals.pop();
             
             console.log(`\n⏳ سیگنال جدید تشخیص داده شد! منتظر بسته شدن کندل‌های ${this.confirmationTimeframes.join(', ')} دقیقه برای تایید...`);
-            console.log(`📊 جهت: ${sig.type === 'BUY' ? 'خرید' : 'فروش'} | سطح ورود: ${sig.entry.toLocaleString()}`);
-            if (sig.isSecondEntry) {
+            console.log(`📊 جهت: ${(sig as any).type === 'BUY' ? 'خرید' : 'فروش'} | سطح ورود: ${(sig as any).entry.toLocaleString()}`);
+            if ((sig as any).isSecondEntry) {
                 console.log(`📍 نقطه ورود دوم`);
-            } else if (sig.activeLevel === 38.2) {
-                const fibLevels = this.strategy.calculateFibLevelsForSignal(this.candles, sig.type);
+            } else if ((sig as any).activeLevel === 38.2) {
+                const fibLevels = this.strategy.calculateFibLevelsForSignal(this.candles, (sig as any).type);
                 if (fibLevels && fibLevels.fib618) {
                     console.log(`📍 نقطه ورود دوم: ${fibLevels.fib618.toLocaleString()}`);
                 }
             }
-            console.log(`🔍 نوع سیگنال: ${sig.signalType || 'نامشخص'}`);
-            console.log(`🏷 کیفیت: ${sig.signalQuality || 'متوسط'} | اعتماد: ${sig.confidence}%`);
-            console.log(`📊 تحلیل روند: ${sig.trendAnalysis.overall} با قدرت ${sig.trendAnalysis.strength}%`);
-            if (sig.trendAnalysis.trend15Min) {
-                console.log(`📊 روند تایم ۱۵ دقیقه: ${sig.trendAnalysis.trend15Min.overall} (${sig.trendAnalysis.trend15Min.strength}%)`);
+            console.log(`🔍 نوع سیگنال: ${(sig as any).signalType || 'نامشخص'}`);
+            console.log(`🏷 کیفیت: ${(sig as any).signalQuality || 'متوسط'} | اعتماد: ${(sig as any).confidence}%`);
+            console.log(`📊 تحلیل روند: ${(sig as any).trendAnalysis.overall} با قدرت ${(sig as any).trendAnalysis.strength}%`);
+            if ((sig as any).trendAnalysis.trend15Min) {
+                console.log(`📊 روند تایم ۱۵ دقیقه: ${(sig as any).trendAnalysis.trend15Min.overall} (${(sig as any).trendAnalysis.trend15Min.strength}%)`);
             }
             
             this.pendingSignal = sig;
@@ -3198,37 +3251,37 @@ class BitcoinEngine {
         const tradeNumberText = this.getTradeNumberText(this.nextTradeNumber);
         
         console.log(`\n${'='.repeat(70)}`);
-        console.log(`📢 سیگنال تایید شده - استراتژی شکار روند بیت‌کوین (تایم ${sig.timeframe} دقیقه)`);
+        console.log(`📢 سیگنال تایید شده - استراتژی شکار روند بیت‌کوین (تایم ${(sig as any).timeframe} دقیقه)`);
         console.log(`📌 معامله ${tradeNumberText}`);
         console.log(`${'='.repeat(70)}`);
-        console.log(`📊 جهت: ${sig.type === 'BUY' ? '🟢 خرید (Long)' : '🔴 فروش (Short)'}`);
-        console.log(`💰 نقطه ورود اول: ${sig.entry.toLocaleString()}`);
+        console.log(`📊 جهت: ${(sig as any).type === 'BUY' ? '🟢 خرید (Long)' : '🔴 فروش (Short)'}`);
+        console.log(`💰 نقطه ورود اول: ${(sig as any).entry.toLocaleString()}`);
         
-        if (sig.isSecondEntry) {
+        if ((sig as any).isSecondEntry) {
             console.log(`📍 نقطه ورود دوم`);
-        } else if (sig.activeLevel === 38.2) {
-            const fibLevels = this.strategy.calculateFibLevelsForSignal(this.candles, sig.type);
+        } else if ((sig as any).activeLevel === 38.2) {
+            const fibLevels = this.strategy.calculateFibLevelsForSignal(this.candles, (sig as any).type);
             if (fibLevels && fibLevels.fib618) {
                 console.log(`📍 نقطه ورود دوم: ${fibLevels.fib618.toLocaleString()}`);
             }
         }
         
-        console.log(`🛡 حد ضرر: ${sig.sl.toLocaleString()}`);
-        console.log(`🎯 TP1: ${sig.tp1.toLocaleString()}`);
-        console.log(`🎯 TP2: ${sig.tp2.toLocaleString()}`);
-        console.log(`🎯 TP3: ${sig.tp3.toLocaleString()}`);
-        console.log(`🎯 TP4: ${sig.tp4.toLocaleString()}`);
-        console.log(`🎯 TP5: ${sig.tp5.toLocaleString()} ⚠️ پرریسک`);
-        console.log(`📐 ریسک: ${sig.riskPercent}%`);
-        console.log(`\n🔍 نوع سیگنال: ${sig.signalType || 'نامشخص'} (${sig.signalStrength || 'متوسط'})`);
-        console.log(`🏷 کیفیت سیگنال: ${sig.signalQuality || 'متوسط'}`);
-        console.log(`📊 RSI فعلی: ${sig.rsi.toFixed(1)}`);
-        console.log(`📊 تحلیل روند: ${sig.trendAnalysis.overall} (قدرت: ${sig.trendAnalysis.strength}%, اطمینان: ${sig.trendAnalysis.confidence}%)`);
-        if (sig.trendAnalysis.trend15Min) {
-            console.log(`📊 روند تایم ۱۵ دقیقه: ${sig.trendAnalysis.trend15Min.overall} (قدرت: ${sig.trendAnalysis.trend15Min.strength}%)`);
-            console.log(`   ${sig.trendAnalysis.trend15Min.message}`);
+        console.log(`🛡 حد ضرر: ${(sig as any).sl.toLocaleString()}`);
+        console.log(`🎯 TP1: ${(sig as any).tp1.toLocaleString()}`);
+        console.log(`🎯 TP2: ${(sig as any).tp2.toLocaleString()}`);
+        console.log(`🎯 TP3: ${(sig as any).tp3.toLocaleString()}`);
+        console.log(`🎯 TP4: ${(sig as any).tp4.toLocaleString()}`);
+        console.log(`🎯 TP5: ${(sig as any).tp5.toLocaleString()} ⚠️ پرریسک`);
+        console.log(`📐 ریسک: ${(sig as any).riskPercent}%`);
+        console.log(`\n🔍 نوع سیگنال: ${(sig as any).signalType || 'نامشخص'} (${(sig as any).signalStrength || 'متوسط'})`);
+        console.log(`🏷 کیفیت سیگنال: ${(sig as any).signalQuality || 'متوسط'}`);
+        console.log(`📊 RSI فعلی: ${(sig as any).rsi.toFixed(1)}`);
+        console.log(`📊 تحلیل روند: ${(sig as any).trendAnalysis.overall} (قدرت: ${(sig as any).trendAnalysis.strength}%, اطمینان: ${(sig as any).trendAnalysis.confidence}%)`);
+        if ((sig as any).trendAnalysis.trend15Min) {
+            console.log(`📊 روند تایم ۱۵ دقیقه: ${(sig as any).trendAnalysis.trend15Min.overall} (قدرت: ${(sig as any).trendAnalysis.trend15Min.strength}%)`);
+            console.log(`   ${(sig as any).trendAnalysis.trend15Min.message}`);
         }
-        console.log(`⭐ اعتماد سیگنال: ${sig.confidence}%`);
+        console.log(`⭐ اعتماد سیگنال: ${(sig as any).confidence}%`);
         console.log(`📊 معاملات فعال: ${this.activeTrades.length}`);
         console.log(`🔹 bit22 🔹`);
         console.log(`${'='.repeat(70)}\n`);
@@ -3287,7 +3340,7 @@ class BitcoinEngine {
         
         for (const tf of timeframes) {
             const candles = this.multiTimeframeManager.getCandles(tf);
-            if (candles.length > 0) {
+            if ((candles as any).length > 0) {
                 const keyLevels = this.strategy.findKeyLevels(candles);
                 levels[tf] = keyLevels;
             } else {

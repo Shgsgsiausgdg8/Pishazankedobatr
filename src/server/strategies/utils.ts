@@ -1,4 +1,4 @@
-import { Candle } from '../strategy.js';
+import { Candle } from '../types.js';
 
 export function calculateSMA(candles: Candle[], period: number) {
     if (candles.length < period) return null;

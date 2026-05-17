@@ -1,5 +1,5 @@
 import { AlphaGoldClient } from './alphagold_client.js';
-import { Signal } from './strategy.js';
+import { Signal } from './types.js';
 import { AlphaGoldEngine } from './alpha_engine.js';
 import WebSocket from 'ws';
 import { getSetting, setSetting } from './db.js';

@@ -1,7 +1,8 @@
 import WebSocket from 'ws';
 import fs from 'fs';
 import path from 'path';
-import { TradingStrategy, Signal, Candle } from './strategy.js';
+import { TradingStrategy } from './strategy.js';
+import { Signal, Candle } from './types.js';
 import { saveCandles, getCandles, getSetting, setSetting, getCandleCount } from './db.js';
 
 export class BtcEngine {

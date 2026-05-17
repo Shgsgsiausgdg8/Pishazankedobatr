@@ -1,4 +1,4 @@
-import { Candle, StrategyConfig } from '../strategy.js';
+import { Candle, StrategyConfig } from '../types.js';
 import { checkCRSIDivergence } from './utils.js';
 
 export class Strategy3Detector {

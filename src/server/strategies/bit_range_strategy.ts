@@ -1,4 +1,4 @@
-import { Candle, Signal } from "../strategy.js";
+import { Candle, Signal } from "../types.js";
 import { BitRangeTradingStrategy } from "./bitcoin_range_core.js";
 
 export class BitRangeAnalyzer {
@@ -6,13 +6,16 @@ export class BitRangeAnalyzer {
     private nextTradeNumber: number = 1;
 
     constructor() {
-        this.strategyInstance = new BitRangeTradingStrategy({
+        this.strategyInstance = new BitRangeTradingStrategy();
+        // Update config manually since constructor doesn't take args
+        this.strategyInstance.config = {
+            ...this.strategyInstance.config,
             minCandles: 50,
             rsiPeriod: 14,
             fibLookback: 100,
             fib382Tolerance: 0.05,
             fib618Tolerance: 0.05,
-        });
+        };
     }
 
     private aggregateCandles(candles1m: Candle[], periodMinutes: number): any[] {

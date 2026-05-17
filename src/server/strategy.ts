@@ -9,44 +9,7 @@ import { Fib38Detector } from './strategies/fib38.js';
 import { Strategy3Detector } from './strategies/strategy3.js';
 import { Strategy4Detector } from './strategies/strategy4.js';
 import { Strategy5Detector } from './strategies/strategy5.js';
-
-export interface Candle {
-  time: number;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-}
-
-export interface Signal {
-  type: 'BUY' | 'SELL';
-  entry: number;
-  tp1: number;
-  tp2: number;
-  tp3: number;
-  tp4?: number;
-  tp5?: number;
-  tp6?: number;
-  tp7?: number;
-  sl: number;
-  time: number;
-  timeframe: string;
-  kaf?: number;
-  saghf?: number;
-  confidence?: number;
-}
-
-export interface StrategyConfig {
-    smaPeriod: number;
-    nMinPullback: number;
-    nMaxPullback: number;
-    nReversalThreshold: number;
-    fibLookback: number;
-    fibMinRange: number;
-    strategy3Strictness: 'low' | 'medium' | 'high';
-    customKaf?: number;
-    customSaghf?: number;
-}
+import { Candle, Signal, StrategyConfig } from './types.js';
 
 export class TradingStrategy {
     private lastSignalTime: number = 0;       

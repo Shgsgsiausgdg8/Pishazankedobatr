@@ -1,4 +1,4 @@
-import { Candle, StrategyConfig } from '../strategy.js';
+import { Candle, StrategyConfig } from '../types.js';
 import { calculateATR, getSwingPivots } from './utils.js';
 
 export class NPatternDetector {

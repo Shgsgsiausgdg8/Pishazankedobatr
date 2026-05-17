@@ -1,4 +1,5 @@
-import { TradingStrategy, Candle, Signal } from "./strategy.js";
+import { TradingStrategy } from "./strategy.js";
+import { Candle, Signal } from "./types.js";
 
 export interface BacktestResult {
     totalTrades: number;

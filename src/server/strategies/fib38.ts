@@ -1,4 +1,4 @@
-import { Candle, StrategyConfig } from '../strategy.js';
+import { Candle, StrategyConfig } from '../types.js';
 
 export class Fib38Detector {
     public detect(candles: Candle[], config: StrategyConfig) {

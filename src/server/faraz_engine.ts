@@ -1,7 +1,8 @@
 import WebSocket from 'ws';
 import fs from 'fs';
 import path from 'path';
-import { TradingStrategy, Signal, Candle } from './strategy.js';
+import { TradingStrategy } from './strategy.js';
+import { Signal, Candle } from './types.js';
 import { saveCandles, getCandles, getSetting, setSetting, getCandleCount } from './db.js';
 
 export class FarazGoldEngine {
@@ -76,7 +77,7 @@ export class FarazGoldEngine {
             console.log(`[FarazEngine] Fetching ${targetDays} days (${targetTotalCandles} bars) from ${baseUrl}...`);
 
             // Fetch in chunks to avoid overwhelming the provider and memory
-            for (let i = 0; i < Math.ceil(targetTotalCandles / limit); i++) {
+            for (let i = 0; i < Math.ceil(targetTotalCandles / barsCount); i++) {
                 const from = to - (barsCount * timeframeSeconds);
                 const url = `${baseUrl}/api/room/api/get-bars/?symbol=mazane&from=${from}&to=${to}&resolution=${resolution}`;
                 
