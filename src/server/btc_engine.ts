@@ -256,18 +256,25 @@ export class BtcEngine {
             console.log("[BTC-Engine] WS Connected.");
             // Keep-alive ping interval
             this.pingInterval = setInterval(() => {
-                if (this.ws && this.ws.readyState === 1) {
-                    this.ws.send('2');
+                if (this.ws && (this.ws as any).readyState === 1 && typeof (this.ws as any).send === 'function') {
+                    (this.ws as any).send('2');
                 }
             }, 25000);
         });
 
         this.ws.on('message', (data) => {
             const msg = data.toString();
-            if (msg === '2') { this.ws?.send('3'); return; }
+            if (msg === '2') { 
+                if (this.ws && (this.ws as any).readyState === 1 && typeof (this.ws as any).send === 'function') {
+                    (this.ws as any).send('3'); 
+                }
+                return; 
+            }
             
             if (msg.startsWith('0{')) {
-                this.ws?.send(`40/customer,${JSON.stringify({ token: this.currentToken, UserId: null })}`);
+                if (this.ws && (this.ws as any).readyState === 1 && typeof (this.ws as any).send === 'function') {
+                    (this.ws as any).send(`40/customer,${JSON.stringify({ token: this.currentToken, UserId: null })}`);
+                }
                 return;
             }
 
@@ -409,14 +416,55 @@ export class BtcEngine {
         const date = new Date(sig.time).toLocaleDateString('fa-IR');
         const time = new Date(sig.time).toLocaleTimeString('fa-IR');
         
-        const strategyNames: Record<string, string> = {
-            'N-PATTERN': 'الگوی N',
-            'FIB-38': 'فیبوناتچی ۳۸٪',
-            'STRATEGY_3': 'استراتژی فراز',
-            'STRATEGY_4': 'استراتژی چهارم'
-        };
+        let message = "";
 
-        const message = `
+        if (this.liveStrategyType === 'BIT_RANGE') {
+            const result: any = (sig as any).extras || {};
+            const tradeNumbers = ['اول', 'دوم', 'سوم', 'چهارم', 'پنجم', 'ششم', 'هفتم', 'هشتم', 'نهم', 'دهم'];
+            const tradeNumberRaw = (sig as any).tradeNumber || 1;
+            const tradeNumberText = tradeNumberRaw <= 10 ? tradeNumbers[tradeNumberRaw - 1] : `${tradeNumberRaw}ام`;
+            
+            message = `🌟 **سیگنال جدید - استراتژی شکار روند بیت‌کوین** 🌟\n\n`;
+            message += `📊 BTC/USD (بیت‌کوین)\n`;
+            message += `📌 **معامله ${tradeNumberText}**\n`;
+            message += `⏱ تایم فریم اصلی: 5 دقیقه\n`;
+            message += `✅ تایید شده با تایم‌های ۲، ۳، ۵ دقیقه\n`;
+            message += `📊 جهت: ${sig.type === 'BUY' ? 'خرید 🟢' : 'فروش 🔴'}\n`;
+            message += `💰 نقطه ورود: ${sig.entry.toLocaleString()}\n`;
+            
+            if (result.isSecondEntry) {
+                message += `📍 **نقطه ورود دوم**\n`;
+            }
+            
+            message += `🛡 حد ضرر: ${sig.sl.toLocaleString()}\n`;
+            message += `🎯 TP1: ${sig.tp1.toLocaleString()}\n`;
+            message += `🎯 TP2: ${sig.tp2.toLocaleString()}\n`;
+            message += `🎯 TP3: ${sig.tp3.toLocaleString()}\n`;
+            message += `🎯 TP4: ${sig.tp4?.toLocaleString() || '---'}\n`;
+            message += `🎯 TP5: ${sig.tp5?.toLocaleString() || '---'} ⚠️ پرریسک\n\n`;
+            
+            if (result.signalType) {
+                message += `🔍 نوع سیگنال: ${result.signalType}\n`;
+                const strength = result.signalStrength === 'very_strong' ? 'بسیار قوی 💪💪' : result.signalStrength === 'strong' ? 'قوی 💪' : result.signalStrength === 'moderate' ? 'متوسط 📊' : 'ضعیف 📉';
+                message += `📊 قدرت سیگنال: ${strength}\n`;
+            }
+            
+            message += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+            message += `📊 **وضعیت ساختار:**\n`;
+            message += `📏 سقف (Saghf): ${sig.saghf?.toLocaleString() || '---'}\n`;
+            message += `📏 کف (Kaf): ${sig.kaf?.toLocaleString() || '---'}\n`;
+            message += `\n📅 زمان: ${date} ${time}\n\n`;
+            message += `「 🥇 کانال سیگنال بیت‌کوین ⏱ 」\n`;
+            message += `🔹 bit22 🔹`;
+        } else {
+            const strategyNames: Record<string, string> = {
+                'N-PATTERN': 'الگوی N',
+                'FIB-38': 'فیبوناتچی ۳۸٪',
+                'STRATEGY_3': 'استراتژی فراز',
+                'STRATEGY_4': 'استراتژی چهارم'
+            };
+
+            message = `
 🌟 **سیگنال جدید ربات فراز گلد** 🌟
 
 📊 **بازار:** ${this.brokerName}
@@ -441,6 +489,7 @@ export class BtcEngine {
 --------------------------
 ⚠️ مدیریت سرمایه فراموش نشود!
 `;
+        }
         try {
             await fetch(url, {
                 method: 'POST',

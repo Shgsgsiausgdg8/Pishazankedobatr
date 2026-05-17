@@ -67,16 +67,16 @@ export class FarazGoldEngine {
                 }
             }
 
-            const baseUrl = 'https://demo.farazgold.com';
+            const baseUrl = process.env.FARAZGOLD_BASEURL || 'https://farazgold.com';
             let to = Math.floor(Date.now() / 1000);
             const barsCount = 2000;
             const timeframeSeconds = (parseInt(resolution) || 1) * 60;
             let totalFetched = 0;
 
-            console.log(`[FarazEngine] Fetching ${targetDays} days (${targetTotalCandles} bars)...`);
+            console.log(`[FarazEngine] Fetching ${targetDays} days (${targetTotalCandles} bars) from ${baseUrl}...`);
 
             // Fetch in chunks to avoid overwhelming the provider and memory
-            for (let i = 0; i < Math.ceil(targetTotalCandles / barsCount); i++) {
+            for (let i = 0; i < Math.ceil(targetTotalCandles / limit); i++) {
                 const from = to - (barsCount * timeframeSeconds);
                 const url = `${baseUrl}/api/room/api/get-bars/?symbol=mazane&from=${from}&to=${to}&resolution=${resolution}`;
                 
@@ -88,28 +88,33 @@ export class FarazGoldEngine {
                 if (this.accessToken) headers['authorization'] = `Bearer ${this.accessToken}`;
                 if (this.sessionId) headers['cookie'] = `sessionid=${this.sessionId}; csrftoken=${this.csrfToken}`;
 
-                const res = await fetch(url, { headers });
-                if (!res.ok) {
-                    console.log(`[FarazEngine] Fetch failed at chunk ${i}: ${res.status}`);
-                    break;
-                }
+                try {
+                    const res = await fetch(url, { headers, signal: AbortSignal.timeout(10000) });
+                    if (!res.ok) {
+                        console.log(`[FarazEngine] Fetch failed at chunk ${i}: ${res.status}`);
+                        break;
+                    }
 
-                const data = await res.json();
-                if (Array.isArray(data) && data.length > 0) {
-                    const chunk = data.map((b: any) => ({
-                        time: b.time > 20000000000 ? b.time : b.time * 1000,
-                        open: parseFloat(b.open || b.close),
-                        high: parseFloat(b.high || b.close),
-                        low: parseFloat(b.low || b.close),
-                        close: parseFloat(b.close)
-                    }));
-                    
-                    saveCandles('faraz', resolution, chunk);
-                    totalFetched += chunk.length;
-                    to = Math.floor(data[0].time / 1000) - 1;
-                    
-                    if (data.length < barsCount) break; // End of history
-                } else {
+                    const data = await res.json() as any;
+                    if (Array.isArray(data) && data.length > 0) {
+                        const chunk = data.map((b: any) => ({
+                            time: b.time > 20000000000 ? b.time : b.time * 1000,
+                            open: parseFloat(b.open || b.close),
+                            high: parseFloat(b.high || b.close),
+                            low: parseFloat(b.low || b.close),
+                            close: parseFloat(b.close)
+                        }));
+                        
+                        saveCandles('faraz', resolution, chunk);
+                        totalFetched += chunk.length;
+                        to = Math.floor(data[0].time / 1000) - 1;
+                        
+                        if (data.length < barsCount) break; // End of history
+                    } else {
+                        break;
+                    }
+                } catch (fetchErr: any) {
+                    console.error(`[FarazEngine] Chunk fetch error: ${fetchErr.message}`);
                     break;
                 }
             }
@@ -129,7 +134,7 @@ export class FarazGoldEngine {
     }
 
     async probeOldHistory() {
-        const baseUrl = process.env.FARAZGOLD_BASEURL || 'https://demo.farazgold.com';
+        const baseUrl = process.env.FARAZGOLD_BASEURL || 'https://farazgold.com';
         const timeframe = this.timeframe === '60' ? '60' : this.timeframe;
         const paths = [`/api/room/api/get-history/`, `/api/room/get-history/`];
         for (const p of paths) {
@@ -141,10 +146,11 @@ export class FarazGoldEngine {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                         'Origin': baseUrl,
                         'Referer': `${baseUrl}/room/`
-                    }
+                    },
+                    signal: AbortSignal.timeout(5000)
                 });
                 if (res.ok) {
-                    const data = await res.json();
+                    const data = await res.json() as any;
                     if (Array.isArray(data)) {
                         this.candles = data.map((b: any) => ({
                             time: b.time > 20000000000 ? b.time : b.time * 1000,
@@ -210,14 +216,15 @@ export class FarazGoldEngine {
     async refreshAuthToken() {
         if (!this.refreshToken) return false;
         try {
-            const baseUrl = process.env.FARAZGOLD_BASEURL || 'https://demo.farazgold.com';
+            const baseUrl = process.env.FARAZGOLD_BASEURL || 'https://farazgold.com';
             const res = await fetch(`${baseUrl}/api/User/api/token/refresh/`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
                 },
-                body: JSON.stringify({ refresh: this.refreshToken })
+                body: JSON.stringify({ refresh: this.refreshToken }),
+                signal: AbortSignal.timeout(10000)
             });
             const data: any = await res.json();
             if (data && data.access) {
@@ -252,14 +259,15 @@ export class FarazGoldEngine {
             return;
         }
 
-        const baseUrl = process.env.FARAZGOLD_BASEURL || 'https://demo.farazgold.com';
-        const wsUrl = 'wss://demo.farazgold.com/ws/';
+        const baseUrl = process.env.FARAZGOLD_BASEURL || 'https://farazgold.com';
+        const wsUrl = process.env.FARAZGOLD_WSURL || 'wss://farazgold.com/ws/';
         const resolution = this.timeframe;
 
         if (!this.sessionId || !this.csrfToken) {
             try {
                 const res = await fetch(`${baseUrl}/room/`, {
-                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36' }
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36' },
+                    signal: AbortSignal.timeout(10000)
                 });
                 const text = await res.text();
                 const cookie = res.headers.get('set-cookie');
@@ -346,7 +354,8 @@ export class FarazGoldEngine {
 
     async fetchPriceAPI() {
         try {
-            const res = await fetch('https://demo.farazgold.com/api/room/api/get-last-price/?symbol=mazane');
+            const baseUrl = process.env.FARAZGOLD_BASEURL || 'https://farazgold.com';
+            const res = await fetch(`${baseUrl}/api/room/api/get-last-price/?symbol=mazane`, { signal: AbortSignal.timeout(5000) });
             const data: any = await res.json();
             if (data && data.price) {
                 this.updatePrice(parseFloat(data.price));

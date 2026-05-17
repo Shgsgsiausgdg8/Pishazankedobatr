@@ -368,7 +368,7 @@ async function startServer() {
         if (!refreshToken)
             return res.status(400).json({ error: 'Token is required' });
         try {
-            process.env.FARAZGOLD_BASEURL = type === 'real' ? 'https://farazgold.com' : 'https://demo.farazgold.com';
+            process.env.FARAZGOLD_BASEURL = 'https://farazgold.com';
             if (refreshToken.startsWith('eyJ')) {
                 farazEngine.accessToken = refreshToken;
                 console.log("[Server] Access token set directly.");
