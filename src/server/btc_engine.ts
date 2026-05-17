@@ -100,9 +100,13 @@ export class BtcEngine {
                 }
             } else {
                 console.error(`[BTCEngine] Failed to refresh token: status ${res.status}`);
+                // Retry soon if failed
+                setTimeout(() => this.scheduleTokenRefresh(), 60000);
             }
         } catch (e: any) {
             console.error(`[BTCEngine] Error refreshing Faraz token: ${e.message}`);
+            // Retry soon on network error
+            setTimeout(() => this.scheduleTokenRefresh(), 60000);
         }
     }
 
@@ -304,6 +308,11 @@ export class BtcEngine {
                     }
                 } catch (e) {}
             }
+        });
+
+        this.ws.on('error', (err) => {
+            console.error("[BTC-Engine] WS Error:", err.message);
+            // close event will trigger reconnection
         });
 
         this.ws.on('close', () => {

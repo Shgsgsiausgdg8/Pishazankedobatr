@@ -1183,11 +1183,6 @@ class DivergenceDetector {
 // کلاس TradingStrategy - استراتژی اصلی (با تایم 15 دقیقه برای روند و تایم 2 دقیقه برای ورود)
 // ============================================================
 class TradingStrategy {
-    public trendAnalyzer: any;
-    public marketAnalyzer: any;
-    public divergenceDetector: any;
-    public activeTrades: any;
-    public last15MinTrend: any;
     config = {
         fibLookback: 60,
         fibMinRange: 0.5,
@@ -1202,7 +1197,7 @@ class TradingStrategy {
     divergenceDetector = new DivergenceDetector();
     trendAnalyzer = new TrendAnalyzer();
     pendingSecondEntry = null;
-    last15MinTrend = { overall: 'neutral', strength: 0, timestamp: 0 };
+    last15MinTrend: any = { overall: 'neutral', strength: 0, timestamp: 0 };
 
     priceToPips(price, entryPrice) {
         return Math.abs(price - entryPrice);
@@ -2301,19 +2296,6 @@ class MultiTimeframeDataManager {
 // کلاس BitcoinEngine - موتور اصلی ربات بیت‌کوین
 // ============================================================
 class BitcoinEngine {
-    public config: any;
-    // public strategy: any;
-    public dataManager: any;
-    public messenger: any;
-    // // public strategy: any;
-    // // // public strategy: any;
-    // // // // public strategy: any;
-    // // // // // public strategy: any;
-    // // // // // // public strategy: any;
-    // // // // // // // public strategy: any;
-    // // // // // // // // public strategy: any;
-    // // // // // // // // // public strategy: any;
-    // // // // // // // // // // public strategy: any;
     price = 0;
     mainTimeframe = '5';
     confirmationTimeframes = ['2', '3', '5'];
@@ -2912,8 +2894,12 @@ class BitcoinEngine {
         }
     }
 
+    isRefreshing = false;
+
     async refreshToken() {
+        if (this.isRefreshing) return false;
         try {
+            this.isRefreshing = true;
             console.log("🔄 در حال رفرش توکن فاراز...");
             const res = await axios.get("https://faraz.io/api/public/authentication/me", {
                 headers: {
@@ -2940,16 +2926,23 @@ class BitcoinEngine {
                 } else {
                     console.log("ℹ️ توکن فاراز هنوز معتبر است، نیازی به رفرش نبود");
                 }
+                this.isRefreshing = false;
                 return true;
             } else {
                 console.error("❌ پاسخ رفرش توکن نامعتبر است:", JSON.stringify(res.data).slice(0, 200));
+                // Retry in 1 minute
+                this.isRefreshing = false;
+                setTimeout(() => this.refreshToken(), 60000);
                 return false;
             }
-        } catch (e) {
+        } catch (e: any) {
+            this.isRefreshing = false;
             if (e.response?.status === 401 || e.response?.status === 403) {
                 console.error("❌ سشن فاراز منقضی شده است! لطفاً farazSession را در تنظیمات به‌روز کنید.");
             } else {
                 console.error("❌ خطا در رفرش توکن فاراز:", e.message);
+                // Retry in 1 minute on network error
+                setTimeout(() => this.refreshToken(), 60000);
             }
             return false;
         }
